@@ -1,25 +1,12 @@
 #pragma once
 
-#include <cstdint>
-#include <opencv2/core/mat.hpp>
+#include "common.h"
+
 #include <string>
 
 #include <opencv2/opencv.hpp>
 
 namespace ChromaPrint3D {
-
-enum class ResizeMethod : uint8_t {
-    Nearest = 0,
-    Area    = 1,
-    Linear  = 2,
-    Cubic   = 3,
-};
-
-enum class DenoiseMethod : uint8_t {
-    None      = 0,
-    Bilateral = 1,
-    Median    = 2,
-};
 
 struct ImgProcResult {
     int width  = 0;

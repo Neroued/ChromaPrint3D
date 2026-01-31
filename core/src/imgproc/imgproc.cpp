@@ -21,6 +21,7 @@ static auto ToCvMethod(ResizeMethod method) {
     case ResizeMethod::Cubic:
         return cv::INTER_CUBIC;
     }
+    return cv::INTER_AREA;
 }
 
 static cv::Mat EnsureBgr(const cv::Mat& src) {
