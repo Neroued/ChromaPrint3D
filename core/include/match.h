@@ -8,6 +8,7 @@
 #include <opencv2/opencv.hpp>
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace ChromaPrint3D {
@@ -20,6 +21,8 @@ struct MatchConfig {
 };
 
 struct RecipeMap {
+    std::string name;
+
     int width        = 0;
     int height       = 0;
     int color_layers = 0;

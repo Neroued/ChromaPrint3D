@@ -71,6 +71,7 @@ RecipeMap RecipeMap::MatchFromImage(const ImgProcResult& img, const ColorDB& db,
     }
 
     RecipeMap result;
+    result.name         = img.name;
     result.width        = img.width;
     result.height       = img.height;
     result.color_layers = db.max_color_layers;

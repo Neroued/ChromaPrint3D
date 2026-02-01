@@ -72,6 +72,7 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
     if (total_layers < 0) { throw std::runtime_error("total_layers is invalid"); }
 
     ModelIR result;
+    result.name             = recipe_map.name;
     result.width            = width;
     result.height           = height;
     result.color_layers     = color_layers;

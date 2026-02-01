@@ -9,6 +9,8 @@
 namespace ChromaPrint3D {
 
 struct ImgProcResult {
+    std::string name;
+
     int width  = 0;
     int height = 0;
 

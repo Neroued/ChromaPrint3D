@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace ChromaPrint3D {
@@ -30,6 +31,8 @@ struct BuildModelIRConfig {
 };
 
 struct ModelIR {
+    std::string name;
+
     int width  = 0;
     int height = 0;
 
@@ -59,5 +62,7 @@ struct Mesh {
 };
 
 void Export3mf(const std::string& path, const ModelIR& ModelIR);
+
+void Export3mf(const std::string& path, const ModelIR& ModelIR, const BuildMeshConfig& cfg);
 
 } // namespace ChromaPrint3D

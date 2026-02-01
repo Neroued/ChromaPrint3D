@@ -14,6 +14,7 @@ target_sources(core PRIVATE
     src/imgproc/imgproc.cpp
     src/colorDB/colorDB.cpp
     src/match/match.cpp
+    src/calib/calib.cpp
     src/geo/geo.cpp
     src/geo/export3mf.cpp)
 

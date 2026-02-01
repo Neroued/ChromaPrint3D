@@ -48,9 +48,8 @@ static std::string BuildObjectName(const ModelIR& model_ir, std::size_t idx) {
     return "Channel " + std::to_string(idx);
 }
 
-} // namespace
-
-void Export3mf(const std::string& path, const ModelIR& model_ir) {
+static void Export3mfInternal(const std::string& path, const ModelIR& model_ir,
+                              const BuildMeshConfig& cfg) {
     if (path.empty()) { throw std::runtime_error("Export3mf path is empty"); }
     if (model_ir.voxel_grids.empty()) { throw std::runtime_error("ModelIR voxel_grids is empty"); }
 
@@ -64,7 +63,7 @@ void Export3mf(const std::string& path, const ModelIR& model_ir) {
             if (grid.width <= 0 || grid.height <= 0 || grid.num_layers <= 0) { continue; }
             if (grid.ooc.empty()) { continue; }
 
-            Mesh mesh = Mesh::Build(grid);
+            Mesh mesh = Mesh::Build(grid, cfg);
             if (mesh.vertices.empty() || mesh.indices.empty()) { continue; }
 
             const std::size_t vertex_count = mesh.vertices.size();
@@ -98,6 +97,16 @@ void Export3mf(const std::string& path, const ModelIR& model_ir) {
         Lib3MF::PWriter writer = model->QueryWriter("3mf");
         writer->WriteToFile(path);
     } catch (const Lib3MF::ELib3MFException& e) { throw std::runtime_error(e.what()); }
+}
+
+} // namespace
+
+void Export3mf(const std::string& path, const ModelIR& model_ir) {
+    Export3mfInternal(path, model_ir, BuildMeshConfig{});
+}
+
+void Export3mf(const std::string& path, const ModelIR& model_ir, const BuildMeshConfig& cfg) {
+    Export3mfInternal(path, model_ir, cfg);
 }
 
 } // namespace ChromaPrint3D

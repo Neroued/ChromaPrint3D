@@ -16,4 +16,5 @@ if(TARGET lib3mf)
 endif()
 
 add_subdirectory(core)
+add_subdirectory(apps)
 

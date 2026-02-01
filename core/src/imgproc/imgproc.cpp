@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <filesystem>
 #include <stdexcept>
 
 namespace ChromaPrint3D {
@@ -77,6 +78,14 @@ static cv::Mat BgrToRgbLinear(const cv::Mat& bgr) {
 
     return rgb_linear;
 }
+
+static std::string PathStem(const std::string& path) {
+    if (path.empty()) { return {}; }
+    std::filesystem::path p(path);
+    std::string stem = p.stem().string();
+    if (!stem.empty()) { return stem; }
+    return p.filename().string();
+}
 } // namespace
 
 ImgProcResult ImgProc::Run(const std::string& path) const {
@@ -99,6 +108,7 @@ ImgProcResult ImgProc::Run(const std::string& path) const {
     Denoise(bgr, denoised);
 
     ImgProcResult result;
+    result.name   = PathStem(path);
     result.width  = resized.cols;
     result.height = resized.rows;
     result.rgb    = BgrToRgbLinear(denoised);

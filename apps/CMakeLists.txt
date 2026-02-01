@@ -1,0 +1,3 @@
+add_executable(gen_calibration_board gen_calibration_board.cpp)
+
+target_link_libraries(gen_calibration_board PRIVATE core)
