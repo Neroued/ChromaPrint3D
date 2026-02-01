@@ -6,6 +6,60 @@
 
 namespace ChromaPrint3D {
 
+struct Vec3i {
+    int x = 0, y = 0, z = 0;
+
+    constexpr Vec3i() = default;
+
+    constexpr Vec3i(int x_, int y_, int z_) : x(x_), y(y_), z(z_) {}
+
+    Vec3i operator+(const Vec3i& other) const {
+        return Vec3i(x + other.x, y + other.y, z + other.z);
+    }
+
+    Vec3i operator-(const Vec3i& other) const {
+        return Vec3i(x - other.x, y - other.y, z - other.z);
+    }
+
+    Vec3i operator*(int s) const { return Vec3i(x * s, y * s, z * s); }
+
+    Vec3i operator/(int s) const { return Vec3i(x / s, y / s, z / s); }
+
+    Vec3i& operator+=(const Vec3i& other) {
+        x += other.x;
+        y += other.y;
+        z += other.z;
+        return *this;
+    }
+
+    Vec3i& operator-=(const Vec3i& other) {
+        x -= other.x;
+        y -= other.y;
+        z -= other.z;
+        return *this;
+    }
+
+    Vec3i& operator*=(int s) {
+        x *= s;
+        y *= s;
+        z *= s;
+        return *this;
+    }
+
+    Vec3i& operator/=(int s) {
+        x /= s;
+        y /= s;
+        z /= s;
+        return *this;
+    }
+
+    int Dot(const Vec3i& other) const { return x * other.x + y * other.y + z * other.z; }
+
+    int LengthSquared() const { return Dot(*this); }
+};
+
+inline Vec3i operator*(int s, const Vec3i& v) { return v * s; }
+
 struct Vec3f {
     float x = 0.0f, y = 0.0f, z = 0.0f;
 

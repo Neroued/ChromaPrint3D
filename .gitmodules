@@ -1,0 +1,3 @@
+[submodule "3dparty/lib3mf"]
+	path = 3dparty/lib3mf
+	url = https://github.com/3MFConsortium/lib3mf.git

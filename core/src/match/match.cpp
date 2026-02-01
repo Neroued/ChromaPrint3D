@@ -59,7 +59,8 @@ cv::Mat RecipeMap::ToBgrImage(uint8_t background_b, uint8_t background_g,
     return bgr;
 }
 
-RecipeMap MatchImageToRecipe(const ImgProcResult& img, const ColorDB& db, const MatchConfig& cfg) {
+RecipeMap RecipeMap::MatchFromImage(const ImgProcResult& img, const ColorDB& db,
+                                    const MatchConfig& cfg) {
     if (img.lab.empty()) { throw std::runtime_error("Image Lab data is empty"); }
     if (img.lab.type() != CV_32FC3) { throw std::runtime_error("Image Lab data must be CV_32FC3"); }
     if (img.lab.rows != img.height || img.lab.cols != img.width) {
@@ -74,6 +75,7 @@ RecipeMap MatchImageToRecipe(const ImgProcResult& img, const ColorDB& db, const 
     result.height       = img.height;
     result.color_layers = db.max_color_layers;
     result.num_channels = db.NumChannels();
+    result.layer_order  = db.layer_order;
     result.recipes.assign(static_cast<size_t>(img.width) * static_cast<size_t>(img.height) *
                               static_cast<size_t>(db.max_color_layers),
                           0);

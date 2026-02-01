@@ -12,11 +12,20 @@
 
 namespace ChromaPrint3D {
 
+struct MatchConfig {
+    int k_candidates = 1; // k <= 1 使用最邻近
+    // TODO: Top-k match
+
+    ColorSpace color_space = ColorSpace::Lab;
+};
+
 struct RecipeMap {
     int width        = 0;
     int height       = 0;
     int color_layers = 0;
     int num_channels = 0;
+
+    LayerOrder layer_order = LayerOrder::Top2Bottom;
 
     std::vector<uint8_t> recipes;  // H * W * N
     std::vector<uint8_t> mask;     // H * W
@@ -28,15 +37,9 @@ struct RecipeMap {
 
     cv::Mat ToBgrImage(uint8_t background_b = 0, uint8_t background_g = 0,
                        uint8_t background_r = 0) const;
+
+    static RecipeMap MatchFromImage(const ImgProcResult& img, const ColorDB& db,
+                                    const MatchConfig& cfg = MatchConfig{});
 };
-
-struct MatchConfig {
-    int k_candidates = 1; // k <= 1 使用最邻近
-    // TODO: Top-k match
-
-    ColorSpace color_space = ColorSpace::Lab;
-};
-
-RecipeMap MatchImageToRecipe(const ImgProcResult& img, const ColorDB& db, const MatchConfig& cfg);
 
 } // namespace ChromaPrint3D
