@@ -3,6 +3,7 @@
 #include "match.h"
 
 #include <nlohmann/json.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -11,6 +12,10 @@
 #include <string>
 
 namespace ChromaPrint3D {
+
+cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
+                                     const CalibrationBoardMeta& meta);
+
 namespace {
 using nlohmann::json;
 
@@ -117,6 +122,159 @@ static void ApplyHoleMask(std::vector<uint8_t>& mask, int width, int height, flo
             }
         }
     }
+}
+
+static cv::Mat EnsureBgr(const cv::Mat& src) {
+    if (src.empty()) { return cv::Mat(); }
+    if (src.channels() == 3) { return src; }
+    if (src.channels() == 4) {
+        cv::Mat bgr;
+        cv::cvtColor(src, bgr, cv::COLOR_BGRA2BGR);
+        return bgr;
+    }
+    if (src.channels() == 1) {
+        cv::Mat bgr;
+        cv::cvtColor(src, bgr, cv::COLOR_GRAY2BGR);
+        return bgr;
+    }
+    throw std::runtime_error("Unsupported image channel count");
+}
+
+static cv::Mat BgrToLab(const cv::Mat& bgr) {
+    if (bgr.empty()) { return cv::Mat(); }
+    cv::Mat bgr_float;
+    bgr.convertTo(bgr_float, CV_32F, 1.0 / 255.0);
+    cv::Mat lab;
+    cv::cvtColor(bgr_float, lab, cv::COLOR_BGR2Lab);
+    return lab;
+}
+
+static int ResolveColorRegionScale(const CalibrationBoardMeta& meta, int width, int height) {
+    if (width <= 0 || height <= 0) { throw std::runtime_error("Color region size is invalid"); }
+    const int grid_rows = meta.grid_rows;
+    const int grid_cols = meta.grid_cols;
+    if (grid_rows <= 0 || grid_cols <= 0) { throw std::runtime_error("Grid size is invalid"); }
+
+    const int tile_factor = meta.config.layout.tile_factor;
+    const int gap_factor  = meta.config.layout.gap_factor;
+    if (tile_factor <= 0) { throw std::runtime_error("tile_factor is invalid"); }
+    if (gap_factor < 0) { throw std::runtime_error("gap_factor is invalid"); }
+
+    const int base_w = grid_cols * tile_factor + (grid_cols - 1) * gap_factor;
+    const int base_h = grid_rows * tile_factor + (grid_rows - 1) * gap_factor;
+    if (base_w <= 0 || base_h <= 0) { throw std::runtime_error("Color region base size is invalid"); }
+
+    int scale = meta.config.layout.resolution_scale;
+    if (scale <= 0) { scale = 1; }
+
+    auto near = [](int a, int b) { return std::abs(a - b) <= 1; };
+    if (near(base_w * scale, width) && near(base_h * scale, height)) { return scale; }
+
+    const double scale_x = static_cast<double>(width) / static_cast<double>(base_w);
+    const double scale_y = static_cast<double>(height) / static_cast<double>(base_h);
+    const int inferred_x = static_cast<int>(std::lround(scale_x));
+    const int inferred_y = static_cast<int>(std::lround(scale_y));
+    if (inferred_x <= 0 || inferred_y <= 0 || inferred_x != inferred_y) {
+        throw std::runtime_error("Color region size does not match meta layout");
+    }
+    if (!near(base_w * inferred_x, width) || !near(base_h * inferred_y, height)) {
+        throw std::runtime_error("Color region size does not match meta layout");
+    }
+    return inferred_x;
+}
+
+static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input,
+                                           const CalibrationBoardMeta& meta) {
+    if (input.empty()) { throw std::runtime_error("Color region image is empty"); }
+    const cv::Mat bgr = EnsureBgr(input);
+    if (bgr.empty()) { throw std::runtime_error("Failed to normalize color region image"); }
+
+    const int grid_rows = meta.grid_rows;
+    const int grid_cols = meta.grid_cols;
+    if (grid_rows <= 0 || grid_cols <= 0) { throw std::runtime_error("Grid size is invalid"); }
+
+    const int scale = ResolveColorRegionScale(meta, bgr.cols, bgr.rows);
+    const int tile  = meta.config.layout.tile_factor * scale;
+    const int gap   = meta.config.layout.gap_factor * scale;
+
+    const size_t expected_patches =
+        static_cast<size_t>(grid_rows) * static_cast<size_t>(grid_cols);
+    if (meta.patch_recipe_idx.size() < expected_patches) {
+        throw std::runtime_error("patch_recipe_idx size mismatch");
+    }
+
+    const size_t recipe_count = meta.config.recipe.NumRecipes();
+    if (recipe_count == 0) { throw std::runtime_error("Recipe count is zero"); }
+
+    const cv::Mat lab = BgrToLab(bgr);
+    if (lab.empty() || lab.type() != CV_32FC3) {
+        throw std::runtime_error("Failed to convert color region to Lab");
+    }
+
+    std::vector<Vec3f> sum(recipe_count, Vec3f());
+    std::vector<int> counts(recipe_count, 0);
+
+    for (int r = 0; r < grid_rows; ++r) {
+        for (int c = 0; c < grid_cols; ++c) {
+            const size_t patch_idx =
+                static_cast<size_t>(r) * static_cast<size_t>(grid_cols) + static_cast<size_t>(c);
+            const uint16_t recipe_idx = meta.patch_recipe_idx[patch_idx];
+            if (recipe_idx == kInvalidRecipeIdx) { continue; }
+            if (recipe_idx >= recipe_count) { continue; }
+
+            const int x0 = c * (tile + gap);
+            const int y0 = r * (tile + gap);
+            const int x1 = x0 + tile;
+            const int y1 = y0 + tile;
+            if (x0 < 0 || y0 < 0 || x1 > lab.cols || y1 > lab.rows) {
+                throw std::runtime_error("Patch ROI is out of bounds");
+            }
+
+            int inset = std::max(1, tile / 10);
+            if (tile <= inset * 2) { inset = 0; }
+            int sx0 = x0 + inset;
+            int sy0 = y0 + inset;
+            int sx1 = x1 - inset;
+            int sy1 = y1 - inset;
+            if (sx1 <= sx0 || sy1 <= sy0) {
+                sx0 = x0;
+                sy0 = y0;
+                sx1 = x1;
+                sy1 = y1;
+            }
+
+            cv::Rect roi(sx0, sy0, sx1 - sx0, sy1 - sy0);
+            cv::Scalar mean = cv::mean(lab(roi));
+
+            sum[recipe_idx] += Vec3f(static_cast<float>(mean[0]),
+                                     static_cast<float>(mean[1]),
+                                     static_cast<float>(mean[2]));
+            counts[recipe_idx] += 1;
+        }
+    }
+
+    ColorDB db;
+    db.name             = meta.name.empty() ? "ColorDB" : meta.name;
+    db.max_color_layers = meta.config.recipe.color_layers;
+    db.base_layers      = meta.config.base_layers;
+    db.base_channel_idx = meta.config.base_channel_idx;
+    db.layer_height_mm  = meta.config.layer_height_mm;
+    db.line_width_mm    = meta.config.layout.line_width_mm;
+    db.layer_order      = meta.config.recipe.layer_order;
+    db.palette          = meta.config.palette;
+
+    db.entries.reserve(recipe_count);
+    for (size_t idx = 0; idx < recipe_count; ++idx) {
+        if (counts[idx] <= 0) {
+            throw std::runtime_error("Missing patch for recipe index " + std::to_string(idx));
+        }
+        Vec3f avg = sum[idx] / static_cast<float>(counts[idx]);
+        Entry entry;
+        entry.lab = Lab(avg.x, avg.y, avg.z);
+        entry.recipe = meta.config.recipe.RecipeAt(idx);
+        db.entries.push_back(entry);
+    }
+    return db;
 }
 
 } // namespace
@@ -402,9 +560,8 @@ void GenCalibrationBoard(const CalibrationBoardConfig& cfg, const std::string& b
 }
 
 ColorDB GenColorDBFromImage(const std::string& image_path, const CalibrationBoardMeta& meta) {
-    (void)image_path;
-    (void)meta;
-    throw std::runtime_error("GenColorDBFromImage is not implemented yet");
+    cv::Mat color_region = LocateCalibrationColorRegion(image_path, meta);
+    return BuildColorDBFromColorRegion(color_region, meta);
 }
 
 ColorDB GenColorDBFromImage(const std::string& image_path, const std::string& json_path) {
