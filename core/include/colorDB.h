@@ -11,7 +11,7 @@
 namespace ChromaPrint3D {
 
 struct Entry {
-    Vec3f lab;
+    Lab lab;
     std::vector<uint8_t> recipe; // size() == color_layers
 
     size_t ColorLayers() const { return recipe.size(); }
@@ -48,10 +48,13 @@ public:
 
     void SaveToJson(const std::string& path) const;
 
-    const Entry& NearestEntry(const Vec3f& target, ColorSpace space = ColorSpace::Lab) const;
+    const Entry& NearestEntry(const Lab& target) const;
 
-    std::vector<const Entry*> NearestEntries(const Vec3f& target, std::size_t k,
-                                             ColorSpace space = ColorSpace::Lab) const;
+    const Entry& NearestEntry(const Rgb& target) const;
+
+    std::vector<const Entry*> NearestEntries(const Lab& target, std::size_t k) const;
+
+    std::vector<const Entry*> NearestEntries(const Rgb& target, std::size_t k) const;
 };
 
 } // namespace ChromaPrint3D

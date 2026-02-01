@@ -1,4 +1,5 @@
 #include "imgproc.h"
+#include "vec3.h"
 
 #include <opencv2/opencv.hpp>
 
@@ -51,6 +52,31 @@ static cv::Mat BgrToLab(const cv::Mat& bgr) {
     cv::cvtColor(bgr_float, lab, cv::COLOR_BGR2Lab);
     return lab;
 }
+
+static cv::Mat BgrToRgbLinear(const cv::Mat& bgr) {
+    // 1. BGR -> RGB (swap channels)
+    cv::Mat rgb;
+    cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
+
+    // 2. Convert to float [0, 1]
+    cv::Mat rgb_float;
+    rgb.convertTo(rgb_float, CV_32F, 1.0 / 255.0);
+
+    // 3. sRGB gamma correction -> linear RGB
+    cv::Mat rgb_linear(rgb_float.size(), CV_32FC3);
+    for (int i = 0; i < rgb_float.rows; i++) {
+        for (int j = 0; j < rgb_float.cols; j++) {
+            cv::Vec3f pixel = rgb_float.at<cv::Vec3f>(i, j);
+            for (int c = 0; c < 3; c++) {
+                float val = pixel[c];
+                pixel[c]  = SrgbToLinear(val);
+            }
+            rgb_linear.at<cv::Vec3f>(i, j) = pixel;
+        }
+    }
+
+    return rgb_linear;
+}
 } // namespace
 
 ImgProcResult ImgProc::Run(const std::string& path) const {
@@ -75,7 +101,7 @@ ImgProcResult ImgProc::Run(const std::string& path) const {
     ImgProcResult result;
     result.width  = resized.cols;
     result.height = resized.rows;
-    result.bgr    = denoised;
+    result.rgb    = BgrToRgbLinear(denoised);
     result.mask   = mask;
     result.lab    = BgrToLab(denoised);
     return result;

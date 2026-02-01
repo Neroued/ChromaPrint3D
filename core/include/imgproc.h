@@ -12,9 +12,9 @@ struct ImgProcResult {
     int width  = 0;
     int height = 0;
 
-    cv::Mat bgr;  // H x W, CV_8UC3
-    cv::Mat mask; // H x W, CV_8UC1
+    cv::Mat rgb;  // H x W, CV_32FC3 linear RGB
     cv::Mat lab;  // H x W, CV_32FC3
+    cv::Mat mask; // H x W, CV_8UC1
 };
 
 class ImgProc {

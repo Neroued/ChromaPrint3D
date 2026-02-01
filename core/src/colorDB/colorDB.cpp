@@ -39,16 +39,13 @@ static LayerOrder ParseLayerOrder(const json& value) {
     throw std::runtime_error("Invalid layer_order value");
 }
 
-static float DistanceInSpace(const Vec3f& target, const Entry& entry, ColorSpace space) {
-    switch (space) {
-    case ColorSpace::Lab:
-        return Vec3f::DeltaE76(target, entry.lab);
-    case ColorSpace::Rgb: {
-        Vec3f entry_rgb = entry.lab.ToRGBFromLab();
-        return Vec3f::Distance(target, entry_rgb);
-    }
-    }
-    return Vec3f::DeltaE76(target, entry.lab);
+static float DistanceInSpace(const Lab& target, const Entry& entry) {
+    return Lab::DeltaE76(target, entry.lab);
+}
+
+static float DistanceInSpace(const Rgb& target, const Entry& entry) {
+    Rgb entry_rgb = entry.lab.ToRgb();
+    return Rgb::Distance(target, entry_rgb);
 }
 } // namespace
 
@@ -95,8 +92,8 @@ ColorDB ColorDB::LoadFromJson(const std::string& path) {
             }
 
             Entry entry;
-            entry.lab = Vec3f::FromLab(lab.at(0).get<float>(), lab.at(1).get<float>(),
-                                       lab.at(2).get<float>());
+            entry.lab = Lab::FromLab(lab.at(0).get<float>(), lab.at(1).get<float>(),
+                                     lab.at(2).get<float>());
 
             const auto& recipe = item.at("recipe");
             if (!recipe.is_array()) { throw std::runtime_error("recipe must be an array"); }
@@ -148,13 +145,13 @@ void ColorDB::SaveToJson(const std::string& path) const {
     if (!out.good()) { throw std::runtime_error("Failed to write json: " + path); }
 }
 
-const Entry& ColorDB::NearestEntry(const Vec3f& target, ColorSpace space) const {
+const Entry& ColorDB::NearestEntry(const Lab& target) const {
     if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
 
     const Entry* best  = nullptr;
     float best_dist_sq = std::numeric_limits<float>::infinity();
     for (const auto& entry : entries) {
-        float d = DistanceInSpace(target, entry, space);
+        float d = DistanceInSpace(target, entry);
         if (d < best_dist_sq) {
             best_dist_sq = d;
             best         = &entry;
@@ -163,8 +160,22 @@ const Entry& ColorDB::NearestEntry(const Vec3f& target, ColorSpace space) const 
     return *best;
 }
 
-std::vector<const Entry*> ColorDB::NearestEntries(const Vec3f& target, std::size_t k,
-                                                  ColorSpace space) const {
+const Entry& ColorDB::NearestEntry(const Rgb& target) const {
+    if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
+
+    const Entry* best  = nullptr;
+    float best_dist_sq = std::numeric_limits<float>::infinity();
+    for (const auto& entry : entries) {
+        float d = DistanceInSpace(target, entry);
+        if (d < best_dist_sq) {
+            best_dist_sq = d;
+            best         = &entry;
+        }
+    }
+    return *best;
+}
+
+std::vector<const Entry*> ColorDB::NearestEntries(const Lab& target, std::size_t k) const {
     if (k == 0) { return {}; }
     if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
 
@@ -172,9 +183,27 @@ std::vector<const Entry*> ColorDB::NearestEntries(const Vec3f& target, std::size
 
     std::vector<std::pair<float, const Entry*>> dist;
     dist.reserve(entries.size());
-    for (const auto& entry : entries) {
-        dist.emplace_back(DistanceInSpace(target, entry, space), &entry);
-    }
+    for (const auto& entry : entries) { dist.emplace_back(DistanceInSpace(target, entry), &entry); }
+
+    auto mid = dist.begin() + static_cast<std::ptrdiff_t>(k);
+    std::partial_sort(dist.begin(), mid, dist.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    std::vector<const Entry*> result;
+    result.reserve(k);
+    for (std::size_t i = 0; i < k; ++i) { result.push_back(dist[i].second); }
+    return result;
+}
+
+std::vector<const Entry*> ColorDB::NearestEntries(const Rgb& target, std::size_t k) const {
+    if (k == 0) { return {}; }
+    if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
+
+    k = std::min(k, entries.size());
+
+    std::vector<std::pair<float, const Entry*>> dist;
+    dist.reserve(entries.size());
+    for (const auto& entry : entries) { dist.emplace_back(DistanceInSpace(target, entry), &entry); }
 
     auto mid = dist.begin() + static_cast<std::ptrdiff_t>(k);
     std::partial_sort(dist.begin(), mid, dist.end(),
