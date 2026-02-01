@@ -1,3 +1,7 @@
 add_executable(gen_calibration_board gen_calibration_board.cpp)
+add_executable(image_to_3mf image_to_3mf.cpp)
+add_executable(build_colordb build_colordb.cpp)
 
 target_link_libraries(gen_calibration_board PRIVATE core)
+target_link_libraries(image_to_3mf PRIVATE core)
+target_link_libraries(build_colordb PRIVATE core)
