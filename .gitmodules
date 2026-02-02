@@ -4,3 +4,6 @@
 [submodule "3dparty/pybind11"]
 	path = 3dparty/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "3dparty/opencv"]
+	path = 3dparty/opencv
+	url = https://github.com/opencv/opencv.git

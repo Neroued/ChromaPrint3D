@@ -95,6 +95,131 @@ static cv::Mat AutoCanny(const cv::Mat& gray) {
     return edges;
 }
 
+static float AngleDegrees(const cv::Point2f& a, const cv::Point2f& b, const cv::Point2f& c) {
+    const cv::Point2f v1 = a - b;
+    const cv::Point2f v2 = c - b;
+    const float l1       = std::sqrt(v1.x * v1.x + v1.y * v1.y);
+    const float l2       = std::sqrt(v2.x * v2.x + v2.y * v2.y);
+    if (l1 < 1e-3f || l2 < 1e-3f) { return 180.0f; }
+    float cosang = (v1.x * v2.x + v1.y * v2.y) / (l1 * l2);
+    cosang       = std::clamp(cosang, -1.0f, 1.0f);
+    return std::acos(cosang) * 180.0f / kPi;
+}
+
+static bool EvaluateQuadCandidate(const std::vector<cv::Point>& quad, double contour_area,
+                                  std::vector<cv::Point2f>& out, double& score) {
+    if (quad.size() != 4) { return false; }
+    if (!cv::isContourConvex(quad)) { return false; }
+
+    cv::RotatedRect rect = cv::minAreaRect(quad);
+    const float w        = rect.size.width;
+    const float h        = rect.size.height;
+    if (w <= 1.0f || h <= 1.0f) { return false; }
+
+    const float ratio = std::max(w, h) / std::min(w, h);
+    if (ratio > 1.6f) { return false; }
+
+    const double rect_area = static_cast<double>(w) * static_cast<double>(h);
+    if (rect_area <= 1e-3) { return false; }
+
+    const double rectangularity = std::min(1.0, contour_area / rect_area);
+    if (rectangularity < 0.7) { return false; }
+
+    float max_dev = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        const cv::Point2f p0 = quad[(i + 3) % 4];
+        const cv::Point2f p1 = quad[i];
+        const cv::Point2f p2 = quad[(i + 1) % 4];
+        const float angle    = AngleDegrees(p0, p1, p2);
+        max_dev              = std::max(max_dev, std::abs(angle - 90.0f));
+    }
+    if (max_dev > 25.0f) { return false; }
+
+    out.clear();
+    out.reserve(4);
+    for (const auto& p : quad) {
+        out.emplace_back(static_cast<float>(p.x), static_cast<float>(p.y));
+    }
+
+    const double angle_weight = 1.0 - std::min(1.0, static_cast<double>(max_dev) / 45.0);
+    score                     = contour_area * rectangularity * angle_weight;
+    return true;
+}
+
+static bool TryCoarseLocateByEdges(const cv::Mat& small, const cv::Mat& edges,
+                                   std::vector<cv::Point2f>& corners) {
+    if (edges.empty() || small.empty()) { return false; }
+
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(edges, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    if (contours.empty()) { return false; }
+
+    const double img_area = static_cast<double>(small.cols) * static_cast<double>(small.rows);
+    const double min_area = img_area * 0.08;
+    const double max_area = img_area * 0.98;
+
+    double best_score = -1.0;
+    std::vector<cv::Point2f> best_quad;
+
+    for (const auto& contour : contours) {
+        const double area = std::abs(cv::contourArea(contour));
+        if (area < min_area || area > max_area) { continue; }
+
+        const double peri = cv::arcLength(contour, true);
+        if (peri <= 0.0) { continue; }
+
+        std::vector<cv::Point2f> quad;
+        double score = -1.0;
+        std::vector<cv::Point> approx;
+
+        cv::approxPolyDP(contour, approx, 0.02 * peri, true);
+        bool ok = EvaluateQuadCandidate(approx, area, quad, score);
+        if (!ok) {
+            cv::approxPolyDP(contour, approx, 0.01 * peri, true);
+            ok = EvaluateQuadCandidate(approx, area, quad, score);
+        }
+
+        if (!ok) {
+            cv::RotatedRect rect = cv::minAreaRect(contour);
+            const float w        = rect.size.width;
+            const float h        = rect.size.height;
+            if (w > 1.0f && h > 1.0f) {
+                const float ratio           = std::max(w, h) / std::min(w, h);
+                const double rect_area      = static_cast<double>(w) * static_cast<double>(h);
+                const double rectangularity = (rect_area > 0.0) ? (area / rect_area) : 0.0;
+                if (ratio <= 1.8f && rectangularity >= 0.6) {
+                    cv::Point2f pts[4];
+                    rect.points(pts);
+                    quad.assign(pts, pts + 4);
+                    score = area * rectangularity * 0.8;
+                    ok    = true;
+                }
+            }
+        }
+
+        if (ok && score > best_score) {
+            best_score = score;
+            best_quad  = quad;
+        }
+    }
+
+    if (best_score <= 0.0 || best_quad.size() != 4) { return false; }
+
+#ifdef DEBUG_DIR
+    cv::Mat contour_vis = small.clone();
+    for (const auto& c : contours) {
+        cv::drawContours(contour_vis, std::vector{c}, -1, {0, 255, 0}, 1);
+    }
+    for (int i = 0; i < 4; ++i) {
+        cv::line(contour_vis, best_quad[i], best_quad[(i + 1) % 4], cv::Scalar(0, 0, 255), 2);
+    }
+    SaveDebugImage("04_coarse_rect.png", contour_vis);
+#endif
+
+    corners = best_quad;
+    return true;
+}
+
 static std::vector<cv::Point2f> OrderCorners(const std::vector<cv::Point2f>& pts) {
     if (pts.size() != 4) { throw std::runtime_error("OrderCorners expects 4 points"); }
     cv::Point2f tl, tr, br, bl;
@@ -143,45 +268,10 @@ static std::vector<cv::Point2f> CoarseLocateBoard(const cv::Mat& bgr, double& sc
     SaveDebugImage("03_coarse_edges.png", edges);
 #endif
 
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(edges, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-    const double img_area = static_cast<double>(small.cols) * static_cast<double>(small.rows);
-    double best_area      = 0.0;
-    cv::RotatedRect best_rect;
-
-    for (const auto& contour : contours) {
-        double area = cv::contourArea(contour);
-        if (area < img_area * 0.1) { continue; }
-        cv::RotatedRect rect = cv::minAreaRect(contour);
-        float w              = rect.size.width;
-        float h              = rect.size.height;
-        if (w <= 1.0f || h <= 1.0f) { continue; }
-        float ratio = std::max(w, h) / std::min(w, h);
-        if (ratio > 1.4f) { continue; }
-        double rect_area = static_cast<double>(w) * static_cast<double>(h);
-        if (rect_area > best_area) {
-            best_area = rect_area;
-            best_rect = rect;
-        }
+    std::vector<cv::Point2f> corners;
+    if (!TryCoarseLocateByEdges(small, edges, corners)) {
+        throw std::runtime_error("Failed to coarse-locate board");
     }
-
-    if (best_area <= 0.0) { throw std::runtime_error("Failed to coarse-locate board"); }
-
-    cv::Point2f pts[4];
-    best_rect.points(pts);
-    std::vector<cv::Point2f> corners(pts, pts + 4);
-
-#ifdef DEBUG_DIR
-    cv::Mat contour_vis = small.clone();
-    for (const auto& c : contours) {
-        cv::drawContours(contour_vis, std::vector{c}, -1, {0, 255, 0}, 1);
-    }
-    for (int i = 0; i < 4; ++i) {
-        cv::line(contour_vis, pts[i], pts[(i + 1) % 4], cv::Scalar(0, 0, 255), 2);
-    }
-    SaveDebugImage("04_coarse_rect.png", contour_vis);
-#endif
 
     for (auto& p : corners) {
         p.x = static_cast<float>(p.x / scale_out);

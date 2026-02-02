@@ -8,6 +8,8 @@
 #include <iostream>
 #include <string>
 
+#include <opencv2/opencv.hpp>
+
 using namespace ChromaPrint3D;
 
 namespace {
@@ -16,10 +18,11 @@ struct Options {
     std::string image_path;
     std::string db_path;
     std::string out_path;
+    std::string preview_path;
 
     float request_scale = 1.0f;
-    int max_width       = 0;
-    int max_height      = 0;
+    int max_width       = 512;
+    int max_height      = 512;
 
     ColorSpace color_space = ColorSpace::Lab;
     int k_candidates       = 1;
@@ -33,13 +36,14 @@ void PrintUsage(const char* exe) {
     std::cout << "Usage: " << exe << " --image input.png --db color_db.json --out output.3mf\n"
               << "Options:\n"
               << "  --scale S           ImgProc request scale (default 1.0)\n"
-              << "  --max-width N       Max width for resize (0 = no limit)\n"
-              << "  --max-height N      Max height for resize (0 = no limit)\n"
+              << "  --max-width N       Max width for resize (default 512, 0 = no limit)\n"
+              << "  --max-height N      Max height for resize (default 512, 0 = no limit)\n"
               << "  --color-space lab|rgb   Match in Lab or RGB (default lab)\n"
               << "  --k N               Top-k candidates (default 1)\n"
               << "  --flip-y 0|1        Flip Y axis when building model (default 1)\n"
               << "  --pixel-mm X        Pixel size in mm (default: db.line_width_mm)\n"
-              << "  --layer-mm X        Layer height in mm (default: db.layer_height_mm)\n";
+              << "  --layer-mm X        Layer height in mm (default: db.layer_height_mm)\n"
+              << "  --preview PATH      Save preview image (default: <out>_preview.png)\n";
 }
 
 bool ParseInt(const char* s, int& out) {
@@ -92,6 +96,39 @@ std::string DefaultOutPath(const std::string& image_path) {
     return stem + ".3mf";
 }
 
+std::string DefaultPreviewPath(const std::string& out_path) {
+    std::filesystem::path base(out_path);
+    if (base.empty()) { return "preview.png"; }
+    std::string stem = base.stem().string();
+    if (stem.empty()) { stem = "preview"; }
+    return (base.parent_path() / (stem + "_preview.png")).string();
+}
+
+bool SavePreviewImage(const RecipeMap& recipe_map, const std::string& path, std::string& err) {
+    if (path.empty()) {
+        err = "preview path is empty";
+        return false;
+    }
+    try {
+        cv::Mat bgr = recipe_map.ToBgrImage(255, 255, 255);
+        if (bgr.empty()) {
+            err = "preview image is empty";
+            return false;
+        }
+        if (!cv::imwrite(path, bgr)) {
+            err = "cv::imwrite failed";
+            return false;
+        }
+        return true;
+    } catch (const std::exception& e) {
+        err = e.what();
+        return false;
+    } catch (...) {
+        err = "unknown error";
+        return false;
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -109,6 +146,10 @@ int main(int argc, char** argv) {
         }
         if (arg == "--out" && i + 1 < argc) {
             opt.out_path = argv[++i];
+            continue;
+        }
+        if (arg == "--preview" && i + 1 < argc) {
+            opt.preview_path = argv[++i];
             continue;
         }
         if (arg == "--scale" && i + 1 < argc) {
@@ -178,6 +219,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (opt.out_path.empty()) { opt.out_path = DefaultOutPath(opt.image_path); }
+    if (opt.preview_path.empty()) { opt.preview_path = DefaultPreviewPath(opt.out_path); }
 
     try {
         ColorDB db = ColorDB::LoadFromJson(opt.db_path);
@@ -194,6 +236,15 @@ int main(int argc, char** argv) {
         match_cfg.k_candidates = opt.k_candidates;
 
         RecipeMap recipe_map = RecipeMap::MatchFromImage(img, db, match_cfg);
+
+        if (!opt.preview_path.empty()) {
+            std::string preview_err;
+            if (SavePreviewImage(recipe_map, opt.preview_path, preview_err)) {
+                std::cout << "Saved preview to " << opt.preview_path << "\n";
+            } else {
+                std::cerr << "Warning: failed to save preview: " << preview_err << "\n";
+            }
+        }
 
         BuildModelIRConfig build_cfg;
         build_cfg.flip_y = opt.flip_y;
