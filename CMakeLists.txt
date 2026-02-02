@@ -15,6 +15,8 @@ if(TARGET lib3mf)
     endif()
 endif()
 
+add_subdirectory(3dparty/pybind11)
+
 add_subdirectory(core)
 add_subdirectory(apps)
 

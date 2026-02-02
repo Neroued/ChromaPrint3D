@@ -1,3 +1,6 @@
 [submodule "3dparty/lib3mf"]
 	path = 3dparty/lib3mf
 	url = https://github.com/3MFConsortium/lib3mf.git
+[submodule "3dparty/pybind11"]
+	path = 3dparty/pybind11
+	url = https://github.com/pybind/pybind11.git
