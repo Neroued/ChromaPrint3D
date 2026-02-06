@@ -4,10 +4,9 @@
 
 #include <algorithm>
 #include <fstream>
-#include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
-#include <utility>
 
 namespace ChromaPrint3D {
 namespace {
@@ -39,14 +38,6 @@ static LayerOrder ParseLayerOrder(const json& value) {
     throw std::runtime_error("Invalid layer_order value");
 }
 
-static float DistanceInSpace(const Lab& target, const Entry& entry) {
-    return Lab::DeltaE76(target, entry.lab);
-}
-
-static float DistanceInSpace(const Rgb& target, const Entry& entry) {
-    Rgb entry_rgb = entry.lab.ToRgb();
-    return Rgb::Distance(target, entry_rgb);
-}
 } // namespace
 
 ColorDB ColorDB::LoadFromJson(const std::string& path) {
@@ -109,6 +100,7 @@ ColorDB ColorDB::LoadFromJson(const std::string& path) {
         }
     }
 
+    db.BuildKDTree();
     return db;
 }
 
@@ -147,51 +139,33 @@ void ColorDB::SaveToJson(const std::string& path) const {
 
 const Entry& ColorDB::NearestEntry(const Lab& target) const {
     if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
-
-    const Entry* best  = nullptr;
-    float best_dist_sq = std::numeric_limits<float>::infinity();
-    for (const auto& entry : entries) {
-        float d = DistanceInSpace(target, entry);
-        if (d < best_dist_sq) {
-            best_dist_sq = d;
-            best         = &entry;
-        }
-    }
-    return *best;
+    EnsureKDTree();
+    const auto neighbor = lab_tree_.Nearest(target);
+    return entries[static_cast<std::size_t>(neighbor.index)];
 }
 
 const Entry& ColorDB::NearestEntry(const Rgb& target) const {
     if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
-
-    const Entry* best  = nullptr;
-    float best_dist_sq = std::numeric_limits<float>::infinity();
-    for (const auto& entry : entries) {
-        float d = DistanceInSpace(target, entry);
-        if (d < best_dist_sq) {
-            best_dist_sq = d;
-            best         = &entry;
-        }
-    }
-    return *best;
+    EnsureKDTree();
+    const auto neighbor = rgb_tree_.Nearest(target);
+    return entries[static_cast<std::size_t>(neighbor.index)];
 }
 
 std::vector<const Entry*> ColorDB::NearestEntries(const Lab& target, std::size_t k) const {
     if (k == 0) { return {}; }
     if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
 
+    EnsureKDTree();
     k = std::min(k, entries.size());
 
-    std::vector<std::pair<float, const Entry*>> dist;
-    dist.reserve(entries.size());
-    for (const auto& entry : entries) { dist.emplace_back(DistanceInSpace(target, entry), &entry); }
-
-    auto mid = dist.begin() + static_cast<std::ptrdiff_t>(k);
-    std::partial_sort(dist.begin(), mid, dist.end(),
-                      [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<LabTree::NeighborT> neighbors;
+    lab_tree_.KNearest(target, k, neighbors);
 
     std::vector<const Entry*> result;
-    result.reserve(k);
-    for (std::size_t i = 0; i < k; ++i) { result.push_back(dist[i].second); }
+    result.reserve(neighbors.size());
+    for (const auto& n : neighbors) {
+        result.push_back(&entries[static_cast<std::size_t>(n.index)]);
+    }
     return result;
 }
 
@@ -199,20 +173,38 @@ std::vector<const Entry*> ColorDB::NearestEntries(const Rgb& target, std::size_t
     if (k == 0) { return {}; }
     if (entries.empty()) { throw std::runtime_error("ColorDB entries is empty"); }
 
+    EnsureKDTree();
     k = std::min(k, entries.size());
 
-    std::vector<std::pair<float, const Entry*>> dist;
-    dist.reserve(entries.size());
-    for (const auto& entry : entries) { dist.emplace_back(DistanceInSpace(target, entry), &entry); }
-
-    auto mid = dist.begin() + static_cast<std::ptrdiff_t>(k);
-    std::partial_sort(dist.begin(), mid, dist.end(),
-                      [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<RgbTree::NeighborT> neighbors;
+    rgb_tree_.KNearest(target, k, neighbors);
 
     std::vector<const Entry*> result;
-    result.reserve(k);
-    for (std::size_t i = 0; i < k; ++i) { result.push_back(dist[i].second); }
+    result.reserve(neighbors.size());
+    for (const auto& n : neighbors) {
+        result.push_back(&entries[static_cast<std::size_t>(n.index)]);
+    }
     return result;
+}
+
+void ColorDB::BuildKDTree() const {
+    kd_indices_.clear();
+    kd_indices_.reserve(entries.size());
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        kd_indices_.push_back(i);
+    }
+
+    const auto points  = std::span<const Entry>(entries);
+    const auto indices = std::span<const KdIndex>(kd_indices_);
+    lab_tree_.Reset(points, indices, LabProj{});
+    rgb_tree_.Reset(points, indices, RgbProj{});
+    kd_entries_size_ = entries.size();
+}
+
+void ColorDB::EnsureKDTree() const {
+    if (entries.size() != kd_entries_size_) {
+        BuildKDTree();
+    }
 }
 
 } // namespace ChromaPrint3D

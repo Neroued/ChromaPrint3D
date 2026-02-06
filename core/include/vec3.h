@@ -53,6 +53,14 @@ struct Vec3i {
         return *this;
     }
 
+    int& operator[](int i) {
+        return i == 0 ? x : (i == 1 ? y : z);
+    }
+
+    const int& operator[](int i) const {
+        return i == 0 ? x : (i == 1 ? y : z);
+    }
+
     int Dot(const Vec3i& other) const { return x * other.x + y * other.y + z * other.z; }
 
     int LengthSquared() const { return Dot(*this); }
@@ -105,6 +113,14 @@ struct Vec3f {
         y /= s;
         z /= s;
         return *this;
+    }
+
+    float& operator[](int i) {
+        return i == 0 ? x : (i == 1 ? y : z);
+    }
+
+    const float& operator[](int i) const {
+        return i == 0 ? x : (i == 1 ? y : z);
     }
 
     float Dot(const Vec3f& other) const { return x * other.x + y * other.y + z * other.z; }
