@@ -1,4 +1,10 @@
 build/
 .cache/
-data/
 dist/
+*.3mf
+*.jpg
+*.png
+backup/
+modeling/output
+modeling/data
+modeling/dbs

@@ -1,15 +1,18 @@
-#include "calib.h"
+#include "chromaprint3d/calib.h"
+#include "chromaprint3d/error.h"
+#include "detail/cv_utils.h"
+
+#include <spdlog/spdlog.h>
 
 #include <opencv2/opencv.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
-#define DEBUG_DIR "/tmp/calib_debug"
+// #define DEBUG_DIR "/tmp/calib_debug"
 
 #ifdef DEBUG_DIR
 #    include <filesystem>
@@ -18,7 +21,14 @@
 namespace ChromaPrint3D {
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
+constexpr float kPi              = 3.14159265358979323846f;
+constexpr int kTargetDim         = 1200;
+constexpr double kCannySpread    = 0.33;
+constexpr float kAspectMax       = 1.6f;
+constexpr double kRectangularity = 0.7;
+constexpr float kAngleDeviation  = 25.0f;
+constexpr double kAreaMinRatio   = 0.08;
+constexpr double kAreaMaxRatio   = 0.98;
 
 #ifdef DEBUG_DIR
 static std::string DebugDir() { return std::string(DEBUG_DIR); }
@@ -43,27 +53,12 @@ static void SaveDebugImage(const std::string& name, const cv::Mat& img) {
         }
         std::filesystem::path path = std::filesystem::path(DebugDir()) / name;
         cv::imwrite(path.string(), out);
-    } catch (...) {
-        // Debug output should not fail the main pipeline.
+    } catch (const std::exception& e) {
+        spdlog::debug("SaveDebugImage failed: {}", e.what());
     }
 }
 #endif
 
-static cv::Mat EnsureBgr(const cv::Mat& src) {
-    if (src.empty()) { return cv::Mat(); }
-    if (src.channels() == 3) { return src; }
-    if (src.channels() == 4) {
-        cv::Mat bgr;
-        cv::cvtColor(src, bgr, cv::COLOR_BGRA2BGR);
-        return bgr;
-    }
-    if (src.channels() == 1) {
-        cv::Mat bgr;
-        cv::cvtColor(src, bgr, cv::COLOR_GRAY2BGR);
-        return bgr;
-    }
-    throw std::runtime_error("Unsupported image channel count");
-}
 
 static double MedianGray(const cv::Mat& gray) {
     if (gray.empty() || gray.type() != CV_8UC1) { return 0.0; }
@@ -84,8 +79,8 @@ static double MedianGray(const cv::Mat& gray) {
 
 static cv::Mat AutoCanny(const cv::Mat& gray) {
     const double v = MedianGray(gray);
-    double lower   = std::max(0.0, (1.0 - 0.33) * v);
-    double upper   = std::min(255.0, (1.0 + 0.33) * v);
+    double lower   = std::max(0.0, (1.0 - kCannySpread) * v);
+    double upper   = std::min(255.0, (1.0 + kCannySpread) * v);
     if (upper < 10.0) {
         lower = 30.0;
         upper = 90.0;
@@ -117,13 +112,13 @@ static bool EvaluateQuadCandidate(const std::vector<cv::Point>& quad, double con
     if (w <= 1.0f || h <= 1.0f) { return false; }
 
     const float ratio = std::max(w, h) / std::min(w, h);
-    if (ratio > 1.6f) { return false; }
+    if (ratio > kAspectMax) { return false; }
 
     const double rect_area = static_cast<double>(w) * static_cast<double>(h);
     if (rect_area <= 1e-3) { return false; }
 
     const double rectangularity = std::min(1.0, contour_area / rect_area);
-    if (rectangularity < 0.7) { return false; }
+    if (rectangularity < kRectangularity) { return false; }
 
     float max_dev = 0.0f;
     for (int i = 0; i < 4; ++i) {
@@ -133,7 +128,7 @@ static bool EvaluateQuadCandidate(const std::vector<cv::Point>& quad, double con
         const float angle    = AngleDegrees(p0, p1, p2);
         max_dev              = std::max(max_dev, std::abs(angle - 90.0f));
     }
-    if (max_dev > 25.0f) { return false; }
+    if (max_dev > kAngleDeviation) { return false; }
 
     out.clear();
     out.reserve(4);
@@ -155,8 +150,8 @@ static bool TryCoarseLocateByEdges(const cv::Mat& small, const cv::Mat& edges,
     if (contours.empty()) { return false; }
 
     const double img_area = static_cast<double>(small.cols) * static_cast<double>(small.rows);
-    const double min_area = img_area * 0.08;
-    const double max_area = img_area * 0.98;
+    const double min_area = img_area * kAreaMinRatio;
+    const double max_area = img_area * kAreaMaxRatio;
 
     double best_score = -1.0;
     std::vector<cv::Point2f> best_quad;
@@ -221,7 +216,7 @@ static bool TryCoarseLocateByEdges(const cv::Mat& small, const cv::Mat& edges,
 }
 
 static std::vector<cv::Point2f> OrderCorners(const std::vector<cv::Point2f>& pts) {
-    if (pts.size() != 4) { throw std::runtime_error("OrderCorners expects 4 points"); }
+    if (pts.size() != 4) { throw InputError("OrderCorners expects 4 points"); }
     cv::Point2f tl, tr, br, bl;
     double min_sum  = std::numeric_limits<double>::infinity();
     double max_sum  = -std::numeric_limits<double>::infinity();
@@ -241,11 +236,12 @@ static std::vector<cv::Point2f> OrderCorners(const std::vector<cv::Point2f>& pts
 static std::vector<cv::Point2f> CoarseLocateBoard(const cv::Mat& bgr, double& scale_out) {
     const int width  = bgr.cols;
     const int height = bgr.rows;
-    if (width <= 0 || height <= 0) { throw std::runtime_error("Input image is empty"); }
+    if (width <= 0 || height <= 0) {
+        throw InputError("Image is empty or unreadable; please check the uploaded image file");
+    }
 
     const int max_dim = std::max(width, height);
-    const int target  = 1200;
-    scale_out         = (max_dim > target) ? (static_cast<double>(target) / max_dim) : 1.0;
+    scale_out = (max_dim > kTargetDim) ? (static_cast<double>(kTargetDim) / max_dim) : 1.0;
 
     cv::Mat small;
     if (scale_out < 1.0) {
@@ -270,7 +266,10 @@ static std::vector<cv::Point2f> CoarseLocateBoard(const cv::Mat& bgr, double& sc
 
     std::vector<cv::Point2f> corners;
     if (!TryCoarseLocateByEdges(small, edges, corners)) {
-        throw std::runtime_error("Failed to coarse-locate board");
+        throw InputError(
+            "Failed to locate calibration board outline in the image. "
+            "Ensure: (1) the full board is visible; (2) there is good contrast with the background; "
+            "(3) the shooting angle is correct and lighting is even");
     }
 
     for (auto& p : corners) {
@@ -387,7 +386,7 @@ static CircleResult DetectCircleInRoi(const cv::Mat& gray, float expected_radius
 
 static std::vector<cv::Point2f> OrderMainByTag(const std::vector<cv::Point2f>& centers,
                                                const cv::Point2f& tag_center) {
-    if (centers.size() != 4) { throw std::runtime_error("Need 4 main holes"); }
+    if (centers.size() != 4) { throw InputError("Need 4 main holes"); }
     cv::Point2f center(0.0f, 0.0f);
     for (const auto& p : centers) { center += p; }
     center.x /= 4.0f;
@@ -434,12 +433,14 @@ static std::vector<cv::Point2f> RotatedVectors(const cv::Point2f& v) {
 
 } // namespace
 
-cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
-                                     const CalibrationBoardMeta& meta) {
-    cv::Mat input = cv::imread(image_path, cv::IMREAD_UNCHANGED);
-    if (input.empty()) { throw std::runtime_error("Failed to read image: " + image_path); }
-    cv::Mat bgr = EnsureBgr(input);
-    if (bgr.empty()) { throw std::runtime_error("Failed to normalize input image"); }
+cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta) {
+    if (input.empty()) {
+        throw InputError("Input image is empty; please check the uploaded image");
+    }
+    cv::Mat bgr = detail::EnsureBgr(input);
+    if (bgr.empty()) {
+        throw InputError("Image format conversion failed; ensure the uploaded file is a valid RGB/BGR image");
+    }
 
 #ifdef DEBUG_DIR
     SaveDebugImage("00_input.png", bgr);
@@ -447,7 +448,11 @@ cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
 
     const int grid_rows = meta.grid_rows;
     const int grid_cols = meta.grid_cols;
-    if (grid_rows <= 0 || grid_cols <= 0) { throw std::runtime_error("Invalid grid size"); }
+    if (grid_rows <= 0 || grid_cols <= 0) {
+        throw InputError(
+            "Invalid grid dimensions in meta (grid_rows=" + std::to_string(grid_rows) +
+            ", grid_cols=" + std::to_string(grid_cols) + "); check the meta JSON file");
+    }
 
     int scale = meta.config.layout.resolution_scale;
     if (scale <= 0) { scale = 1; }
@@ -455,14 +460,20 @@ cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
     const int tile   = meta.config.layout.tile_factor * scale;
     const int gap    = meta.config.layout.gap_factor * scale;
     const int margin = meta.config.layout.margin_factor * scale;
-    if (tile <= 0) { throw std::runtime_error("Invalid tile factor"); }
-    if (gap < 0 || margin < 0) { throw std::runtime_error("Invalid gap or margin factor"); }
+    if (tile <= 0) {
+        throw InputError("Invalid tile_factor in meta; check the meta JSON file");
+    }
+    if (gap < 0 || margin < 0) {
+        throw InputError("Invalid gap_factor or margin_factor in meta; check the meta JSON file");
+    }
 
     const int color_w = grid_cols * tile + (grid_cols - 1) * gap;
     const int color_h = grid_rows * tile + (grid_rows - 1) * gap;
     const int board_w = color_w + 2 * margin;
     const int board_h = color_h + 2 * margin;
-    if (board_w <= 0 || board_h <= 0) { throw std::runtime_error("Invalid board size"); }
+    if (board_w <= 0 || board_h <= 0) {
+        throw InputError("Computed board dimensions are invalid; check the meta JSON file");
+    }
 
     double coarse_scale                     = 1.0;
     std::vector<cv::Point2f> coarse_corners = CoarseLocateBoard(bgr, coarse_scale);
@@ -510,12 +521,22 @@ cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
         int y0 = std::max(0, static_cast<int>(std::floor(guess.y - search_r)));
         int x1 = std::min(gray.cols - 1, static_cast<int>(std::ceil(guess.x + search_r)));
         int y1 = std::min(gray.rows - 1, static_cast<int>(std::ceil(guess.y + search_r)));
-        if (x1 <= x0 || y1 <= y0) { throw std::runtime_error("Main hole ROI is invalid"); }
+        if (x1 <= x0 || y1 <= y0) {
+            throw InputError(
+                "Search area for main fiducial hole exceeds image bounds; "
+                "ensure the photo contains the full calibration board with all four corners visible");
+        }
 
         cv::Rect roi(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
         const std::string debug_name = "hole_main_" + std::to_string(i);
         CircleResult circle          = DetectCircleInRoi(gray(roi), expected_r, debug_name);
-        if (!circle.ok) { throw std::runtime_error("Failed to detect main hole"); }
+        if (!circle.ok) {
+            throw InputError(
+                "Failed to detect main fiducial hole #" + std::to_string(i + 1) +
+                ". Ensure: (1) the corner holes are clearly visible; "
+                "(2) lighting is even without strong reflections; "
+                "(3) the photo matches the meta file's calibration board");
+        }
 
         circle.center.x += static_cast<float>(roi.x);
         circle.center.y += static_cast<float>(roi.y);
@@ -566,7 +587,11 @@ cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
         }
     }
 
-    if (!tag_circle.ok) { throw std::runtime_error("Failed to detect tag hole"); }
+    if (!tag_circle.ok) {
+        throw InputError(
+            "Failed to detect the tag fiducial hole (the small hole indicating board orientation). "
+            "Ensure all four corners are fully visible and the photo matches the meta file");
+    }
 
 #ifdef DEBUG_DIR
     cv::Mat holes_vis = bgr.clone();
@@ -600,7 +625,7 @@ cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
 #endif
 
     if (margin < 0 || margin + color_w > board.cols || margin + color_h > board.rows) {
-        throw std::runtime_error("Color region bounds are invalid");
+        throw InputError("Failed to extract color region: computed area exceeds image bounds");
     }
     cv::Rect color_roi(margin, margin, color_w, color_h);
     cv::Mat color = board(color_roi).clone();
@@ -610,6 +635,13 @@ cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
 #endif
 
     return color;
+}
+
+cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
+                                     const CalibrationBoardMeta& meta) {
+    cv::Mat input = cv::imread(image_path, cv::IMREAD_UNCHANGED);
+    if (input.empty()) { throw IOError("Failed to read image: " + image_path); }
+    return LocateCalibrationColorRegion(input, meta);
 }
 
 } // namespace ChromaPrint3D

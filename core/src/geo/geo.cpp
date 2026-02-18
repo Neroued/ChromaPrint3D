@@ -1,6 +1,9 @@
-#include "geo.h"
+#include "chromaprint3d/voxel.h"
+#include "chromaprint3d/mesh.h"
+#include "chromaprint3d/error.h"
 
-#include <stdexcept>
+#include <spdlog/spdlog.h>
+
 #include <unordered_map>
 
 namespace ChromaPrint3D {
@@ -30,10 +33,10 @@ bool VoxelGrid::Set(int w, int h, int l, bool v) {
 ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
                        const BuildModelIRConfig& cfg) {
     if (recipe_map.width <= 0 || recipe_map.height <= 0) {
-        throw std::runtime_error("RecipeMap size is invalid");
+        throw InputError("RecipeMap size is invalid");
     }
     if (recipe_map.color_layers < 0 || recipe_map.num_channels < 0) {
-        throw std::runtime_error("RecipeMap layers or channels are invalid");
+        throw InputError("RecipeMap layers or channels are invalid");
     }
 
     const int width        = recipe_map.width;
@@ -44,32 +47,35 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
     if (color_layers > 0) {
         const size_t expected = pixel_count * static_cast<size_t>(color_layers);
         if (recipe_map.recipes.size() < expected) {
-            throw std::runtime_error("RecipeMap recipes size mismatch");
+            throw InputError("RecipeMap recipes size mismatch");
         }
     }
     if (!recipe_map.mask.empty() && recipe_map.mask.size() < pixel_count) {
-        throw std::runtime_error("RecipeMap mask size mismatch");
+        throw InputError("RecipeMap mask size mismatch");
+    }
+    if (!cfg.base_only_mask.empty() && cfg.base_only_mask.size() != pixel_count) {
+        throw InputError("base_only_mask size mismatch");
     }
 
     int num_channels = recipe_map.num_channels;
     if (num_channels <= 0) { num_channels = static_cast<int>(db.NumChannels()); }
-    if (num_channels <= 0) { throw std::runtime_error("num_channels is invalid"); }
+    if (num_channels <= 0) { throw InputError("num_channels is invalid"); }
     if (db.NumChannels() > 0 && static_cast<int>(db.NumChannels()) != num_channels) {
-        throw std::runtime_error("RecipeMap num_channels does not match ColorDB");
+        throw ConfigError("RecipeMap num_channels does not match ColorDB");
     }
 
     const int base_layers = (cfg.base_layers != 0) ? cfg.base_layers : db.base_layers;
-    if (base_layers < 0) { throw std::runtime_error("base_layers is invalid"); }
+    if (base_layers < 0) { throw InputError("base_layers is invalid"); }
 
     const int base_channel_idx = db.base_channel_idx;
     if (base_layers > 0 && (base_channel_idx < 0 || base_channel_idx >= num_channels)) {
-        throw std::runtime_error("base_channel_idx is out of range");
+        throw InputError("base_channel_idx is out of range");
     }
 
     const bool double_sided = cfg.double_sided;
     const int base_start    = double_sided ? color_layers : 0;
     const int total_layers  = base_start + base_layers + color_layers;
-    if (total_layers < 0) { throw std::runtime_error("total_layers is invalid"); }
+    if (total_layers < 0) { throw InputError("total_layers is invalid"); }
 
     ModelIR result;
     result.name             = recipe_map.name;
@@ -82,9 +88,11 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
     if (result.palette.empty()) {
         result.palette.resize(static_cast<size_t>(num_channels));
     } else if (static_cast<int>(result.palette.size()) != num_channels) {
-        throw std::runtime_error("palette size does not match num_channels");
+        throw ConfigError("palette size does not match num_channels");
     }
-    result.voxel_grids.resize(static_cast<size_t>(num_channels));
+    const bool has_base_grid = base_layers > 0;
+    const int base_grid_idx  = has_base_grid ? num_channels : -1;
+    result.voxel_grids.resize(static_cast<size_t>(num_channels + (has_base_grid ? 1 : 0)));
 
     for (int ch = 0; ch < num_channels; ++ch) {
         VoxelGrid& grid  = result.voxel_grids[static_cast<size_t>(ch)];
@@ -94,9 +102,22 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
         grid.channel_idx = ch;
         grid.ooc.assign(pixel_count * static_cast<size_t>(total_layers), 0);
     }
+    if (has_base_grid) {
+        VoxelGrid& grid  = result.voxel_grids[static_cast<size_t>(base_grid_idx)];
+        grid.width       = width;
+        grid.height      = height;
+        grid.num_layers  = total_layers;
+        grid.channel_idx = base_grid_idx;
+        grid.ooc.assign(pixel_count * static_cast<size_t>(total_layers), 0);
+    }
 
-    const bool has_mask = !recipe_map.mask.empty();
+    const bool has_mask           = !recipe_map.mask.empty();
+    const bool has_base_only_mask = !cfg.base_only_mask.empty();
+    const uint8_t* base_only_mask = has_base_only_mask ? cfg.base_only_mask.data() : nullptr;
+    VoxelGrid* base_grid =
+        has_base_grid ? &result.voxel_grids[static_cast<size_t>(base_grid_idx)] : nullptr;
 
+    #pragma omp parallel for schedule(dynamic, 64)
     for (int r = 0; r < height; ++r) {
         const int vh = cfg.flip_y ? (height - 1 - r) : r;
         for (int c = 0; c < width; ++c) {
@@ -104,12 +125,11 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
                 static_cast<size_t>(r) * static_cast<size_t>(width) + static_cast<size_t>(c);
             if (has_mask && recipe_map.mask[idx] == 0) { continue; }
 
-            if (base_layers > 0) {
-                VoxelGrid& base_grid = result.voxel_grids[static_cast<size_t>(base_channel_idx)];
+            if (has_base_grid && base_grid) {
                 for (int l = 0; l < base_layers; ++l) {
                     const int base_layer = base_start + l;
                     const size_t offset = GridIndex(c, vh, base_layer, width, height, total_layers);
-                    if (offset < base_grid.ooc.size()) { base_grid.ooc[offset] = 1; }
+                    if (offset < base_grid->ooc.size()) { base_grid->ooc[offset] = 1; }
                 }
             }
 
@@ -117,16 +137,21 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
             const uint8_t* recipe = recipe_map.RecipeAt(r, c);
             if (!recipe) { continue; }
 
+            const bool route_base_channel =
+                has_base_grid && has_base_only_mask && base_only_mask && base_only_mask[idx] != 0;
+
             for (int layer = 0; layer < color_layers; ++layer) {
                 const int mapped_layer = (recipe_map.layer_order == LayerOrder::Top2Bottom)
                                              ? (color_layers - 1 - layer)
                                              : layer;
                 const int stored_layer = base_start + base_layers + mapped_layer;
-                // VoxelGrid 层序为自底向上，layer 0 是最底层（含 base）。
                 const int channel_idx = static_cast<int>(recipe[layer]);
                 if (channel_idx < 0 || channel_idx >= num_channels) { continue; }
 
-                VoxelGrid& grid     = result.voxel_grids[static_cast<size_t>(channel_idx)];
+                VoxelGrid& grid =
+                    (route_base_channel && channel_idx == base_channel_idx && base_grid)
+                        ? *base_grid
+                        : result.voxel_grids[static_cast<size_t>(channel_idx)];
                 const size_t offset = GridIndex(c, vh, stored_layer, width, height, total_layers);
                 if (offset < grid.ooc.size()) { grid.ooc[offset] = 1; }
             }
@@ -140,13 +165,18 @@ ModelIR ModelIR::Build(const RecipeMap& recipe_map, const ColorDB& db,
                 const int channel_idx  = static_cast<int>(recipe[layer]);
                 if (channel_idx < 0 || channel_idx >= num_channels) { continue; }
 
-                VoxelGrid& grid     = result.voxel_grids[static_cast<size_t>(channel_idx)];
+                VoxelGrid& grid =
+                    (route_base_channel && channel_idx == base_channel_idx && base_grid)
+                        ? *base_grid
+                        : result.voxel_grids[static_cast<size_t>(channel_idx)];
                 const size_t offset = GridIndex(c, vh, stored_layer, width, height, total_layers);
                 if (offset < grid.ooc.size()) { grid.ooc[offset] = 1; }
             }
         }
     }
 
+    spdlog::info("ModelIR::Build: {}x{}, {} grids, total_layers={}", result.width, result.height,
+                 result.voxel_grids.size(), total_layers);
     return result;
 }
 
@@ -157,13 +187,13 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     const int layers = voxel_grid.num_layers;
     if (width <= 0 || height <= 0 || layers <= 0) { return mesh; }
     if (cfg.pixel_mm <= 0.0f || cfg.layer_height_mm <= 0.0f) {
-        throw std::runtime_error("BuildMeshConfig values must be positive");
+        throw InputError("BuildMeshConfig values must be positive");
     }
 
     const size_t expected =
         static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(layers);
     if (voxel_grid.ooc.size() < expected) {
-        throw std::runtime_error("VoxelGrid ooc size mismatch");
+        throw InputError("VoxelGrid ooc size mismatch");
     }
 
     struct Vec3iHash {
@@ -181,7 +211,15 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         }
     };
 
+    const std::size_t estimated_surface =
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 2 +
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(layers) * 2 +
+        static_cast<std::size_t>(height) * static_cast<std::size_t>(layers) * 2;
+    mesh.vertices.reserve(estimated_surface);
+    mesh.indices.reserve(estimated_surface * 2);
+
     std::unordered_map<Vec3i, int, Vec3iHash, Vec3iEq> vertex_map;
+    vertex_map.reserve(estimated_surface);
 
     const float px = cfg.pixel_mm;
     const float pz = cfg.layer_height_mm;
@@ -300,6 +338,8 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         }
     }
 
+    spdlog::info("Mesh::Build: ch={}, vertices={}, triangles={}", voxel_grid.channel_idx,
+                 mesh.vertices.size(), mesh.indices.size());
     return mesh;
 }
 

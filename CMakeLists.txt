@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ChromaPrint3D VERSION 1.0.0 LANGUAGES CXX)
+project(ChromaPrint3D VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Build options
+option(CHROMAPRINT3D_BUILD_APPS "Build application executables" ON)
+option(CHROMAPRINT3D_BUILD_TESTS "Build unit tests" OFF)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -52,9 +55,19 @@ if(TARGET lib3mf)
     endif()
 endif()
 
-add_subdirectory(3dparty/pybind11)
+set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Disable spdlog examples" FORCE)
+set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "Disable spdlog tests" FORCE)
+set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "Disable spdlog benchmarks" FORCE)
+add_subdirectory(3dparty/spdlog)
 
 add_subdirectory(core)
-add_subdirectory(apps)
-add_subdirectory(python)
+
+if(CHROMAPRINT3D_BUILD_APPS)
+    add_subdirectory(apps)
+endif()
+
+if(CHROMAPRINT3D_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(core/tests)
+endif()
 

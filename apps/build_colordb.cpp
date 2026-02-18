@@ -1,8 +1,9 @@
-#include "calib.h"
-#include "colorDB.h"
+#include "chromaprint3d/logging.h"
+#include "chromaprint3d/calib.h"
+#include "chromaprint3d/color_db.h"
 
+#include <cstdio>
 #include <filesystem>
-#include <iostream>
 #include <string>
 
 using namespace ChromaPrint3D;
@@ -10,7 +11,7 @@ using namespace ChromaPrint3D;
 namespace {
 
 void PrintUsage(const char* exe) {
-    std::cout << "Usage: " << exe << " --image calib.png --meta calib.json --out color_db.json\n";
+    std::printf("Usage: %s --image calib.png --meta calib.json --out color_db.json\n", exe);
 }
 
 std::string DefaultOutPath(const std::string& image_path) {
@@ -27,6 +28,7 @@ int main(int argc, char** argv) {
     std::string image_path;
     std::string meta_path;
     std::string out_path;
+    std::string log_level = "info";
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -42,14 +44,20 @@ int main(int argc, char** argv) {
             out_path = argv[++i];
             continue;
         }
+        if (arg == "--log-level" && i + 1 < argc) {
+            log_level = argv[++i];
+            continue;
+        }
         if (arg == "--help" || arg == "-h") {
             PrintUsage(argv[0]);
             return 0;
         }
-        std::cerr << "Unknown argument: " << arg << "\n";
+        std::fprintf(stderr, "Unknown argument: %s\n", arg.c_str());
         PrintUsage(argv[0]);
         return 1;
     }
+
+    InitLogging(ParseLogLevel(log_level));
 
     if (image_path.empty() || meta_path.empty()) {
         PrintUsage(argv[0]);
@@ -60,9 +68,9 @@ int main(int argc, char** argv) {
     try {
         ColorDB db = GenColorDBFromImage(image_path, meta_path);
         db.SaveToJson(out_path);
-        std::cout << "Saved ColorDB to " << out_path << "\n";
+        spdlog::info("Saved ColorDB to {}", out_path);
     } catch (const std::exception& e) {
-        std::cerr << "Failed to build ColorDB: " << e.what() << "\n";
+        spdlog::error("Failed to build ColorDB: {}", e.what());
         return 1;
     }
 

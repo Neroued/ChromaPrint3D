@@ -1,83 +1,64 @@
-#include "calib.h"
-#include "geo.h"
-#include "match.h"
+#include "chromaprint3d/calib.h"
+#include "chromaprint3d/voxel.h"
+#include "chromaprint3d/mesh.h"
+#include "chromaprint3d/export_3mf.h"
+#include "chromaprint3d/recipe_map.h"
+#include "chromaprint3d/error.h"
+#include "detail/cv_utils.h"
+#include "detail/json_utils.h"
 
 #include <nlohmann/json.hpp>
 #include <opencv2/opencv.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fstream>
-#include <stdexcept>
 #include <string>
 
 namespace ChromaPrint3D {
 
 cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
                                      const CalibrationBoardMeta& meta);
+cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta);
+
+using nlohmann::json;
 
 namespace {
-using nlohmann::json;
 
 constexpr uint16_t kInvalidRecipeIdx = 0xFFFF;
 
-static std::string ToLayerOrderString(LayerOrder order) {
-    switch (order) {
-    case LayerOrder::Top2Bottom:
-        return "Top2Bottom";
-    case LayerOrder::Bottom2Top:
-        return "Bottom2Top";
-    }
-    return "Top2Bottom";
-}
-
-static LayerOrder FromLayerOrderString(const std::string& order) {
-    if (order == "Top2Bottom") { return LayerOrder::Top2Bottom; }
-    if (order == "Bottom2Top") { return LayerOrder::Bottom2Top; }
-    throw std::runtime_error("Invalid layer_order string: " + order);
-}
-
-static LayerOrder ParseLayerOrder(const json& value) {
-    if (value.is_string()) { return FromLayerOrderString(value.get<std::string>()); }
-    if (value.is_number_integer()) {
-        int v = value.get<int>();
-        if (v == 0) { return LayerOrder::Top2Bottom; }
-        if (v == 1) { return LayerOrder::Bottom2Top; }
-    }
-    throw std::runtime_error("Invalid layer_order value");
-}
-
 static void ValidateConfig(const CalibrationBoardConfig& cfg) {
     if (!cfg.recipe.IsSupported()) {
-        throw std::runtime_error("Calibration recipe is not supported");
+        throw ConfigError("Calibration recipe is not supported");
     }
     if (!cfg.palette.empty() && static_cast<int>(cfg.palette.size()) != cfg.recipe.num_channels) {
-        throw std::runtime_error("Calibration palette size does not match num_channels");
+        throw ConfigError("Calibration palette size does not match num_channels");
     }
-    if (cfg.base_layers < 0) { throw std::runtime_error("base_layers is invalid"); }
+    if (cfg.base_layers < 0) { throw InputError("base_layers is invalid"); }
     if (cfg.base_layers > 0 &&
         (cfg.base_channel_idx < 0 || cfg.base_channel_idx >= cfg.recipe.num_channels)) {
-        throw std::runtime_error("base_channel_idx is out of range");
+        throw InputError("base_channel_idx is out of range");
     }
     if (cfg.layout.line_width_mm <= 0.0f) {
-        throw std::runtime_error("line_width_mm must be positive");
+        throw InputError("line_width_mm must be positive");
     }
     if (cfg.layout.resolution_scale <= 0) {
-        throw std::runtime_error("resolution_scale must be positive");
+        throw InputError("resolution_scale must be positive");
     }
-    if (cfg.layout.tile_factor <= 0) { throw std::runtime_error("tile_factor must be positive"); }
-    if (cfg.layout.gap_factor < 0) { throw std::runtime_error("gap_factor is invalid"); }
-    if (cfg.layout.margin_factor < 0) { throw std::runtime_error("margin_factor is invalid"); }
+    if (cfg.layout.tile_factor <= 0) { throw InputError("tile_factor must be positive"); }
+    if (cfg.layout.gap_factor < 0) { throw InputError("gap_factor is invalid"); }
+    if (cfg.layout.margin_factor < 0) { throw InputError("margin_factor is invalid"); }
     if (cfg.layout.fiducial.main_d_factor <= 0) {
-        throw std::runtime_error("fiducial main_d_factor must be positive");
+        throw InputError("fiducial main_d_factor must be positive");
     }
 }
 
 static int ComputeGridSize(std::size_t recipe_count) {
-    if (recipe_count == 0) { throw std::runtime_error("recipe_count is zero"); }
+    if (recipe_count == 0) { throw InputError("recipe_count is zero"); }
     const double side = std::ceil(std::sqrt(static_cast<double>(recipe_count)));
     const int grid    = static_cast<int>(side);
-    if (grid <= 0) { throw std::runtime_error("grid size is invalid"); }
+    if (grid <= 0) { throw InputError("grid size is invalid"); }
     return grid;
 }
 
@@ -91,12 +72,32 @@ static std::vector<uint8_t> BuildBackgroundRecipe(const CalibrationBoardConfig& 
     return recipe;
 }
 
+static void ValidateMetaRecipes(const CalibrationBoardMeta& meta) {
+    const int grid_rows = meta.grid_rows;
+    const int grid_cols = meta.grid_cols;
+    if (grid_rows <= 0 || grid_cols <= 0) { throw InputError("grid size is invalid"); }
+    const size_t expected = static_cast<size_t>(grid_rows) * static_cast<size_t>(grid_cols);
+    if (meta.patch_recipe_idx.size() < expected) {
+        throw InputError("patch_recipe_idx size mismatch");
+    }
+    if (meta.patch_recipes.size() < expected) {
+        throw InputError("patch_recipes size mismatch");
+    }
+    const size_t layers = static_cast<size_t>(meta.config.recipe.color_layers);
+    for (size_t i = 0; i < expected; ++i) {
+        const auto& recipe = meta.patch_recipes[i];
+        if (recipe.size() != layers) {
+            throw InputError("patch_recipes layer size mismatch");
+        }
+    }
+}
+
 static void ApplyHoleMask(std::vector<uint8_t>& mask, int width, int height, float center_x,
                           float center_y, float diameter) {
     if (width <= 0 || height <= 0) { return; }
     if (diameter <= 0.0f) { return; }
     if (mask.size() < static_cast<size_t>(width) * static_cast<size_t>(height)) {
-        throw std::runtime_error("mask size mismatch");
+        throw InputError("mask size mismatch");
     }
     const float radius = diameter * 0.5f;
     const float r2     = radius * radius;
@@ -124,45 +125,23 @@ static void ApplyHoleMask(std::vector<uint8_t>& mask, int width, int height, flo
     }
 }
 
-static cv::Mat EnsureBgr(const cv::Mat& src) {
-    if (src.empty()) { return cv::Mat(); }
-    if (src.channels() == 3) { return src; }
-    if (src.channels() == 4) {
-        cv::Mat bgr;
-        cv::cvtColor(src, bgr, cv::COLOR_BGRA2BGR);
-        return bgr;
-    }
-    if (src.channels() == 1) {
-        cv::Mat bgr;
-        cv::cvtColor(src, bgr, cv::COLOR_GRAY2BGR);
-        return bgr;
-    }
-    throw std::runtime_error("Unsupported image channel count");
-}
-
-static cv::Mat BgrToLab(const cv::Mat& bgr) {
-    if (bgr.empty()) { return cv::Mat(); }
-    cv::Mat bgr_float;
-    bgr.convertTo(bgr_float, CV_32F, 1.0 / 255.0);
-    cv::Mat lab;
-    cv::cvtColor(bgr_float, lab, cv::COLOR_BGR2Lab);
-    return lab;
-}
 
 static int ResolveColorRegionScale(const CalibrationBoardMeta& meta, int width, int height) {
-    if (width <= 0 || height <= 0) { throw std::runtime_error("Color region size is invalid"); }
+    if (width <= 0 || height <= 0) { throw InputError("Color region size is invalid"); }
     const int grid_rows = meta.grid_rows;
     const int grid_cols = meta.grid_cols;
-    if (grid_rows <= 0 || grid_cols <= 0) { throw std::runtime_error("Grid size is invalid"); }
+    if (grid_rows <= 0 || grid_cols <= 0) { throw InputError("Grid size is invalid"); }
 
     const int tile_factor = meta.config.layout.tile_factor;
     const int gap_factor  = meta.config.layout.gap_factor;
-    if (tile_factor <= 0) { throw std::runtime_error("tile_factor is invalid"); }
-    if (gap_factor < 0) { throw std::runtime_error("gap_factor is invalid"); }
+    if (tile_factor <= 0) { throw InputError("tile_factor is invalid"); }
+    if (gap_factor < 0) { throw InputError("gap_factor is invalid"); }
 
     const int base_w = grid_cols * tile_factor + (grid_cols - 1) * gap_factor;
     const int base_h = grid_rows * tile_factor + (grid_rows - 1) * gap_factor;
-    if (base_w <= 0 || base_h <= 0) { throw std::runtime_error("Color region base size is invalid"); }
+    if (base_w <= 0 || base_h <= 0) {
+        throw InputError("Color region base size is invalid");
+    }
 
     int scale = meta.config.layout.resolution_scale;
     if (scale <= 0) { scale = 1; }
@@ -175,44 +154,52 @@ static int ResolveColorRegionScale(const CalibrationBoardMeta& meta, int width, 
     const int inferred_x = static_cast<int>(std::lround(scale_x));
     const int inferred_y = static_cast<int>(std::lround(scale_y));
     if (inferred_x <= 0 || inferred_y <= 0 || inferred_x != inferred_y) {
-        throw std::runtime_error("Color region size does not match meta layout");
+        throw InputError("Color region size does not match meta layout");
     }
     if (!near(base_w * inferred_x, width) || !near(base_h * inferred_y, height)) {
-        throw std::runtime_error("Color region size does not match meta layout");
+        throw InputError("Color region size does not match meta layout");
     }
     return inferred_x;
 }
 
-static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input,
-                                           const CalibrationBoardMeta& meta) {
-    if (input.empty()) { throw std::runtime_error("Color region image is empty"); }
-    const cv::Mat bgr = EnsureBgr(input);
-    if (bgr.empty()) { throw std::runtime_error("Failed to normalize color region image"); }
+static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta) {
+    if (input.empty()) { throw InputError("Color region image is empty"); }
+    const cv::Mat bgr = detail::EnsureBgr(input);
+    if (bgr.empty()) { throw InputError("Failed to normalize color region image"); }
 
     const int grid_rows = meta.grid_rows;
     const int grid_cols = meta.grid_cols;
-    if (grid_rows <= 0 || grid_cols <= 0) { throw std::runtime_error("Grid size is invalid"); }
+    if (grid_rows <= 0 || grid_cols <= 0) { throw InputError("Grid size is invalid"); }
 
     const int scale = ResolveColorRegionScale(meta, bgr.cols, bgr.rows);
     const int tile  = meta.config.layout.tile_factor * scale;
     const int gap   = meta.config.layout.gap_factor * scale;
 
-    const size_t expected_patches =
-        static_cast<size_t>(grid_rows) * static_cast<size_t>(grid_cols);
+    const size_t expected_patches = static_cast<size_t>(grid_rows) * static_cast<size_t>(grid_cols);
     if (meta.patch_recipe_idx.size() < expected_patches) {
-        throw std::runtime_error("patch_recipe_idx size mismatch");
+        throw InputError("patch_recipe_idx size mismatch");
     }
 
-    const size_t recipe_count = meta.config.recipe.NumRecipes();
-    if (recipe_count == 0) { throw std::runtime_error("Recipe count is zero"); }
+    if (meta.patch_recipes.size() < expected_patches) {
+        throw InputError("patch_recipes size mismatch");
+    }
 
-    const cv::Mat lab = BgrToLab(bgr);
+    size_t recipe_count = 0;
+    for (size_t i = 0; i < expected_patches; ++i) {
+        const uint16_t idx = meta.patch_recipe_idx[i];
+        if (idx == kInvalidRecipeIdx) { continue; }
+        recipe_count = std::max(recipe_count, static_cast<size_t>(idx) + 1);
+    }
+    if (recipe_count == 0) { throw InputError("Recipe count is zero"); }
+
+    const cv::Mat lab = detail::BgrToLab(bgr);
     if (lab.empty() || lab.type() != CV_32FC3) {
-        throw std::runtime_error("Failed to convert color region to Lab");
+        throw InputError("Failed to convert color region to Lab");
     }
 
     std::vector<Vec3f> sum(recipe_count, Vec3f());
     std::vector<int> counts(recipe_count, 0);
+    std::vector<std::vector<uint8_t>> recipes_by_idx(recipe_count);
 
     for (int r = 0; r < grid_rows; ++r) {
         for (int c = 0; c < grid_cols; ++c) {
@@ -222,12 +209,22 @@ static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input,
             if (recipe_idx == kInvalidRecipeIdx) { continue; }
             if (recipe_idx >= recipe_count) { continue; }
 
+            const auto& patch_recipe = meta.patch_recipes[patch_idx];
+            if (patch_recipe.size() != meta.config.recipe.color_layers) {
+                throw InputError("patch_recipes layer size mismatch");
+            }
+            auto& stored_recipe = recipes_by_idx[recipe_idx];
+            if (!stored_recipe.empty() && stored_recipe != patch_recipe) {
+                throw InputError("patch_recipes mismatch for recipe_idx");
+            }
+            if (stored_recipe.empty()) { stored_recipe = patch_recipe; }
+
             const int x0 = c * (tile + gap);
             const int y0 = r * (tile + gap);
             const int x1 = x0 + tile;
             const int y1 = y0 + tile;
             if (x0 < 0 || y0 < 0 || x1 > lab.cols || y1 > lab.rows) {
-                throw std::runtime_error("Patch ROI is out of bounds");
+                throw InputError("Patch ROI is out of bounds");
             }
 
             int inset = std::max(1, tile / 10);
@@ -246,8 +243,7 @@ static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input,
             cv::Rect roi(sx0, sy0, sx1 - sx0, sy1 - sy0);
             cv::Scalar mean = cv::mean(lab(roi));
 
-            sum[recipe_idx] += Vec3f(static_cast<float>(mean[0]),
-                                     static_cast<float>(mean[1]),
+            sum[recipe_idx] += Vec3f(static_cast<float>(mean[0]), static_cast<float>(mean[1]),
                                      static_cast<float>(mean[2]));
             counts[recipe_idx] += 1;
         }
@@ -266,12 +262,15 @@ static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input,
     db.entries.reserve(recipe_count);
     for (size_t idx = 0; idx < recipe_count; ++idx) {
         if (counts[idx] <= 0) {
-            throw std::runtime_error("Missing patch for recipe index " + std::to_string(idx));
+            throw InputError("Missing patch for recipe index " + std::to_string(idx));
         }
         Vec3f avg = sum[idx] / static_cast<float>(counts[idx]);
         Entry entry;
         entry.lab = Lab(avg.x, avg.y, avg.z);
-        entry.recipe = meta.config.recipe.RecipeAt(idx);
+        if (recipes_by_idx[idx].empty()) {
+            throw InputError("Missing patch recipe for index " + std::to_string(idx));
+        }
+        entry.recipe = recipes_by_idx[idx];
         db.entries.push_back(entry);
     }
     return db;
@@ -296,45 +295,57 @@ CalibrationBoardMeta BuildCalibrationBoardMeta(const CalibrationBoardConfig& cfg
     for (size_t i = 0; i < total; ++i) {
         if (i < recipe_count) { meta.patch_recipe_idx[i] = static_cast<uint16_t>(i); }
     }
+    meta.patch_recipes.assign(total, {});
+    const std::vector<uint8_t> background = BuildBackgroundRecipe(cfg);
+    for (size_t i = 0; i < total; ++i) {
+        if (meta.patch_recipe_idx[i] == kInvalidRecipeIdx) {
+            meta.patch_recipes[i] = background;
+            continue;
+        }
+        meta.patch_recipes[i] = cfg.recipe.RecipeAt(meta.patch_recipe_idx[i]);
+    }
     return meta;
 }
 
-void CalibrationBoardMeta::SaveToJson(const std::string& path) const {
+static json MetaToJson(const CalibrationBoardMeta& meta) {
+    if (!meta.patch_recipes.empty() && meta.patch_recipes.size() != meta.patch_recipe_idx.size()) {
+        throw InputError("patch_recipes size mismatch");
+    }
     json j;
-    j["name"]      = name;
-    j["grid_rows"] = grid_rows;
-    j["grid_cols"] = grid_cols;
+    j["name"]      = meta.name;
+    j["grid_rows"] = meta.grid_rows;
+    j["grid_cols"] = meta.grid_cols;
 
     json cfg;
-    cfg["base_layers"]      = config.base_layers;
-    cfg["base_channel_idx"] = config.base_channel_idx;
-    cfg["layer_height_mm"]  = config.layer_height_mm;
+    cfg["base_layers"]      = meta.config.base_layers;
+    cfg["base_channel_idx"] = meta.config.base_channel_idx;
+    cfg["layer_height_mm"]  = meta.config.layer_height_mm;
 
     json recipe;
-    recipe["num_channels"] = config.recipe.num_channels;
-    recipe["color_layers"] = config.recipe.color_layers;
-    recipe["layer_order"]  = ToLayerOrderString(config.recipe.layer_order);
+    recipe["num_channels"] = meta.config.recipe.num_channels;
+    recipe["color_layers"] = meta.config.recipe.color_layers;
+    recipe["layer_order"]  = ToLayerOrderString(meta.config.recipe.layer_order);
     cfg["recipe"]          = recipe;
 
     json layout;
-    layout["line_width_mm"]    = config.layout.line_width_mm;
-    layout["resolution_scale"] = config.layout.resolution_scale;
-    layout["tile_factor"]      = config.layout.tile_factor;
-    layout["gap_factor"]       = config.layout.gap_factor;
-    layout["margin_factor"]    = config.layout.margin_factor;
+    layout["line_width_mm"]    = meta.config.layout.line_width_mm;
+    layout["resolution_scale"] = meta.config.layout.resolution_scale;
+    layout["tile_factor"]      = meta.config.layout.tile_factor;
+    layout["gap_factor"]       = meta.config.layout.gap_factor;
+    layout["margin_factor"]    = meta.config.layout.margin_factor;
 
     json fid;
-    fid["offset_factor"] = config.layout.fiducial.offset_factor;
-    fid["main_d_factor"] = config.layout.fiducial.main_d_factor;
-    fid["tag_d_factor"]  = config.layout.fiducial.tag_d_factor;
-    fid["tag_dx_factor"] = config.layout.fiducial.tag_dx_factor;
-    fid["tag_dy_factor"] = config.layout.fiducial.tag_dy_factor;
+    fid["offset_factor"] = meta.config.layout.fiducial.offset_factor;
+    fid["main_d_factor"] = meta.config.layout.fiducial.main_d_factor;
+    fid["tag_d_factor"]  = meta.config.layout.fiducial.tag_d_factor;
+    fid["tag_dx_factor"] = meta.config.layout.fiducial.tag_dx_factor;
+    fid["tag_dy_factor"] = meta.config.layout.fiducial.tag_dy_factor;
     layout["fiducial"]   = fid;
 
     cfg["layout"] = layout;
 
     json palette = json::array();
-    for (const auto& channel : config.palette) {
+    for (const auto& channel : meta.config.palette) {
         json c;
         c["color"]    = channel.color;
         c["material"] = channel.material;
@@ -345,22 +356,31 @@ void CalibrationBoardMeta::SaveToJson(const std::string& path) const {
     j["config"] = cfg;
 
     json patches = json::array();
-    for (uint16_t v : patch_recipe_idx) { patches.push_back(static_cast<int>(v)); }
+    for (uint16_t v : meta.patch_recipe_idx) { patches.push_back(static_cast<int>(v)); }
     j["patch_recipe_idx"] = patches;
 
-    std::ofstream out(path);
-    if (!out.is_open()) { throw std::runtime_error("Failed to open file: " + path); }
-    out << j.dump(4);
-    if (!out.good()) { throw std::runtime_error("Failed to write json: " + path); }
+    json patch_recipes_json = json::array();
+    for (const auto& r : meta.patch_recipes) {
+        json recipe_json = json::array();
+        for (uint8_t v : r) { recipe_json.push_back(static_cast<int>(v)); }
+        patch_recipes_json.push_back(recipe_json);
+    }
+    j["patch_recipes"] = patch_recipes_json;
+
+    return j;
 }
 
-CalibrationBoardMeta CalibrationBoardMeta::LoadFromJson(const std::string& path) {
-    std::ifstream in(path);
-    if (!in.is_open()) { throw std::runtime_error("Failed to open file: " + path); }
+void CalibrationBoardMeta::SaveToJson(const std::string& path) const {
+    json j = MetaToJson(*this);
+    std::ofstream out(path);
+    if (!out.is_open()) { throw IOError("Failed to open file: " + path); }
+    out << j.dump(4);
+    if (!out.good()) { throw IOError("Failed to write json: " + path); }
+}
 
-    json j;
-    in >> j;
+std::string CalibrationBoardMeta::ToJsonString() const { return MetaToJson(*this).dump(4); }
 
+static CalibrationBoardMeta MetaFromJson(const json& j) {
     CalibrationBoardMeta meta;
     meta.name      = j.value("name", meta.name);
     meta.grid_rows = j.value("grid_rows", meta.grid_rows);
@@ -379,7 +399,7 @@ CalibrationBoardMeta CalibrationBoardMeta::LoadFromJson(const std::string& path)
             meta.config.recipe.color_layers =
                 r.value("color_layers", meta.config.recipe.color_layers);
             if (r.contains("layer_order")) {
-                meta.config.recipe.layer_order = ParseLayerOrder(r.at("layer_order"));
+                meta.config.recipe.layer_order = detail::ParseLayerOrder(r.at("layer_order"));
             }
         }
 
@@ -412,7 +432,7 @@ CalibrationBoardMeta CalibrationBoardMeta::LoadFromJson(const std::string& path)
         meta.config.palette.clear();
         if (c.contains("palette")) {
             const auto& p = c.at("palette");
-            if (!p.is_array()) { throw std::runtime_error("palette must be an array"); }
+            if (!p.is_array()) { throw FormatError("palette must be an array"); }
             for (const auto& item : p) {
                 Channel ch;
                 ch.color    = item.value("color", ch.color);
@@ -425,69 +445,108 @@ CalibrationBoardMeta CalibrationBoardMeta::LoadFromJson(const std::string& path)
     meta.patch_recipe_idx.clear();
     if (j.contains("patch_recipe_idx")) {
         const auto& p = j.at("patch_recipe_idx");
-        if (!p.is_array()) { throw std::runtime_error("patch_recipe_idx must be an array"); }
+        if (!p.is_array()) { throw FormatError("patch_recipe_idx must be an array"); }
         meta.patch_recipe_idx.reserve(p.size());
         for (const auto& v : p) {
             int value = v.get<int>();
             if (value < 0 || value > static_cast<int>(kInvalidRecipeIdx)) {
-                throw std::runtime_error("patch_recipe_idx value out of range");
+                throw FormatError("patch_recipe_idx value out of range");
             }
             meta.patch_recipe_idx.push_back(static_cast<uint16_t>(value));
         }
     }
 
-    if (meta.grid_rows > 0 && meta.grid_cols > 0 && !meta.patch_recipe_idx.empty()) {
+    if (!j.contains("patch_recipes")) { throw FormatError("patch_recipes missing in meta"); }
+    const auto& pr = j.at("patch_recipes");
+    if (!pr.is_array()) { throw FormatError("patch_recipes must be an array"); }
+    meta.patch_recipes.reserve(pr.size());
+    for (const auto& item : pr) {
+        if (!item.is_array()) { throw FormatError("patch_recipes item must be an array"); }
+        std::vector<uint8_t> recipe;
+        recipe.reserve(item.size());
+        for (const auto& v : item) {
+            int value = v.get<int>();
+            if (value < 0 || value > 255) {
+                throw FormatError("patch_recipes value out of range");
+            }
+            recipe.push_back(static_cast<uint8_t>(value));
+        }
+        meta.patch_recipes.push_back(recipe);
+    }
+
+    if (meta.grid_rows > 0 && meta.grid_cols > 0) {
         const size_t expected =
             static_cast<size_t>(meta.grid_rows) * static_cast<size_t>(meta.grid_cols);
         if (meta.patch_recipe_idx.size() < expected) {
-            throw std::runtime_error("patch_recipe_idx size mismatch");
+            throw FormatError("patch_recipe_idx size mismatch");
+        }
+        if (meta.patch_recipes.size() < expected) {
+            throw FormatError("patch_recipes size mismatch");
         }
     }
 
     return meta;
 }
 
-void GenCalibrationBoard(const CalibrationBoardConfig& cfg, const std::string& board_path,
-                         const std::string& meta_path) {
-    if (board_path.empty()) { throw std::runtime_error("board_path is empty"); }
-    if (meta_path.empty()) { throw std::runtime_error("meta_path is empty"); }
+CalibrationBoardMeta CalibrationBoardMeta::LoadFromJson(const std::string& path) {
+    std::ifstream in(path);
+    if (!in.is_open()) { throw IOError("Failed to open file: " + path); }
+    json j;
+    in >> j;
+    return MetaFromJson(j);
+}
 
-    ValidateConfig(cfg);
-    CalibrationBoardMeta meta = BuildCalibrationBoardMeta(cfg);
-    meta.SaveToJson(meta_path);
+CalibrationBoardMeta CalibrationBoardMeta::FromJsonString(const std::string& json_str) {
+    json j = json::parse(json_str);
+    return MetaFromJson(j);
+}
+
+struct BoardBuildResult {
+    ModelIR model;
+    BuildMeshConfig mesh_cfg;
+};
+
+static BoardBuildResult BuildBoardModel(const CalibrationBoardMeta& meta) {
+    ValidateConfig(meta.config);
+    ValidateMetaRecipes(meta);
 
     const int grid_rows = meta.grid_rows;
     const int grid_cols = meta.grid_cols;
-    if (grid_rows <= 0 || grid_cols <= 0) { throw std::runtime_error("grid size is invalid"); }
 
-    const int scale  = cfg.layout.resolution_scale;
-    const int tile   = cfg.layout.tile_factor * scale;
-    const int gap    = cfg.layout.gap_factor * scale;
-    const int margin = cfg.layout.margin_factor * scale;
+    const int scale  = meta.config.layout.resolution_scale;
+    const int tile   = meta.config.layout.tile_factor * scale;
+    const int gap    = meta.config.layout.gap_factor * scale;
+    const int margin = meta.config.layout.margin_factor * scale;
 
     const int color_width  = grid_cols * tile + (grid_cols - 1) * gap;
     const int color_height = grid_rows * tile + (grid_rows - 1) * gap;
     const int width        = color_width + 2 * margin;
     const int height       = color_height + 2 * margin;
-    if (width <= 0 || height <= 0) { throw std::runtime_error("board size is invalid"); }
+    if (width <= 0 || height <= 0) { throw InputError("board size is invalid"); }
 
     RecipeMap map;
     map.name         = meta.name;
     map.width        = width;
     map.height       = height;
-    map.color_layers = cfg.recipe.color_layers;
-    map.num_channels = cfg.recipe.num_channels;
-    map.layer_order  = cfg.recipe.layer_order;
+    map.color_layers = meta.config.recipe.color_layers;
+    map.num_channels = meta.config.recipe.num_channels;
+    map.layer_order  = meta.config.recipe.layer_order;
 
     const size_t pixel_count = static_cast<size_t>(width) * static_cast<size_t>(height);
     const size_t layers      = static_cast<size_t>(map.color_layers);
     map.recipes.assign(pixel_count * layers, 0);
     map.mask.assign(pixel_count, 255);
+    std::vector<uint8_t> base_only_mask(pixel_count, 1);
 
-    const std::vector<uint8_t> background = BuildBackgroundRecipe(cfg);
-    for (size_t i = 0; i < pixel_count; ++i) {
-        size_t offset = i * layers;
-        for (size_t l = 0; l < layers; ++l) { map.recipes[offset + l] = background[l]; }
+    const std::vector<uint8_t> background = BuildBackgroundRecipe(meta.config);
+    {
+        const size_t row_bytes = static_cast<size_t>(width) * layers;
+        for (size_t c = 0; c < static_cast<size_t>(width); ++c) {
+            std::memcpy(&map.recipes[c * layers], background.data(), layers);
+        }
+        for (size_t r = 1; r < static_cast<size_t>(height); ++r) {
+            std::memcpy(&map.recipes[r * row_bytes], &map.recipes[0], row_bytes);
+        }
     }
 
     for (int r = 0; r < grid_rows; ++r) {
@@ -497,35 +556,40 @@ void GenCalibrationBoard(const CalibrationBoardConfig& cfg, const std::string& b
             if (patch_idx >= meta.patch_recipe_idx.size()) { continue; }
             const uint16_t recipe_idx = meta.patch_recipe_idx[patch_idx];
 
-            std::vector<uint8_t> recipe;
-            if (recipe_idx == kInvalidRecipeIdx) {
-                recipe = background;
-            } else {
-                recipe = cfg.recipe.RecipeAt(static_cast<size_t>(recipe_idx));
-                if (recipe.size() < layers) { recipe.resize(layers, background.front()); }
+            const bool is_patch = (recipe_idx != kInvalidRecipeIdx);
+            const uint8_t* recipe_data =
+                is_patch ? meta.patch_recipes[patch_idx].data() : background.data();
+            const size_t recipe_len =
+                is_patch ? meta.patch_recipes[patch_idx].size() : background.size();
+            if (recipe_len != layers) {
+                throw InputError("patch_recipes layer size mismatch");
             }
 
             const int x0 = margin + c * (tile + gap);
             const int y0 = margin + r * (tile + gap);
-            const int x1 = x0 + tile;
-            const int y1 = y0 + tile;
+            const int x1 = std::min(x0 + tile, width);
+            const int y1 = std::min(y0 + tile, height);
+            if (x0 < 0 || y0 < 0) { continue; }
 
+            const size_t tile_row_bytes = static_cast<size_t>(x1 - x0) * layers;
             for (int y = y0; y < y1; ++y) {
-                if (y < 0 || y >= height) { continue; }
-                for (int x = x0; x < x1; ++x) {
-                    if (x < 0 || x >= width) { continue; }
-                    const size_t idx = static_cast<size_t>(y) * static_cast<size_t>(width) +
-                                       static_cast<size_t>(x);
-                    size_t offset = idx * layers;
-                    for (size_t l = 0; l < layers; ++l) { map.recipes[offset + l] = recipe[l]; }
+                const size_t row_start =
+                    static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x0);
+                std::memcpy(&map.recipes[row_start * layers], recipe_data, layers);
+                for (size_t px = 1; px < static_cast<size_t>(x1 - x0); ++px) {
+                    std::memcpy(&map.recipes[(row_start + px) * layers], recipe_data, layers);
+                }
+                if (is_patch) {
+                    std::memset(&base_only_mask[row_start], 0,
+                                static_cast<size_t>(x1 - x0));
                 }
             }
         }
     }
 
-    const float offset = static_cast<float>(cfg.layout.fiducial.offset_factor * scale);
-    const float main_d = static_cast<float>(cfg.layout.fiducial.main_d_factor * scale);
-    const float tag_d  = static_cast<float>(cfg.layout.fiducial.tag_d_factor * scale);
+    const float offset = static_cast<float>(meta.config.layout.fiducial.offset_factor * scale);
+    const float main_d = static_cast<float>(meta.config.layout.fiducial.main_d_factor * scale);
+    const float tag_d  = static_cast<float>(meta.config.layout.fiducial.tag_d_factor * scale);
 
     ApplyHoleMask(map.mask, width, height, offset, offset, main_d);
     ApplyHoleMask(map.mask, width, height, static_cast<float>(width) - offset, offset, main_d);
@@ -533,30 +597,97 @@ void GenCalibrationBoard(const CalibrationBoardConfig& cfg, const std::string& b
     ApplyHoleMask(map.mask, width, height, static_cast<float>(width) - offset,
                   static_cast<float>(height) - offset, main_d);
 
-    const float tag_dx = static_cast<float>(cfg.layout.fiducial.tag_dx_factor * scale);
-    const float tag_dy = static_cast<float>(cfg.layout.fiducial.tag_dy_factor * scale);
+    const float tag_dx = static_cast<float>(meta.config.layout.fiducial.tag_dx_factor * scale);
+    const float tag_dy = static_cast<float>(meta.config.layout.fiducial.tag_dy_factor * scale);
     ApplyHoleMask(map.mask, width, height, offset + tag_dx, offset + tag_dy, tag_d);
+    for (size_t i = 0; i < map.mask.size() && i < base_only_mask.size(); ++i) {
+        if (map.mask[i] == 0) { base_only_mask[i] = 0; }
+    }
 
     ColorDB db;
     db.name             = meta.name;
-    db.max_color_layers = cfg.recipe.color_layers;
-    db.base_layers      = cfg.base_layers;
-    db.base_channel_idx = cfg.base_channel_idx;
-    db.layer_height_mm  = cfg.layer_height_mm;
-    db.line_width_mm    = cfg.layout.line_width_mm;
-    db.layer_order      = cfg.recipe.layer_order;
-    db.palette          = cfg.palette;
+    db.max_color_layers = meta.config.recipe.color_layers;
+    db.base_layers      = meta.config.base_layers;
+    db.base_channel_idx = meta.config.base_channel_idx;
+    db.layer_height_mm  = meta.config.layer_height_mm;
+    db.line_width_mm    = meta.config.layout.line_width_mm;
+    db.layer_order      = meta.config.recipe.layer_order;
+    db.palette          = meta.config.palette;
 
     BuildModelIRConfig build_cfg;
-    build_cfg.flip_y      = true;
-    build_cfg.base_layers = cfg.base_layers;
+    build_cfg.flip_y         = true;
+    build_cfg.base_layers    = meta.config.base_layers;
+    build_cfg.base_only_mask = base_only_mask;
 
     ModelIR model = ModelIR::Build(map, db, build_cfg);
 
     BuildMeshConfig mesh_cfg;
-    mesh_cfg.layer_height_mm = cfg.layer_height_mm;
-    mesh_cfg.pixel_mm        = cfg.layout.line_width_mm / static_cast<float>(scale);
-    Export3mf(board_path, model, mesh_cfg);
+    mesh_cfg.layer_height_mm = meta.config.layer_height_mm;
+    mesh_cfg.pixel_mm        = meta.config.layout.line_width_mm / static_cast<float>(scale);
+
+    return BoardBuildResult{std::move(model), mesh_cfg};
+}
+
+void GenCalibrationBoard(const CalibrationBoardConfig& cfg, const std::string& board_path,
+                         const std::string& meta_path) {
+    CalibrationBoardMeta meta = BuildCalibrationBoardMeta(cfg);
+    if (board_path.empty()) { throw InputError("board_path is empty"); }
+    if (meta_path.empty()) { throw InputError("meta_path is empty"); }
+    meta.SaveToJson(meta_path);
+    auto result = BuildBoardModel(meta);
+    Export3mf(board_path, result.model, result.mesh_cfg);
+}
+
+void GenCalibrationBoardFromMeta(const CalibrationBoardMeta& meta, const std::string& board_path,
+                                 const std::string& meta_path) {
+    if (board_path.empty()) { throw InputError("board_path is empty"); }
+    if (meta_path.empty()) { throw InputError("meta_path is empty"); }
+    meta.SaveToJson(meta_path);
+    auto result = BuildBoardModel(meta);
+    Export3mf(board_path, result.model, result.mesh_cfg);
+}
+
+CalibrationBoardResult GenCalibrationBoardToBuffer(const CalibrationBoardConfig& cfg) {
+    CalibrationBoardMeta meta = BuildCalibrationBoardMeta(cfg);
+    auto result               = BuildBoardModel(meta);
+    CalibrationBoardResult out;
+    out.meta      = std::move(meta);
+    out.model_3mf = Export3mfToBuffer(result.model, result.mesh_cfg);
+    return out;
+}
+
+CalibrationBoardMeshes GenCalibrationBoardMeshes(const CalibrationBoardConfig& cfg) {
+    CalibrationBoardMeta meta = BuildCalibrationBoardMeta(cfg);
+    auto build                = BuildBoardModel(meta);
+
+    const auto n = static_cast<int>(build.model.voxel_grids.size());
+    std::vector<Mesh> meshes(static_cast<std::size_t>(n));
+
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < n; ++i) {
+        const VoxelGrid& grid = build.model.voxel_grids[static_cast<std::size_t>(i)];
+        if (grid.width <= 0 || grid.height <= 0 || grid.num_layers <= 0) { continue; }
+        if (grid.ooc.empty()) { continue; }
+        meshes[static_cast<std::size_t>(i)] = Mesh::Build(grid, build.mesh_cfg);
+    }
+
+    CalibrationBoardMeshes out;
+    out.meta             = std::move(meta);
+    out.meshes           = std::move(meshes);
+    out.mesh_cfg         = build.mesh_cfg;
+    out.base_channel_idx = build.model.base_channel_idx;
+    out.base_layers      = build.model.base_layers;
+    return out;
+}
+
+CalibrationBoardResult BuildResultFromMeshes(const CalibrationBoardMeshes& cached,
+                                             const std::vector<Channel>& palette) {
+    CalibrationBoardResult out;
+    out.meta                 = cached.meta;
+    out.meta.config.palette  = palette;
+    out.model_3mf = Export3mfFromMeshes(cached.meshes, palette,
+                                         cached.base_channel_idx, cached.base_layers);
+    return out;
 }
 
 ColorDB GenColorDBFromImage(const std::string& image_path, const CalibrationBoardMeta& meta) {
@@ -567,6 +698,19 @@ ColorDB GenColorDBFromImage(const std::string& image_path, const CalibrationBoar
 ColorDB GenColorDBFromImage(const std::string& image_path, const std::string& json_path) {
     CalibrationBoardMeta meta = CalibrationBoardMeta::LoadFromJson(json_path);
     return GenColorDBFromImage(image_path, meta);
+}
+
+ColorDB GenColorDBFromBuffer(const std::vector<uint8_t>& image_buffer,
+                             const CalibrationBoardMeta& meta) {
+    if (image_buffer.empty()) {
+        throw InputError("Uploaded image data is empty");
+    }
+    cv::Mat input = cv::imdecode(image_buffer, cv::IMREAD_UNCHANGED);
+    if (input.empty()) {
+        throw IOError("Failed to decode uploaded image; ensure the file is a valid image format (JPEG/PNG, etc.)");
+    }
+    cv::Mat color_region = LocateCalibrationColorRegion(input, meta);
+    return BuildColorDBFromColorRegion(color_region, meta);
 }
 
 } // namespace ChromaPrint3D

@@ -1,7 +1,8 @@
-#include "calib.h"
+#include "chromaprint3d/logging.h"
+#include "chromaprint3d/calib.h"
 
+#include <cstdio>
 #include <cstdlib>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -10,10 +11,10 @@ using namespace ChromaPrint3D;
 namespace {
 
 void PrintUsage(const char* exe) {
-    std::cout
-        << "Usage: " << exe << " [--channels N] [--out board.3mf] [--meta board.json] [--scale N]\n"
-        << "Defaults: --channels 4 --out calibration_board.3mf --meta calibration_board.json\n"
-        << "          --scale uses CalibrationBoardLayout.resolution_scale\n";
+    std::printf("Usage: %s [--channels N] [--out board.3mf] [--meta board.json] [--scale N]\n"
+                "Defaults: --channels 4 --out calibration_board.3mf --meta calibration_board.json\n"
+                "          --scale uses CalibrationBoardLayout.resolution_scale\n",
+                exe);
 }
 
 bool ParseInt(const char* s, int& out) {
@@ -29,7 +30,7 @@ bool ParseInt(const char* s, int& out) {
 
 void ApplyDefaultPalette(CalibrationBoardConfig& cfg) {
     const std::string material = "PLA Basic";
-    for (auto channel : cfg.palette) { channel.material = material; }
+    for (auto& channel : cfg.palette) { channel.material = material; }
 
     cfg.palette.resize(static_cast<size_t>(cfg.recipe.num_channels));
     if (cfg.recipe.num_channels == 4) {
@@ -59,12 +60,13 @@ int main(int argc, char** argv) {
     std::string out_path  = "calibration_board.3mf";
     std::string meta_path = "calibration_board.json";
     int resolution_scale  = 0;
+    std::string log_level = "info";
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--channels" && i + 1 < argc) {
             if (!ParseInt(argv[i + 1], num_channels)) {
-                std::cerr << "Invalid --channels value\n";
+                std::fprintf(stderr, "Invalid --channels value\n");
                 return 1;
             }
             i++;
@@ -82,9 +84,14 @@ int main(int argc, char** argv) {
         }
         if (arg == "--scale" && i + 1 < argc) {
             if (!ParseInt(argv[i + 1], resolution_scale) || resolution_scale <= 0) {
-                std::cerr << "Invalid --scale value\n";
+                std::fprintf(stderr, "Invalid --scale value\n");
                 return 1;
             }
+            i++;
+            continue;
+        }
+        if (arg == "--log-level" && i + 1 < argc) {
+            log_level = argv[i + 1];
             i++;
             continue;
         }
@@ -92,10 +99,12 @@ int main(int argc, char** argv) {
             PrintUsage(argv[0]);
             return 0;
         }
-        std::cerr << "Unknown argument: " << arg << "\n";
+        std::fprintf(stderr, "Unknown argument: %s\n", arg.c_str());
         PrintUsage(argv[0]);
         return 1;
     }
+
+    InitLogging(ParseLogLevel(log_level));
 
     try {
         CalibrationBoardConfig cfg = CalibrationBoardConfig::ForChannels(num_channels);
@@ -104,10 +113,10 @@ int main(int argc, char** argv) {
 
         GenCalibrationBoard(cfg, out_path, meta_path);
 
-        std::cout << "Saved board to " << out_path << "\n";
-        std::cout << "Saved meta to " << meta_path << "\n";
+        spdlog::info("Saved board to {}", out_path);
+        spdlog::info("Saved meta to {}", meta_path);
     } catch (const std::exception& e) {
-        std::cerr << "Failed to generate board: " << e.what() << "\n";
+        spdlog::error("Failed to generate board: {}", e.what());
         return 1;
     }
     return 0;
