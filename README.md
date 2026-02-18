@@ -36,8 +36,7 @@ ChromaPrint3D/
 │   └── recipes/        #   预计算配方文件（如 8 色校准板）
 ├── 3dparty/            # 第三方依赖（git submodules）
 ├── Dockerfile          # 运行时容器
-├── Dockerfile.build    # 编译环境容器
-└── docker-compose.yml  # Docker Compose 配置
+└── Dockerfile.build    # 编译环境容器
 ```
 
 ## 获取代码
@@ -126,11 +125,30 @@ docker run --rm -v $(pwd):/src -w /src/web chromaprint3d-build \
 docker build -t chromaprint3d .
 ```
 
-或使用 Docker Compose：
+启动容器：
 
 ```bash
-docker compose up -d
+docker run -d -p 8080:8080 --name chromaprint3d chromaprint3d
 ```
+
+如需挂载自定义数据或模型包：
+
+```bash
+docker run -d -p 8080:8080 \
+  -v ./my_data:/app/data \
+  -v ./my_model_pack:/app/model_pack \
+  --name chromaprint3d chromaprint3d
+```
+
+### 快速体验（使用预构建镜像）
+
+如果不需要自行编译，可直接使用发布的 Docker 镜像：
+
+```bash
+docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
+```
+
+访问 `http://localhost:8080` 即可使用。
 
 ## 使用
 
@@ -228,6 +246,30 @@ npm run dev
 
 OpenMP 为可选依赖，编译时自动检测，用于并行加速网格构建。
 
+## 发布
+
+项目使用 GitHub Actions 自动化发布。推送版本标签后自动触发：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+CI 会自动完成以下步骤：
+
+1. 编译 C++ 和 Web 前端
+2. 构建 Docker 镜像并推送至 [Docker Hub](https://hub.docker.com/r/neroued/chromaprint3d) 和 GitHub Container Registry
+3. 创建 GitHub Release 并自动生成变更说明
+
+**首次配置：** 需要在仓库 Settings → Secrets and variables → Actions 中添加：
+
+| Secret | 说明 |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
+| `DOCKERHUB_TOKEN` | Docker Hub [Access Token](https://hub.docker.com/settings/security) |
+
+GitHub Container Registry 使用仓库自带的 `GITHUB_TOKEN`，无需额外配置。
+
 ## 许可证
 
 [Apache License 2.0](LICENSE)
@@ -268,8 +310,7 @@ ChromaPrint3D/
 │   └── recipes/        #   Pre-computed recipe files (e.g., 8-color calibration)
 ├── 3dparty/            # Third-party dependencies (git submodules)
 ├── Dockerfile          # Runtime container
-├── Dockerfile.build    # Build environment container
-└── docker-compose.yml  # Docker Compose configuration
+└── Dockerfile.build    # Build environment container
 ```
 
 ### Getting the Code
@@ -358,11 +399,30 @@ After completing the above steps:
 docker build -t chromaprint3d .
 ```
 
-Or use Docker Compose:
+Start the container:
 
 ```bash
-docker compose up -d
+docker run -d -p 8080:8080 --name chromaprint3d chromaprint3d
 ```
+
+To mount custom data or model pack:
+
+```bash
+docker run -d -p 8080:8080 \
+  -v ./my_data:/app/data \
+  -v ./my_model_pack:/app/model_pack \
+  --name chromaprint3d chromaprint3d
+```
+
+#### Quick Start (Pre-built Image)
+
+If you don't need to build from source, use the pre-built Docker image:
+
+```bash
+docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
+```
+
+Visit `http://localhost:8080` to start using.
 
 ### Usage
 
@@ -459,6 +519,30 @@ All C++ dependencies are managed via git submodules — no manual installation r
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) | HTTP server (header-only) |
 
 OpenMP is an optional dependency, auto-detected at build time for parallel mesh construction.
+
+### Releasing
+
+The project uses GitHub Actions for automated releases. Push a version tag to trigger:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The CI pipeline will automatically:
+
+1. Build C++ and web frontend
+2. Build and push the Docker image to [Docker Hub](https://hub.docker.com/r/neroued/chromaprint3d) and GitHub Container Registry
+3. Create a GitHub Release with auto-generated release notes
+
+**First-time setup:** Add the following secrets in Settings → Secrets and variables → Actions:
+
+| Secret | Description |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub [Access Token](https://hub.docker.com/settings/security) |
+
+GitHub Container Registry uses the built-in `GITHUB_TOKEN` — no extra setup needed.
 
 ### License
 
