@@ -6,6 +6,7 @@ import type {
   TaskStatus,
   GenerateBoardRequest,
   GenerateBoardResponse,
+  Generate8ColorBoardRequest,
 } from './types'
 
 const BASE = '' // relative — Vite proxy handles /api in dev
@@ -103,6 +104,16 @@ export async function generateBoard(
   payload: GenerateBoardRequest,
 ): Promise<GenerateBoardResponse> {
   return request<GenerateBoardResponse>('/api/calibration/generate-board', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function generate8ColorBoard(
+  payload: Generate8ColorBoardRequest,
+): Promise<GenerateBoardResponse> {
+  return request<GenerateBoardResponse>('/api/calibration/generate-8color-board', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

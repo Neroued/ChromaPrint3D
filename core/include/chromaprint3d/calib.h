@@ -127,6 +127,11 @@ struct CalibrationBoardMeshes {
 
 CalibrationBoardMeta BuildCalibrationBoardMeta(const CalibrationBoardConfig& cfg);
 
+/// Build meta from a caller-supplied recipe list instead of enumerating all N^L combinations.
+CalibrationBoardMeta BuildCalibrationBoardMetaCustom(
+    const CalibrationBoardConfig& cfg, int grid_rows, int grid_cols,
+    const std::vector<std::vector<uint8_t>>& custom_recipes);
+
 void GenCalibrationBoard(const CalibrationBoardConfig& cfg, const std::string& board_path,
                          const std::string& meta_path);
 void GenCalibrationBoardFromMeta(const CalibrationBoardMeta& meta, const std::string& board_path,
@@ -136,6 +141,9 @@ CalibrationBoardResult GenCalibrationBoardToBuffer(const CalibrationBoardConfig&
 
 /// Generate calibration board meshes (without 3MF export) for caching.
 CalibrationBoardMeshes GenCalibrationBoardMeshes(const CalibrationBoardConfig& cfg);
+
+/// Generate calibration board meshes from a pre-built meta (for custom recipe lists).
+CalibrationBoardMeshes GenCalibrationBoardMeshesFromMeta(CalibrationBoardMeta meta);
 
 /// Build a CalibrationBoardResult from cached meshes with a (possibly updated) palette.
 CalibrationBoardResult BuildResultFromMeshes(const CalibrationBoardMeshes& cached,

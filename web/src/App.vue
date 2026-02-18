@@ -20,6 +20,7 @@ import ParamPanel from './components/ParamPanel.vue'
 import ConvertPanel from './components/ConvertPanel.vue'
 import ResultPanel from './components/ResultPanel.vue'
 import CalibrationPanel from './components/CalibrationPanel.vue'
+import Calibration8ColorPanel from './components/Calibration8ColorPanel.vue'
 import { fetchHealth } from './api'
 import type { ConvertParams, TaskStatus } from './types'
 
@@ -134,6 +135,18 @@ onUnmounted(() => {
             <NTabPane name="calibration" tab="校准工具（四色以下）" display-directive="show">
               <div style="padding-top: 16px">
                 <CalibrationPanel @colordb-updated="handleColorDBUpdated" />
+              </div>
+            </NTabPane>
+
+            <NTabPane name="calibration-8color" display-directive="show">
+              <template #tab>
+                <NSpace :size="4" align="center">
+                  <span>八色校准</span>
+                  <NTag size="tiny" type="warning" :bordered="false">Beta</NTag>
+                </NSpace>
+              </template>
+              <div style="padding-top: 16px">
+                <Calibration8ColorPanel @colordb-updated="handleColorDBUpdated" />
               </div>
             </NTabPane>
           </NTabs>

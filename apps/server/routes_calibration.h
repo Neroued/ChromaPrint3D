@@ -94,10 +94,14 @@ inline void RegisterCalibrationRoutes(ServerContext& ctx) {
                            SetJsonResponse(res, ErrorJson("Board not found or expired"), 404);
                            return;
                        }
+                       std::string filename = entry->meta.name.empty()
+                                                  ? "calibration_board"
+                                                  : entry->meta.name;
+                       filename += ".3mf";
                        SetBinaryResponse(
                            res, entry->model_3mf,
                            "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
-                           "calibration_board.3mf");
+                           filename);
                    });
 
     // Download calibration board meta JSON
@@ -110,12 +114,120 @@ inline void RegisterCalibrationRoutes(ServerContext& ctx) {
                            SetJsonResponse(res, ErrorJson("Board not found or expired"), 404);
                            return;
                        }
+                       std::string filename = entry->meta.name.empty()
+                                                  ? "calibration_board_meta"
+                                                  : entry->meta.name + "_meta";
+                       filename += ".json";
                        std::string meta_json = entry->meta.ToJsonString();
                        res.set_content(meta_json, "application/json");
                        res.set_header("Content-Disposition",
-                                      "attachment; filename=\"calibration_board_meta.json\"");
+                                      "attachment; filename=\"" + filename + "\"");
                        res.status = 200;
                    });
+
+    // Generate 8-color calibration board from pre-computed recipes
+    ctx.server.Post(
+        "/api/calibration/generate-8color-board",
+        [&ctx](const httplib::Request& req, httplib::Response& res) {
+            AddCorsHeaders(req, res);
+            ctx.session_mgr.CleanExpired();
+
+            if (!ctx.recipe_store.loaded) {
+                SetJsonResponse(res, ErrorJson("8-color recipe data not available on server"), 503);
+                return;
+            }
+
+            json body;
+            try {
+                body = json::parse(req.body);
+            } catch (const json::exception& e) {
+                SetJsonResponse(res, ErrorJson(std::string("Invalid JSON: ") + e.what()), 400);
+                return;
+            }
+
+            if (!body.contains("palette") || !body["palette"].is_array()) {
+                SetJsonResponse(res, ErrorJson("Missing or invalid 'palette' array"), 400);
+                return;
+            }
+            if (!body.contains("board_index") || !body["board_index"].is_number_integer()) {
+                SetJsonResponse(res, ErrorJson("Missing or invalid 'board_index'"), 400);
+                return;
+            }
+
+            auto& palette_arr = body["palette"];
+            const int num_ch  = static_cast<int>(palette_arr.size());
+            if (num_ch != ctx.recipe_store.num_channels) {
+                SetJsonResponse(
+                    res,
+                    ErrorJson("palette size must be " +
+                              std::to_string(ctx.recipe_store.num_channels)),
+                    400);
+                return;
+            }
+
+            const int board_index = body["board_index"].get<int>();
+            const auto* board_set = ctx.recipe_store.FindBoard(board_index);
+            if (!board_set) {
+                SetJsonResponse(res, ErrorJson("Invalid board_index: " +
+                                               std::to_string(board_index)),
+                                400);
+                return;
+            }
+
+            CalibrationBoardConfig cfg;
+            cfg.recipe.num_channels = num_ch;
+            cfg.recipe.color_layers = ctx.recipe_store.color_layers;
+            cfg.recipe.layer_order =
+                (ctx.recipe_store.layer_order == "Bottom2Top") ? LayerOrder::Bottom2Top
+                                                               : LayerOrder::Top2Bottom;
+            cfg.base_layers      = ctx.recipe_store.base_layers;
+            cfg.base_channel_idx = ctx.recipe_store.base_channel_idx;
+            cfg.layer_height_mm  = ctx.recipe_store.layer_height_mm;
+            cfg.layout.line_width_mm = ctx.recipe_store.line_width_mm;
+            cfg.palette.resize(palette_arr.size());
+            for (size_t i = 0; i < palette_arr.size(); ++i) {
+                const auto& ch          = palette_arr[i];
+                cfg.palette[i].color    = ch.value("color", "");
+                cfg.palette[i].material = ch.value("material", "PLA Basic");
+            }
+
+            try {
+                const int c_layers = cfg.recipe.color_layers;
+
+                CalibrationBoardResult result;
+                const auto* cached =
+                    ctx.geometry_cache.Find(num_ch, c_layers, board_index);
+                if (cached) {
+                    spdlog::info("Geometry cache hit for 8ch board {}", board_index);
+                    result = BuildResultFromMeshes(*cached, cfg.palette);
+                } else {
+                    spdlog::info("Generating 8ch board {} ({}x{}, {} recipes)...",
+                                 board_index, board_set->grid_rows, board_set->grid_cols,
+                                 board_set->recipes.size());
+                    CalibrationBoardMeta meta = BuildCalibrationBoardMetaCustom(
+                        cfg, board_set->grid_rows, board_set->grid_cols, board_set->recipes);
+                    meta.name += "_board" + std::to_string(board_index);
+                    CalibrationBoardMeshes meshes =
+                        GenCalibrationBoardMeshesFromMeta(std::move(meta));
+                    result = BuildResultFromMeshes(meshes, cfg.palette);
+                    ctx.geometry_cache.Store(num_ch, c_layers, std::move(meshes),
+                                            board_index);
+                }
+
+                std::string meta_str = result.meta.ToJsonString();
+                std::string board_id = ctx.board_cache.Store(std::move(result));
+                spdlog::info("8-color board {} generated: id={}", board_index,
+                             board_id.substr(0, 8));
+                json resp;
+                resp["board_id"] = board_id;
+                resp["meta"]     = json::parse(meta_str);
+                SetJsonResponse(res, resp);
+            } catch (const std::exception& e) {
+                spdlog::error("8-color board generation failed: {}", e.what());
+                SetJsonResponse(res,
+                                ErrorJson(std::string("Generation failed: ") + e.what()), 500);
+            }
+        });
 
     // Build ColorDB from calibration photo
     ctx.server.Post(

@@ -64,12 +64,35 @@ int main(int argc, char** argv) {
 
     BoardGeometryCache geometry_cache;
 
+    // Load 8-color recipe store
+    EightColorRecipeStore recipe_store;
+    {
+        std::string recipes_dir = opts.recipes_dir;
+        if (recipes_dir.empty()) {
+            auto parent = std::filesystem::path(opts.data_dir).parent_path();
+            auto candidate = parent / "recipes";
+            if (std::filesystem::is_directory(candidate)) { recipes_dir = candidate.string(); }
+        }
+        if (!recipes_dir.empty()) {
+            auto recipe_path = std::filesystem::path(recipes_dir) / "8color_boards.json";
+            if (std::filesystem::is_regular_file(recipe_path)) {
+                try {
+                    recipe_store = EightColorRecipeStore::LoadFromFile(recipe_path.string());
+                } catch (const std::exception& e) {
+                    spdlog::warn("Failed to load 8-color recipes: {}", e.what());
+                }
+            } else {
+                spdlog::info("No 8-color recipe file found at {}", recipe_path.string());
+            }
+        }
+    }
+
     // Create HTTP server and context
     httplib::Server svr;
     svr.set_payload_max_length(static_cast<size_t>(opts.max_upload_mb) * 1024 * 1024);
 
     ServerContext ctx{svr, task_mgr, db_cache, model_pack ? &model_pack.value() : nullptr,
-                      session_mgr, board_cache, geometry_cache};
+                      session_mgr, board_cache, geometry_cache, recipe_store};
 
     // Register routes
     RegisterHealthRoutes(ctx);

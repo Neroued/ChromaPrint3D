@@ -308,6 +308,41 @@ CalibrationBoardMeta BuildCalibrationBoardMeta(const CalibrationBoardConfig& cfg
     return meta;
 }
 
+CalibrationBoardMeta BuildCalibrationBoardMetaCustom(
+    const CalibrationBoardConfig& cfg, int grid_rows, int grid_cols,
+    const std::vector<std::vector<uint8_t>>& custom_recipes) {
+    ValidateConfig(cfg);
+    if (grid_rows <= 0 || grid_cols <= 0) { throw InputError("grid size must be positive"); }
+
+    CalibrationBoardMeta meta;
+    meta.config    = cfg;
+    meta.name      = "CalibrationBoard_" + std::to_string(cfg.recipe.num_channels) + "ch_custom";
+    meta.grid_rows = grid_rows;
+    meta.grid_cols = grid_cols;
+
+    const size_t total      = static_cast<size_t>(grid_rows) * static_cast<size_t>(grid_cols);
+    const size_t num_custom = custom_recipes.size();
+    const size_t layers     = static_cast<size_t>(cfg.recipe.color_layers);
+
+    meta.patch_recipe_idx.assign(total, kInvalidRecipeIdx);
+    meta.patch_recipes.assign(total, {});
+    const std::vector<uint8_t> background = BuildBackgroundRecipe(cfg);
+
+    for (size_t i = 0; i < total; ++i) {
+        if (i < num_custom) {
+            if (custom_recipes[i].size() != layers) {
+                throw InputError("custom_recipes[" + std::to_string(i) +
+                                 "] has wrong layer count");
+            }
+            meta.patch_recipe_idx[i] = static_cast<uint16_t>(i);
+            meta.patch_recipes[i]    = custom_recipes[i];
+        } else {
+            meta.patch_recipes[i] = background;
+        }
+    }
+    return meta;
+}
+
 static json MetaToJson(const CalibrationBoardMeta& meta) {
     if (!meta.patch_recipes.empty() && meta.patch_recipes.size() != meta.patch_recipe_idx.size()) {
         throw InputError("patch_recipes size mismatch");
@@ -678,6 +713,37 @@ CalibrationBoardMeshes GenCalibrationBoardMeshes(const CalibrationBoardConfig& c
         total_tris += m.indices.size();
     }
     spdlog::info("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts, total_tris);
+
+    CalibrationBoardMeshes out;
+    out.meta             = std::move(meta);
+    out.meshes           = std::move(meshes);
+    out.mesh_cfg         = build.mesh_cfg;
+    out.base_channel_idx = build.model.base_channel_idx;
+    out.base_layers      = build.model.base_layers;
+    return out;
+}
+
+CalibrationBoardMeshes GenCalibrationBoardMeshesFromMeta(CalibrationBoardMeta meta) {
+    auto build = BuildBoardModel(meta);
+
+    const auto n = static_cast<int>(build.model.voxel_grids.size());
+    std::vector<Mesh> meshes(static_cast<std::size_t>(n));
+
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < n; ++i) {
+        const VoxelGrid& grid = build.model.voxel_grids[static_cast<std::size_t>(i)];
+        if (grid.width <= 0 || grid.height <= 0 || grid.num_layers <= 0) { continue; }
+        if (grid.ooc.empty()) { continue; }
+        meshes[static_cast<std::size_t>(i)] = Mesh::Build(grid, build.mesh_cfg);
+    }
+
+    std::size_t total_verts = 0, total_tris = 0;
+    for (const auto& m : meshes) {
+        total_verts += m.vertices.size();
+        total_tris += m.indices.size();
+    }
+    spdlog::info("Mesh::Build(custom): {} grids, total vertices={}, triangles={}",
+                 n, total_verts, total_tris);
 
     CalibrationBoardMeshes out;
     out.meta             = std::move(meta);

@@ -10,6 +10,7 @@ struct ServerOptions {
     std::string data_dir;        // ColorDB directory (required)
     std::string model_pack_path; // Optional model package
     std::string web_dir;         // Optional static files directory
+    std::string recipes_dir;     // Optional pre-computed recipes directory
     int max_upload_mb     = 50;
     int max_tasks         = 4;
     int task_ttl_seconds  = 3600;
@@ -25,6 +26,7 @@ inline void PrintUsage(const char* exe) {
         "  --data DIR           ColorDB data directory (required)\n"
         "  --model-pack PATH    Model package JSON (optional)\n"
         "  --web DIR            Static web files directory (optional)\n"
+        "  --recipes-dir DIR    Pre-computed recipes directory (optional)\n"
         "  --max-upload-mb N    Max upload size in MB (default: 50)\n"
         "  --max-tasks N        Max concurrent tasks (default: 4)\n"
         "  --task-ttl N         Task TTL in seconds (default: 3600)\n"
@@ -45,6 +47,8 @@ inline bool ParseArgs(int argc, char** argv, ServerOptions& opts) {
             opts.model_pack_path = argv[++i];
         } else if ((arg == "--web") && i + 1 < argc) {
             opts.web_dir = argv[++i];
+        } else if ((arg == "--recipes-dir") && i + 1 < argc) {
+            opts.recipes_dir = argv[++i];
         } else if ((arg == "--max-upload-mb") && i + 1 < argc) {
             opts.max_upload_mb = std::stoi(argv[++i]);
         } else if ((arg == "--max-tasks") && i + 1 < argc) {

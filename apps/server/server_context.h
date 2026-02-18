@@ -4,6 +4,7 @@
 #include "session.h"
 #include "board_cache.h"
 #include "board_geometry_cache.h"
+#include "recipe_store.h"
 #include "task_manager.h"
 
 #include "chromaprint3d/model_package.h"
@@ -20,4 +21,5 @@ struct ServerContext {
     SessionManager& session_mgr;
     BoardCache& board_cache;
     BoardGeometryCache& geometry_cache;
+    EightColorRecipeStore recipe_store;
 };

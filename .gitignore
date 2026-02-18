@@ -5,6 +5,7 @@ cmake-build-*/
 *.a
 *.so
 *.dylib
+*.pyc
 
 # IDE
 .cache/

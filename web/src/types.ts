@@ -97,6 +97,11 @@ export interface GenerateBoardResponse {
   meta: Record<string, unknown>
 }
 
+export interface Generate8ColorBoardRequest {
+  palette: PaletteChannel[]
+  board_index: number // 1 or 2
+}
+
 // ---- Health response ----
 
 export interface HealthResponse {
