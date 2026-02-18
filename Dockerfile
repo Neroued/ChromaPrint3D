@@ -12,7 +12,8 @@ RUN apt-get update \
 
 COPY build/bin/chromaprint3d_server /app/bin/chromaprint3d_server
 COPY web/dist/        /app/web/
-COPY data/dbs/        /app/data/
+COPY data/dbs/        /app/data/dbs/
+COPY data/recipes/    /app/data/recipes/
 COPY data/model_pack/ /app/model_pack/
 
 EXPOSE 8080

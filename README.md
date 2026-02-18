@@ -138,7 +138,7 @@ docker compose up -d
 
 ```bash
 build/bin/chromaprint3d_server \
-  --data data/dbs \
+  --data data \
   --web web/dist \
   --model-pack data/model_pack/model_package.json \
   --port 8080
@@ -148,12 +148,11 @@ build/bin/chromaprint3d_server \
 
 | 参数 | 必需 | 默认值 | 说明 |
 |---|---|---|---|
-| `--data DIR` | 是 | — | ColorDB 数据目录 |
+| `--data DIR` | 是 | — | 数据根目录（需包含 `dbs/` 和 `recipes/` 子目录） |
 | `--port PORT` | 否 | 8080 | HTTP 端口 |
 | `--host HOST` | 否 | 0.0.0.0 | 绑定地址 |
 | `--web DIR` | 否 | — | 静态文件目录（Web 前端） |
 | `--model-pack PATH` | 否 | — | 模型包 JSON 文件 |
-| `--recipes-dir DIR` | 否 | 自动检测 | 预计算配方目录 |
 | `--max-upload-mb N` | 否 | 50 | 最大上传文件大小（MB） |
 | `--max-tasks N` | 否 | 4 | 最大并发任务数 |
 | `--task-ttl N` | 否 | 3600 | 任务缓存过期时间（秒） |
@@ -371,7 +370,7 @@ docker compose up -d
 
 ```bash
 build/bin/chromaprint3d_server \
-  --data data/dbs \
+  --data data \
   --web web/dist \
   --model-pack data/model_pack/model_package.json \
   --port 8080
@@ -381,12 +380,11 @@ Server options:
 
 | Flag | Required | Default | Description |
 |---|---|---|---|
-| `--data DIR` | Yes | — | ColorDB data directory |
+| `--data DIR` | Yes | — | Data root directory (expects `dbs/` and `recipes/` inside) |
 | `--port PORT` | No | 8080 | HTTP port |
 | `--host HOST` | No | 0.0.0.0 | Bind address |
 | `--web DIR` | No | — | Static files directory (web frontend) |
 | `--model-pack PATH` | No | — | Model package JSON file |
-| `--recipes-dir DIR` | No | auto-detect | Pre-computed recipes directory |
 | `--max-upload-mb N` | No | 50 | Max upload size in MB |
 | `--max-tasks N` | No | 4 | Max concurrent tasks |
 | `--task-ttl N` | No | 3600 | Task cache TTL in seconds |

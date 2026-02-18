@@ -30,11 +30,19 @@ int main(int argc, char** argv) {
                  opts.port, opts.host, opts.data_dir, opts.max_upload_mb, opts.max_tasks,
                  opts.task_ttl_seconds, opts.log_level);
 
+    // Resolve sub-directories under data root
+    auto data_root = std::filesystem::path(opts.data_dir);
+    auto dbs_dir   = data_root / "dbs";
+    if (!std::filesystem::is_directory(dbs_dir)) {
+        // Fallback: treat data_dir itself as the dbs directory (backward compat)
+        dbs_dir = data_root;
+    }
+
     // Load ColorDBs
-    spdlog::info("Loading ColorDBs from: {}", opts.data_dir);
+    spdlog::info("Loading ColorDBs from: {}", dbs_dir.string());
     ColorDBCache db_cache;
     try {
-        db_cache.LoadFromDirectory(opts.data_dir);
+        db_cache.LoadFromDirectory(dbs_dir.string());
     } catch (const std::exception& e) {
         spdlog::error("Failed to load ColorDBs: {}", e.what());
         return 1;
@@ -67,14 +75,9 @@ int main(int argc, char** argv) {
     // Load 8-color recipe store
     EightColorRecipeStore recipe_store;
     {
-        std::string recipes_dir = opts.recipes_dir;
-        if (recipes_dir.empty()) {
-            auto parent = std::filesystem::path(opts.data_dir).parent_path();
-            auto candidate = parent / "recipes";
-            if (std::filesystem::is_directory(candidate)) { recipes_dir = candidate.string(); }
-        }
-        if (!recipes_dir.empty()) {
-            auto recipe_path = std::filesystem::path(recipes_dir) / "8color_boards.json";
+        auto recipes_dir = data_root / "recipes";
+        if (std::filesystem::is_directory(recipes_dir)) {
+            auto recipe_path = recipes_dir / "8color_boards.json";
             if (std::filesystem::is_regular_file(recipe_path)) {
                 try {
                     recipe_store = EightColorRecipeStore::LoadFromFile(recipe_path.string());
