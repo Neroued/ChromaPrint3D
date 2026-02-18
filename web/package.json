@@ -1,8 +1,22 @@
 {
-  "name": "web",
-  "private": true,
-  "version": "0.0.0",
+  "name": "chromaprint3d-web",
+  "version": "0.1.0",
+  "description": "Web frontend for ChromaPrint3D — multi-color 3D print image processor",
   "type": "module",
+  "license": "Apache-2.0",
+  "author": "neroued <neroued@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neroued/ChromaPrint3D.git",
+    "directory": "web"
+  },
+  "keywords": [
+    "3d-printing",
+    "multi-color",
+    "3mf",
+    "color-matching",
+    "vue"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",

@@ -1,0 +1,31 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        g++-13 \
+        cmake \
+        ninja-build \
+        git \
+        pkg-config \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Usage:
+#   docker build -f Dockerfile.build -t chromaprint3d-build .
+#
+#   # Compile C++ (mount source directory)
+#   docker run --rm -v $(pwd):/src -w /src chromaprint3d-build \
+#     bash -c "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)"
+#
+#   # Build web frontend
+#   docker run --rm -v $(pwd):/src -w /src/web chromaprint3d-build \
+#     bash -c "npm ci && npm run build"

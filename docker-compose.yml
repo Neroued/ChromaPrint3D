@@ -1,0 +1,24 @@
+services:
+  server:
+    image: neroued/chromaprint3d:latest
+    build: .
+    ports:
+      - "8080:8080"
+    # Override the built-in data with your own ColorDB files:
+    #   volumes:
+    #     - ./my_dbs:/app/data
+    #
+    # Override model pack:
+    #   volumes:
+    #     - ./my_model_pack:/app/model_pack
+    #
+    # Pass extra server options:
+    #   command:
+    #     - "--data"
+    #     - "/app/data"
+    #     - "--web"
+    #     - "/app/web"
+    #     - "--port"
+    #     - "8080"
+    #     - "--max-tasks"
+    #     - "8"

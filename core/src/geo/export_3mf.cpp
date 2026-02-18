@@ -114,6 +114,13 @@ static void Export3mfInternal(const std::string& path, const ModelIR& model_ir,
         meshes[static_cast<std::size_t>(i)] = Mesh::Build(grid, cfg);
     }
 
+    std::size_t total_verts = 0, total_tris = 0;
+    for (const auto& m : meshes) {
+        total_verts += m.vertices.size();
+        total_tris += m.indices.size();
+    }
+    spdlog::info("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts, total_tris);
+
     try {
         Lib3MF::PWrapper wrapper = Lib3MF::CWrapper::loadLibrary();
         Lib3MF::PModel model     = wrapper->CreateModel();
@@ -157,6 +164,13 @@ std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshC
         if (grid.ooc.empty()) { continue; }
         meshes[static_cast<std::size_t>(i)] = Mesh::Build(grid, cfg);
     }
+
+    std::size_t total_verts = 0, total_tris = 0;
+    for (const auto& m : meshes) {
+        total_verts += m.vertices.size();
+        total_tris += m.indices.size();
+    }
+    spdlog::info("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts, total_tris);
 
     try {
         Lib3MF::PWrapper wrapper = Lib3MF::CWrapper::loadLibrary();

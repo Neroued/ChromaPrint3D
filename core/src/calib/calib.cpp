@@ -4,6 +4,7 @@
 #include "chromaprint3d/export_3mf.h"
 #include "chromaprint3d/recipe_map.h"
 #include "chromaprint3d/error.h"
+#include "chromaprint3d/logging.h"
 #include "detail/cv_utils.h"
 #include "detail/json_utils.h"
 
@@ -670,6 +671,13 @@ CalibrationBoardMeshes GenCalibrationBoardMeshes(const CalibrationBoardConfig& c
         if (grid.ooc.empty()) { continue; }
         meshes[static_cast<std::size_t>(i)] = Mesh::Build(grid, build.mesh_cfg);
     }
+
+    std::size_t total_verts = 0, total_tris = 0;
+    for (const auto& m : meshes) {
+        total_verts += m.vertices.size();
+        total_tris += m.indices.size();
+    }
+    spdlog::info("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts, total_tris);
 
     CalibrationBoardMeshes out;
     out.meta             = std::move(meta);

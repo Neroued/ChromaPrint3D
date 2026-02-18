@@ -338,8 +338,8 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         }
     }
 
-    spdlog::info("Mesh::Build: ch={}, vertices={}, triangles={}", voxel_grid.channel_idx,
-                 mesh.vertices.size(), mesh.indices.size());
+    spdlog::debug("Mesh::Build: ch={}, vertices={}, triangles={}", voxel_grid.channel_idx,
+                  mesh.vertices.size(), mesh.indices.size());
     return mesh;
 }
 

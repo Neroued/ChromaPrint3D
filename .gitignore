@@ -1,9 +1,38 @@
+# Build
 build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE
 .cache/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated artifacts
 dist/
 *.3mf
 *.jpg
 *.png
+*.log
+
+# Web
+web/node_modules/
+web/dist/
+
+# Docker
+*.tar
+
+# Local data / experiments
 backup/
 modeling/output
 modeling/data
