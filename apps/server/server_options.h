@@ -14,6 +14,7 @@ struct ServerOptions {
     int max_tasks         = 4;
     int task_ttl_seconds  = 3600;
     std::string log_level = "info";
+    std::string cors_origin; // Restrict CORS to this origin (empty = allow all)
 };
 
 inline void PrintUsage(const char* exe) {
@@ -28,7 +29,9 @@ inline void PrintUsage(const char* exe) {
         "  --max-upload-mb N    Max upload size in MB (default: 50)\n"
         "  --max-tasks N        Max concurrent tasks (default: 4)\n"
         "  --task-ttl N         Task TTL in seconds (default: 3600)\n"
-        "  --log-level LEVEL    Log level: trace/debug/info/warn/error/off (default: info)\n",
+        "  --log-level LEVEL    Log level: trace/debug/info/warn/error/off (default: info)\n"
+        "  --cors-origin URL    Allowed CORS origin for cross-origin deployment\n"
+        "                       (e.g. https://example.com). Omit to allow all origins.\n",
         exe);
 }
 
@@ -53,6 +56,8 @@ inline bool ParseArgs(int argc, char** argv, ServerOptions& opts) {
             opts.task_ttl_seconds = std::stoi(argv[++i]);
         } else if ((arg == "--log-level") && i + 1 < argc) {
             opts.log_level = argv[++i];
+        } else if ((arg == "--cors-origin") && i + 1 < argc) {
+            opts.cors_origin = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage(argv[0]);
             return false;

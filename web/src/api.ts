@@ -9,7 +9,7 @@ import type {
   Generate8ColorBoardRequest,
 } from './types'
 
-const BASE = '' // relative — Vite proxy handles /api in dev
+const BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '')
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const merged: RequestInit = { credentials: 'include', ...init }
@@ -53,7 +53,7 @@ export async function submitConvert(
   const formData = new FormData()
   formData.append('image', file)
   formData.append('params', JSON.stringify(params))
-  const res = await fetch('/api/convert', { method: 'POST', body: formData, credentials: 'include' })
+  const res = await fetch(`${BASE}/api/convert`, { method: 'POST', body: formData, credentials: 'include' })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
@@ -87,15 +87,15 @@ export async function deleteTask(id: string): Promise<void> {
 // ---- Binary resource URLs (for <img src> or download links) ----
 
 export function getPreviewUrl(id: string): string {
-  return `/api/tasks/${id}/preview`
+  return `${BASE}/api/tasks/${id}/preview`
 }
 
 export function getSourceMaskUrl(id: string): string {
-  return `/api/tasks/${id}/source-mask`
+  return `${BASE}/api/tasks/${id}/source-mask`
 }
 
 export function getResultUrl(id: string): string {
-  return `/api/tasks/${id}/result`
+  return `${BASE}/api/tasks/${id}/result`
 }
 
 // ---- Calibration ----
@@ -121,11 +121,11 @@ export async function generate8ColorBoard(
 }
 
 export function getBoardModelUrl(boardId: string): string {
-  return `/api/calibration/boards/${boardId}/3mf`
+  return `${BASE}/api/calibration/boards/${boardId}/3mf`
 }
 
 export function getBoardMetaUrl(boardId: string): string {
-  return `/api/calibration/boards/${boardId}/meta`
+  return `${BASE}/api/calibration/boards/${boardId}/meta`
 }
 
 export async function buildColorDB(
@@ -137,7 +137,7 @@ export async function buildColorDB(
   formData.append('image', image)
   formData.append('meta', meta)
   formData.append('name', name)
-  const res = await fetch('/api/calibration/build-colordb', {
+  const res = await fetch(`${BASE}/api/calibration/build-colordb`, {
     method: 'POST',
     body: formData,
     credentials: 'include',
@@ -165,7 +165,7 @@ export async function deleteSessionColorDB(name: string): Promise<void> {
 }
 
 export function getSessionColorDBDownloadUrl(name: string): string {
-  return `/api/session/colordbs/${name}/download`
+  return `${BASE}/api/session/colordbs/${name}/download`
 }
 
 export async function uploadColorDB(
@@ -175,7 +175,7 @@ export async function uploadColorDB(
   const formData = new FormData()
   formData.append('file', file)
   if (name) formData.append('name', name)
-  const res = await fetch('/api/session/colordbs/upload', {
+  const res = await fetch(`${BASE}/api/session/colordbs/upload`, {
     method: 'POST',
     body: formData,
     credentials: 'include',

@@ -26,9 +26,15 @@ int main(int argc, char** argv) {
 
     spdlog::info("ChromaPrint3D Server v1.0.0");
     spdlog::info("Configuration: port={}, host={}, data={}, max_upload={}MB, max_tasks={}, "
-                 "task_ttl={}s, log_level={}",
+                 "task_ttl={}s, log_level={}, cors_origin={}",
                  opts.port, opts.host, opts.data_dir, opts.max_upload_mb, opts.max_tasks,
-                 opts.task_ttl_seconds, opts.log_level);
+                 opts.task_ttl_seconds, opts.log_level,
+                 opts.cors_origin.empty() ? "(allow all)" : opts.cors_origin);
+
+    if (!opts.cors_origin.empty()) {
+        CorsAllowedOrigin() = opts.cors_origin;
+        spdlog::info("Cross-origin mode enabled, allowed origin: {}", opts.cors_origin);
+    }
 
     // Resolve sub-directories under data root
     auto data_root = std::filesystem::path(opts.data_dir);

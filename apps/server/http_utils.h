@@ -32,15 +32,32 @@ inline void SetBinaryResponse(httplib::Response& res, const std::vector<uint8_t>
     res.status = 200;
 }
 
+// Global CORS origin configuration (set once at startup, read-only afterwards).
+// Empty = allow all origins (development / single-origin mode).
+// Non-empty = only allow this specific origin (cross-origin production mode).
+inline std::string& CorsAllowedOrigin() {
+    static std::string origin;
+    return origin;
+}
+
+inline bool IsCrossOriginMode() { return !CorsAllowedOrigin().empty(); }
+
 inline void AddCorsHeaders(const httplib::Request& req, httplib::Response& res) {
     std::string origin = req.has_header("Origin") ? req.get_header_value("Origin") : "";
-    if (!origin.empty()) {
-        res.set_header("Access-Control-Allow-Origin", origin);
+    const auto& allowed = CorsAllowedOrigin();
+
+    if (allowed.empty()) {
+        if (!origin.empty()) {
+            res.set_header("Access-Control-Allow-Origin", origin);
+        } else {
+            res.set_header("Access-Control-Allow-Origin", "*");
+        }
     } else {
-        res.set_header("Access-Control-Allow-Origin", "*");
+        if (origin != allowed) { return; }
+        res.set_header("Access-Control-Allow-Origin", allowed);
     }
     res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.set_header("Access-Control-Allow-Headers", "Content-Type");
     res.set_header("Access-Control-Allow-Credentials", "true");
     res.set_header("Access-Control-Max-Age", "86400");
 }

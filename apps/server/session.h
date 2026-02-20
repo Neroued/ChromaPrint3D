@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chromaprint3d/color_db.h"
+#include "http_utils.h"
 
 #include <httplib/httplib.h>
 #include <spdlog/spdlog.h>
@@ -96,9 +97,10 @@ inline std::string EnsureSession(const httplib::Request& req, httplib::Response&
                                  SessionManager& session_mgr) {
     std::string token = GetSessionToken(req);
     if (token.empty()) {
-        token = GenerateUUID();
-        res.set_header("Set-Cookie",
-                       "session=" + token + "; HttpOnly; SameSite=Strict; Path=/");
+        token            = GenerateUUID();
+        auto cookie_attr = IsCrossOriginMode() ? "; HttpOnly; SameSite=None; Secure; Path=/"
+                                               : "; HttpOnly; SameSite=Strict; Path=/";
+        res.set_header("Set-Cookie", "session=" + token + cookie_attr);
         spdlog::info("New session created: {}", token.substr(0, 8));
     }
     session_mgr.GetOrCreate(token);
