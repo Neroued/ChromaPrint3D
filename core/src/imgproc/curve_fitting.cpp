@@ -116,10 +116,10 @@ CubicBezier FitSingleBezier(const std::vector<Vec2f>& pts, const std::vector<flo
 
     float seg_len = (p3 - p0).Length();
     float eps     = seg_len * 1e-4f;
-    if (alpha1 < eps || alpha2 > -eps) {
+    if (alpha1 < eps || alpha2 < eps) {
         float dist = seg_len / 3.0f;
         alpha1     = dist;
-        alpha2     = -dist;
+        alpha2     = dist;
     }
 
     return {p0, p0 + tan_left * alpha1, p3 + tan_right * alpha2, p3};

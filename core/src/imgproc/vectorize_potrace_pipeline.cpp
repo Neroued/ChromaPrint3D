@@ -511,8 +511,11 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
         spdlog::debug("Vectorize transparent mask applied: transparent_pixels={}", transparent_px);
     }
 
-    if (multicolor && cfg.refine_passes > 0 && !unsmoothed.empty() && !seg.centers_lab.empty()) {
-        cv::Mat unsmoothed_lab = BgrToLab(unsmoothed);
+    cv::Mat unsmoothed_lab;
+    if (multicolor && !unsmoothed.empty()) { unsmoothed_lab = BgrToLab(unsmoothed); }
+
+    if (multicolor && cfg.refine_passes > 0 && !unsmoothed_lab.empty() &&
+        !seg.centers_lab.empty()) {
         RefineLabelsBoundary(seg.labels, unsmoothed_lab, seg.centers_lab, cfg.refine_passes);
         spdlog::info("Vectorize label refinement applied: passes={}", cfg.refine_passes);
     }
@@ -543,7 +546,8 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
                       boundary_graph.edges.size());
 
         if (cfg.enable_subpixel_refine) {
-            cv::Mat refine_lab = unsmoothed.empty() ? BgrToLab(working) : BgrToLab(unsmoothed);
+            const cv::Mat& refine_lab =
+                unsmoothed_lab.empty() ? (unsmoothed_lab = BgrToLab(working)) : unsmoothed_lab;
             SubpixelRefineConfig sp_cfg;
             sp_cfg.max_displacement = cfg.subpixel_max_displacement;
             RefineEdgesSubpixel(boundary_graph, refine_lab, sp_cfg);

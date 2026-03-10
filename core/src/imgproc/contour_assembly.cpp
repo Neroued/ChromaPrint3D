@@ -203,12 +203,59 @@ std::vector<std::vector<Vec2f>> ChainEdgesIntoLoops(const BoundaryGraph& graph,
     return loops;
 }
 
+// Remove near-collinear interior points to clean up residual zigzag
+// from the crack grid after subpixel refinement.
+void DecimateNearCollinear(std::vector<Vec2f>& pts, float epsilon) {
+    constexpr int kMinPoints = 6;
+    constexpr int kMaxPasses = 3;
+    const float eps_sq       = epsilon * epsilon;
+
+    for (int pass = 0; pass < kMaxPasses; ++pass) {
+        int n = static_cast<int>(pts.size());
+        if (n <= kMinPoints) break;
+
+        std::vector<bool> remove(static_cast<size_t>(n), false);
+        bool prev_removed = false;
+        int count         = 0;
+
+        for (int i = 0; i < n; ++i) {
+            if (prev_removed) {
+                prev_removed = false;
+                continue;
+            }
+            int prev        = ((i - 1) % n + n) % n;
+            int next        = (i + 1) % n;
+            Vec2f ab        = pts[static_cast<size_t>(next)] - pts[static_cast<size_t>(prev)];
+            float ab_len_sq = ab.LengthSquared();
+            if (ab_len_sq < 1e-12f) continue;
+            Vec2f ap      = pts[static_cast<size_t>(i)] - pts[static_cast<size_t>(prev)];
+            float cross   = ap.x * ab.y - ap.y * ab.x;
+            float dist_sq = (cross * cross) / ab_len_sq;
+
+            if (dist_sq < eps_sq && (n - count) > kMinPoints) {
+                remove[static_cast<size_t>(i)] = true;
+                prev_removed                   = true;
+                ++count;
+            }
+        }
+
+        if (count == 0) break;
+
+        std::vector<Vec2f> result;
+        result.reserve(static_cast<size_t>(n - count));
+        for (int i = 0; i < n; ++i) {
+            if (!remove[static_cast<size_t>(i)]) result.push_back(pts[static_cast<size_t>(i)]);
+        }
+        pts = std::move(result);
+    }
+}
+
 void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int iterations) {
     if (pts.size() < 5) return;
-    const int n                       = static_cast<int>(pts.size());
-    const std::vector<Vec2f> original = pts;
+    const int n = static_cast<int>(pts.size());
 
     for (int iter = 0; iter < iterations; ++iter) {
+        std::vector<Vec2f> prev_pts = pts;
         std::vector<Vec2f> smoothed(n);
         for (int i = 0; i < n; ++i) {
             int im2 = ((i - 2) % n + n) % n;
@@ -220,10 +267,10 @@ void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int itera
                 (1.0f / 16.0f);
         }
         for (int i = 0; i < n; ++i) {
-            Vec2f delta = smoothed[i] - original[i];
+            Vec2f delta = smoothed[i] - prev_pts[i];
             float dist  = delta.Length();
             if (dist > max_displacement) {
-                smoothed[i] = original[i] + delta * (max_displacement / dist);
+                smoothed[i] = prev_pts[i] + delta * (max_displacement / dist);
             }
         }
         pts = std::move(smoothed);
@@ -257,9 +304,13 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             continue;
         }
 
+        constexpr float kDecimateEpsilon       = 0.15f;
         constexpr float kSmoothMaxDisplacement = 0.5f;
         constexpr int kSmoothIterations        = 2;
-        for (auto& lp : loops) { SmoothClosedLoop(lp, kSmoothMaxDisplacement, kSmoothIterations); }
+        for (auto& lp : loops) {
+            DecimateNearCollinear(lp, kDecimateEpsilon);
+            SmoothClosedLoop(lp, kSmoothMaxDisplacement, kSmoothIterations);
+        }
 
         // Classify loops as outer (CCW, positive area) or hole (CW, negative area)
         struct ClassifiedLoop {
