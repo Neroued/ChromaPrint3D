@@ -6,6 +6,7 @@
 #include "imgproc/contour_assembly.h"
 #include "imgproc/coverage_guard.h"
 #include "imgproc/curve_fitting.h"
+#include "imgproc/subpixel_refine.h"
 #include "imgproc/potrace_adapter.h"
 #include "imgproc/thin_line_vectorizer.h"
 #include "imgproc/svg_writer.h"
@@ -540,6 +541,14 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
         auto boundary_graph = BuildBoundaryGraph(seg.labels);
         spdlog::debug("BoundaryGraph built: nodes={}, edges={}", boundary_graph.nodes.size(),
                       boundary_graph.edges.size());
+
+        if (cfg.enable_subpixel_refine) {
+            cv::Mat refine_lab = unsmoothed.empty() ? BgrToLab(working) : BgrToLab(unsmoothed);
+            SubpixelRefineConfig sp_cfg;
+            sp_cfg.max_displacement = cfg.subpixel_max_displacement;
+            RefineEdgesSubpixel(boundary_graph, refine_lab, sp_cfg);
+        }
+
         CurveFitConfig fit_cfg;
         fit_cfg.error_threshold            = std::clamp(cfg.curve_fit_error, 0.05f, 10.0f);
         fit_cfg.corner_angle_threshold_deg = std::clamp(cfg.corner_angle_threshold, 60.0f, 179.0f);

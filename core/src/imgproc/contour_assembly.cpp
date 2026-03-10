@@ -257,7 +257,7 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             continue;
         }
 
-        constexpr float kSmoothMaxDisplacement = 0.8f;
+        constexpr float kSmoothMaxDisplacement = 0.5f;
         constexpr int kSmoothIterations        = 2;
         for (auto& lp : loops) { SmoothClosedLoop(lp, kSmoothMaxDisplacement, kSmoothIterations); }
 

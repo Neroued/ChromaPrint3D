@@ -41,6 +41,10 @@ struct VectorizerConfig {
     float max_merge_color_dist =
         200.0f; ///< Max LAB ΔE² for small-region merging (higher = merge more aggressively).
 
+    // ── Subpixel boundary refinement ────────────────────────────────────────
+    bool enable_subpixel_refine     = true; ///< Gradient-guided sub-pixel boundary refinement.
+    float subpixel_max_displacement = 0.7f; ///< Max normal displacement for sub-pixel refine (px).
+
     // ── Thin-line enhancement ───────────────────────────────────────────────
     float thin_line_max_radius =
         2.5f; ///< Distance-transform radius threshold for thin-line extraction.

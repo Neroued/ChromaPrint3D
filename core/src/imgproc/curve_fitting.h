@@ -15,7 +15,7 @@ struct CurveFitConfig {
     int max_recursion_depth          = 8;
     int reparameterize_iterations    = 3;
     float corner_angle_threshold_deg = 135.0f;
-    int corner_neighbor_k            = 3;
+    int corner_neighbor_k            = 6;
 };
 
 /// Detect corner indices in a polyline based on angle threshold.
