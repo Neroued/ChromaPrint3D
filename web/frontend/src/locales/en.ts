@@ -289,61 +289,68 @@ export default {
     },
     settings: {
       title: 'Vectorize Settings',
+      quickTip:
+        'Start by tuning Colors → Curve Fit → Contour Simplify (in that order). Keep other params at defaults unless needed.',
+      outputEnhancement: 'Output Enhancement',
       numColors: 'Number of Colors',
       numColorsHint:
-        'Smaller = more "cartoon-like"; larger = closer to original but bigger file. Try 12-24 first.',
-      curveFitError: 'Curve Fit Accuracy (smaller = closer to edges)',
+        'Total color count in SVG output. Fewer = more stylized; more = closer to original. Try 12-24 first.',
+      curveFitError: 'Curve Fit Accuracy',
       curveFitErrorHint:
-        'Smaller follows edges more closely; larger is smoother. Recommended 0.6-1.0.',
-      contourSimplify: 'Contour Simplification (larger = fewer nodes)',
+        'How closely curves follow edges. Smaller = tighter fit; larger = smoother. Recommended 0.6-1.0.',
+      contourSimplify: 'Contour Simplify',
       contourSimplifyHint:
-        'Controls node reduction intensity. Larger = smaller SVG; smaller = more detail. Recommended 0.35-0.8.',
-      enableStroke: 'Enable Thin Line Stroke Enhancement',
+        'Reduces path nodes. Larger = smaller file, smoother; smaller = more detail. Recommended 0.35-0.8.',
+      enableStroke: 'Stroke Enhancement',
       enableStrokeHint:
-        'Good for line art, hand-drawn, thin edges. Disable if edges appear too heavy.',
-      enableCoverageFix: 'Enable Coverage Fix',
-      enableCoverageFixHint: 'Fixes missing regions / fill gaps. Generally keep enabled.',
-      defaultHint: 'Start with "Colors + Curve Fit + Contour Simplify", keep the rest at defaults.',
-      tuningOrder: 'Recommended tuning order:',
-      tuningStep1: '1) Adjust "Number of Colors" for overall color block levels;',
-      tuningStep2: '2) Adjust "Curve Fit Accuracy" to balance edge fidelity and smoothness;',
-      tuningStep3: '3) Use "Contour Simplification" to control file size and node count.',
+        'Adds stroke outlines to thin structures. Great for line art / hand-drawn images. Disable if edges look too heavy.',
+      enableCoverageFix: 'Coverage Fix',
+      enableCoverageFixHint:
+        'Auto-fills missing regions and gaps. Keep enabled unless edges appear over-filled.',
     },
     advanced: {
       title: 'Advanced Parameters (usually keep defaults)',
-      smoothingSpatial: 'Spatial Smoothing (Mean Shift sp)',
+      preprocessing: 'Preprocessing',
+      segmentation: 'Superpixel Segmentation',
+      filtering: 'Region Filtering',
+      smoothingSpatial: 'Spatial Smoothing',
       smoothingSpatialHint:
-        'Controls spatial-proximity smoothing. Increase to denoise, but may blur small details.',
-      smoothingColor: 'Color Smoothing (Mean Shift sr)',
-      smoothingColorHint: 'Controls color merging strength. Increase for more uniform colors.',
-      thinLineRadius: 'Thin Line Detection Radius (px)',
-      thinLineRadiusHint: 'Determines how thin a structure must be to be treated as a "line".',
+        'Mean Shift spatial radius. Increase to reduce noise; may blur fine details.',
+      smoothingColor: 'Color Smoothing',
+      smoothingColorHint:
+        'Mean Shift color radius. Increase to unify similar colors; may lose subtle gradients.',
+      thinLineRadius: 'Detection Radius',
+      thinLineRadiusHint:
+        'Max radius (px) to classify a structure as a thin line. Larger = more aggressive line detection.',
       maxWorkingPixels: 'Max Working Pixels',
       maxWorkingPixelsHint:
-        'Images above this pixel count are downscaled before vectorizing. Set 0 to disable.',
-      slicRegionSize: 'SLIC Superpixel Size',
+        'Downscale images above this pixel count before vectorizing. Set 0 to disable.',
+      slicRegionSize: 'Superpixel Size',
       slicRegionSizeHint:
-        'Target superpixel size. Smaller = finer detail but slower. Recommended 15-30.',
-      edgeSensitivity: 'Edge Alignment Sensitivity',
+        'Target size of each superpixel. Smaller = finer detail but slower. Recommended 15-30.',
+      edgeSensitivity: 'Edge Sensitivity',
       edgeSensitivityHint:
-        'SLIC edge weight reduction strength. Higher = better edge alignment. Recommended 0.6-1.0.',
-      refinePasses: 'Boundary Refinement Iterations',
+        'How strongly superpixels snap to image edges. Higher = sharper boundaries. Recommended 0.6-1.0.',
+      refinePasses: 'Refine Passes',
       refinePassesHint:
-        'Per-pixel boundary reassignment passes. More = sharper edges. Recommended 4-8.',
-      mergeColorDist: 'Merge Color Tolerance',
-      mergeColorDistHint: 'Max LAB color distance² for small region merging. Recommended 100-300.',
-      minRegionArea: 'Min Region Area (px²)',
-      minRegionAreaHint: 'Fragments smaller than this are merged into neighbors.',
-      minContourArea: 'Min Contour Area (px²)',
-      minContourAreaHint: 'Closed shapes smaller than this are ignored.',
-      minHoleArea: 'Min Hole Area (px²)',
-      minHoleAreaHint: 'Holes smaller than this are filled in.',
-      minCoverageRatio: 'Min Coverage Ratio (triggers fix below this)',
+        'Per-pixel boundary refinement iterations. More = sharper edges, slower. Recommended 4-8.',
+      mergeColorDist: 'Merge Tolerance',
+      mergeColorDistHint:
+        'Max LAB color distance² for merging small fragments. Lower preserves fine details. Recommended 100-300.',
+      minRegionArea: 'Min Region (px²)',
+      minRegionAreaHint:
+        'Fragments below this area are merged into neighbors. Increase to reduce noise.',
+      minContourArea: 'Min Contour (px²)',
+      minContourAreaHint:
+        'Closed shapes below this area are discarded. Increase to remove small artifacts.',
+      minHoleArea: 'Min Hole (px²)',
+      minHoleAreaHint: 'Holes below this area are filled. Decrease to preserve small cutouts.',
+      minCoverageRatio: 'Coverage Threshold',
       minCoverageRatioHint:
-        'Closer to 1 = more aggressive gap filling. Try 0.999 for missing areas.',
+        'When SVG coverage falls below this ratio, gap-filling kicks in. Try 0.999 for missing areas.',
       svgStrokeWidth: 'Stroke Width (px)',
       svgStrokeWidthHint:
-        'Only effective with stroke enhancement enabled. 0.3-0.8 is usually natural.',
+        'Width of stroke outlines when enhancement is enabled. 0.3-0.8 is usually natural.',
     },
     actions: {
       processing: 'Processing...',
