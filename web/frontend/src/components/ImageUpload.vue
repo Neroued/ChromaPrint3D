@@ -150,7 +150,9 @@ watch(
       <NUploadDragger>
         <NSpace vertical align="center" justify="center" style="padding: 32px 16px">
           <NText depth="3" style="font-size: 14px"> {{ t('imageUpload.dropHint') }} </NText>
-          <NText depth="3" style="font-size: 12px"> {{ t('imageUpload.formatHint', { formats: CONVERT_IMAGE_FORMATS_TEXT }) }} </NText>
+          <NText depth="3" style="font-size: 12px">
+            {{ t('imageUpload.formatHint', { formats: CONVERT_IMAGE_FORMATS_TEXT }) }}
+          </NText>
           <NText depth="3" style="font-size: 11px">
             {{ t('imageUpload.sizeHint', { maxMb: backendMaxUploadMb, maxPixels: maxPixelText }) }}
           </NText>
@@ -172,11 +174,15 @@ watch(
             :type="detectedType === 'vector' ? 'success' : 'info'"
             :bordered="false"
           >
-            {{ detectedType === 'vector' ? t('imageUpload.vectorType') : t('imageUpload.rasterType') }}
+            {{
+              detectedType === 'vector' ? t('imageUpload.vectorType') : t('imageUpload.rasterType')
+            }}
           </NTag>
         </NSpace>
         <NSpace :size="4" align="center">
-          <NButton size="tiny" quaternary @click="previewPanZoom.resetView"> {{ t('imageUpload.resetView') }} </NButton>
+          <NButton size="tiny" quaternary @click="previewPanZoom.resetView">
+            {{ t('imageUpload.resetView') }}
+          </NButton>
           <NButton size="tiny" quaternary type="error" :disabled="disabled" @click="clearFile">
             {{ t('imageUpload.removeFile') }}
           </NButton>
@@ -202,5 +208,4 @@ watch(
   justify-content: space-between;
   margin-bottom: 4px;
 }
-
 </style>

@@ -114,7 +114,11 @@ async function handleGenerate() {
     boardId.value = response.board_id
     message.success(t('calibration.generateSuccess'))
   } catch (error: unknown) {
-    message.error(t('calibration.generateFailed', { error: error instanceof Error ? error.message : String(error) }))
+    message.error(
+      t('calibration.generateFailed', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
   } finally {
     generating.value = false
   }
@@ -122,12 +126,18 @@ async function handleGenerate() {
 
 async function download3mf() {
   if (!boardId.value) return
-  await downloadByUrl(getBoardModelPath(boardId.value), `calibration-board-${boardId.value.slice(0, 8)}.3mf`)
+  await downloadByUrl(
+    getBoardModelPath(boardId.value),
+    `calibration-board-${boardId.value.slice(0, 8)}.3mf`,
+  )
 }
 
 async function downloadMeta() {
   if (!boardId.value) return
-  await downloadByUrl(getBoardMetaPath(boardId.value), `calibration-board-${boardId.value.slice(0, 8)}.json`)
+  await downloadByUrl(
+    getBoardMetaPath(boardId.value),
+    `calibration-board-${boardId.value.slice(0, 8)}.json`,
+  )
 }
 
 function handleResetCalibrationParams() {
@@ -154,16 +164,29 @@ function handleColorDBUpdated() {
         <div class="calibration-header">
           <NSpace align="center" :size="8">
             <span>{{ t('calibration.fourColor.title') }}</span>
-            <NTag size="small" :bordered="false" type="info">{{ t('calibration.fourColor.tag') }}</NTag>
+            <NTag size="small" :bordered="false" type="info">{{
+              t('calibration.fourColor.tag')
+            }}</NTag>
           </NSpace>
-          <p class="calibration-subtitle">{{ t('calibration.currentStep', { step: currentStep }) }}</p>
+          <p class="calibration-subtitle">
+            {{ t('calibration.currentStep', { step: currentStep }) }}
+          </p>
         </div>
       </template>
 
       <NSteps :current="currentStep" size="small" class="calibration-steps">
-        <NStep :title="t('calibration.fourColor.steps.generate.title')" :description="t('calibration.fourColor.steps.generate.description')" />
-        <NStep :title="t('calibration.fourColor.steps.print.title')" :description="t('calibration.fourColor.steps.print.description')" />
-        <NStep :title="t('calibration.fourColor.steps.build.title')" :description="t('calibration.fourColor.steps.build.description')" />
+        <NStep
+          :title="t('calibration.fourColor.steps.generate.title')"
+          :description="t('calibration.fourColor.steps.generate.description')"
+        />
+        <NStep
+          :title="t('calibration.fourColor.steps.print.title')"
+          :description="t('calibration.fourColor.steps.print.description')"
+        />
+        <NStep
+          :title="t('calibration.fourColor.steps.build.title')"
+          :description="t('calibration.fourColor.steps.build.description')"
+        />
       </NSteps>
 
       <NAlert type="info" :bordered="false" class="calibration-step-alert">
@@ -173,7 +196,13 @@ function handleColorDBUpdated() {
 
     <NCard :title="t('calibration.fourColor.step1Title')" class="calibration-card">
       <template #header-extra>
-        <NButton size="tiny" quaternary :disabled="generating" @click="handleResetCalibrationParams">{{ t('common.reset') }}</NButton>
+        <NButton
+          size="tiny"
+          quaternary
+          :disabled="generating"
+          @click="handleResetCalibrationParams"
+          >{{ t('common.reset') }}</NButton
+        >
       </template>
       <NSpace vertical :size="12">
         <div class="calibration-preset-row">
@@ -206,7 +235,9 @@ function handleColorDBUpdated() {
             :placeholder="t('calibration.materialPlaceholder')"
             class="calibration-palette-input"
           />
-          <NButton size="small" quaternary type="error" @click="removeChannel(index)">{{ t('common.delete') }}</NButton>
+          <NButton size="small" quaternary type="error" @click="removeChannel(index)">{{
+            t('common.delete')
+          }}</NButton>
         </div>
 
         <div class="calibration-inline-actions">
@@ -221,7 +252,9 @@ function handleColorDBUpdated() {
           <NButton type="primary" :loading="generating" @click="handleGenerate">
             {{ t('calibration.generateBoard') }}
           </NButton>
-          <NTag v-if="boardId" type="success" :bordered="false" size="small">{{ t('calibration.boardGenerated') }}</NTag>
+          <NTag v-if="boardId" type="success" :bordered="false" size="small">{{
+            t('calibration.boardGenerated')
+          }}</NTag>
         </div>
 
         <div v-if="boardId" class="calibration-actions">

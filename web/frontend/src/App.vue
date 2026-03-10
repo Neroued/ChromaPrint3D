@@ -62,8 +62,7 @@ const siteIcpUrl = getSiteIcpUrl()
 const sitePublicSecurityRecordNumber = getSitePublicSecurityRecordNumber()
 const sitePublicSecurityRecordUrl = getSitePublicSecurityRecordUrl()
 const showSiteIcpRecord = !isElectronRuntime() && Boolean(siteIcpNumber)
-const showSitePublicSecurityRecord =
-  !isElectronRuntime() && Boolean(sitePublicSecurityRecordNumber)
+const showSitePublicSecurityRecord = !isElectronRuntime() && Boolean(sitePublicSecurityRecordNumber)
 const activePreprocessTab = ref('vectorize')
 const activeCalibrationTab = ref('calibration')
 
@@ -178,7 +177,11 @@ function toggleLocale() {
                     animated
                     class="nested-tabs fade-in-up"
                   >
-                    <NTabPane name="vectorize" :tab="t('app.tabs.vectorize')" display-directive="show">
+                    <NTabPane
+                      name="vectorize"
+                      :tab="t('app.tabs.vectorize')"
+                      display-directive="show"
+                    >
                       <div class="nested-tab-pane-content">
                         <VectorizePanel />
                       </div>
@@ -198,7 +201,11 @@ function toggleLocale() {
                 </div>
               </NTabPane>
 
-              <NTabPane name="calibration-tools" :tab="t('app.tabs.calibrationTools')" display-directive="show">
+              <NTabPane
+                name="calibration-tools"
+                :tab="t('app.tabs.calibrationTools')"
+                display-directive="show"
+              >
                 <div class="tab-pane-content">
                   <NTabs
                     v-model:value="activeCalibrationTab"
@@ -206,12 +213,20 @@ function toggleLocale() {
                     animated
                     class="nested-tabs fade-in-up"
                   >
-                    <NTabPane name="calibration" :tab="t('app.tabs.calibration')" display-directive="show">
+                    <NTabPane
+                      name="calibration"
+                      :tab="t('app.tabs.calibration')"
+                      display-directive="show"
+                    >
                       <div class="nested-tab-pane-content">
                         <CalibrationPanel @colordb-updated="handleColorDBUpdated" />
                       </div>
                     </NTabPane>
-                    <NTabPane name="calibration-8color" :tab="t('app.tabs.calibration8color')" display-directive="show">
+                    <NTabPane
+                      name="calibration-8color"
+                      :tab="t('app.tabs.calibration8color')"
+                      display-directive="show"
+                    >
                       <div class="nested-tab-pane-content">
                         <Calibration8ColorPanel @colordb-updated="handleColorDBUpdated" />
                       </div>
@@ -220,7 +235,11 @@ function toggleLocale() {
                 </div>
               </NTabPane>
 
-              <NTabPane name="colordb-upload" :tab="t('app.tabs.colordbUpload')" display-directive="show">
+              <NTabPane
+                name="colordb-upload"
+                :tab="t('app.tabs.colordbUpload')"
+                display-directive="show"
+              >
                 <div class="tab-pane-content">
                   <NSpace vertical :size="20" class="calibration-layout">
                     <ColorDBUploadSection

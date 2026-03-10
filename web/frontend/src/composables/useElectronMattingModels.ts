@@ -40,11 +40,19 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
   const modelConnectivitySummary = computed(() => {
     if (!modelConnectivity.value) return ''
     const report = modelConnectivity.value
-    return t('matting.connectivity.summary', { available: report.availableSources, total: report.totalSources, models: report.checkedModels })
+    return t('matting.connectivity.summary', {
+      available: report.availableSources,
+      total: report.totalSources,
+      models: report.checkedModels,
+    })
   })
   const showRestartHint = computed(() => {
     if (!isElectron || !modelStatus.value) return false
-    return modelStatus.value.totalModels > 0 && pendingModelCount.value === 0 && hasOnlyOpenCvMethod.value
+    return (
+      modelStatus.value.totalModels > 0 &&
+      pendingModelCount.value === 0 &&
+      hasOnlyOpenCvMethod.value
+    )
   })
   const requiredDownloadBytes = computed(() => {
     const models = modelStatus.value?.models ?? []
@@ -152,7 +160,11 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
       if (payload.type === 'error') {
         modelError.value = payload.message
       }
-      if (payload.type === 'completed' || payload.type === 'cancelled' || payload.type === 'error') {
+      if (
+        payload.type === 'completed' ||
+        payload.type === 'cancelled' ||
+        payload.type === 'error'
+      ) {
         modelActionLoading.value = false
         void refreshModelStatus()
       }

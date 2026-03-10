@@ -16,7 +16,11 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../composables/useBlobDownload'
-import { generate8ColorBoard, getBoardMetaPath, getBoardModelPath } from '../services/calibrationService'
+import {
+  generate8ColorBoard,
+  getBoardMetaPath,
+  getBoardModelPath,
+} from '../services/calibrationService'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
 import ColorDBBuildSection from './calibration/ColorDBBuildSection.vue'
 
@@ -111,7 +115,11 @@ async function handleGenerateBoard(boardIndex: number) {
     boardRef.value = response.board_id
     message.success(t('calibration.eightColor.boardGenerateSuccess', { index: boardIndex }))
   } catch (error: unknown) {
-    message.error(t('calibration.generateFailed', { error: error instanceof Error ? error.message : String(error) }))
+    message.error(
+      t('calibration.generateFailed', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
   } finally {
     generatingRef.value = false
   }
@@ -147,14 +155,25 @@ function handleColorDBUpdated() {
           <NSpace align="center" :size="8">
             <span>{{ t('calibration.eightColor.title') }}</span>
           </NSpace>
-          <p class="calibration-subtitle">{{ t('calibration.currentStep', { step: currentStep }) }}</p>
+          <p class="calibration-subtitle">
+            {{ t('calibration.currentStep', { step: currentStep }) }}
+          </p>
         </div>
       </template>
 
       <NSteps :current="currentStep" size="small" class="calibration-steps">
-        <NStep :title="t('calibration.eightColor.steps.generate.title')" :description="t('calibration.eightColor.steps.generate.description')" />
-        <NStep :title="t('calibration.eightColor.steps.print.title')" :description="t('calibration.eightColor.steps.print.description')" />
-        <NStep :title="t('calibration.eightColor.steps.build.title')" :description="t('calibration.eightColor.steps.build.description')" />
+        <NStep
+          :title="t('calibration.eightColor.steps.generate.title')"
+          :description="t('calibration.eightColor.steps.generate.description')"
+        />
+        <NStep
+          :title="t('calibration.eightColor.steps.print.title')"
+          :description="t('calibration.eightColor.steps.print.description')"
+        />
+        <NStep
+          :title="t('calibration.eightColor.steps.build.title')"
+          :description="t('calibration.eightColor.steps.build.description')"
+        />
       </NSteps>
 
       <NAlert type="info" :bordered="false" class="calibration-step-alert">
@@ -164,7 +183,14 @@ function handleColorDBUpdated() {
 
     <NCard :title="t('calibration.eightColor.step1Title')" class="calibration-card">
       <template #header-extra>
-        <NButton size="tiny" quaternary :disabled="generating1 || generating2" @click="handleResetCalibrationParams"> {{ t('common.reset') }} </NButton>
+        <NButton
+          size="tiny"
+          quaternary
+          :disabled="generating1 || generating2"
+          @click="handleResetCalibrationParams"
+        >
+          {{ t('common.reset') }}
+        </NButton>
       </template>
       <NSpace vertical :size="12">
         <NAlert type="info" :bordered="false">
@@ -209,24 +235,36 @@ function handleColorDBUpdated() {
           <NButton type="primary" :loading="generating1" @click="handleGenerateBoard(1)">
             {{ t('calibration.eightColor.generateBoard1') }}
           </NButton>
-          <NTag v-if="board1Id" type="success" :bordered="false" size="small">{{ t('calibration.eightColor.board1Generated') }}</NTag>
+          <NTag v-if="board1Id" type="success" :bordered="false" size="small">{{
+            t('calibration.eightColor.board1Generated')
+          }}</NTag>
         </div>
 
         <div v-if="board1Id" class="calibration-actions">
-          <NButton type="success" size="small" @click="download3mf(board1Id)">{{ t('calibration.eightColor.downloadBoard1_3mf') }}</NButton>
-          <NButton type="info" size="small" @click="downloadMeta(board1Id)">{{ t('calibration.eightColor.downloadBoard1_meta') }}</NButton>
+          <NButton type="success" size="small" @click="download3mf(board1Id)">{{
+            t('calibration.eightColor.downloadBoard1_3mf')
+          }}</NButton>
+          <NButton type="info" size="small" @click="downloadMeta(board1Id)">{{
+            t('calibration.eightColor.downloadBoard1_meta')
+          }}</NButton>
         </div>
 
         <div class="calibration-actions">
           <NButton type="primary" :loading="generating2" @click="handleGenerateBoard(2)">
             {{ t('calibration.eightColor.generateBoard2') }}
           </NButton>
-          <NTag v-if="board2Id" type="success" :bordered="false" size="small">{{ t('calibration.eightColor.board2Generated') }}</NTag>
+          <NTag v-if="board2Id" type="success" :bordered="false" size="small">{{
+            t('calibration.eightColor.board2Generated')
+          }}</NTag>
         </div>
 
         <div v-if="board2Id" class="calibration-actions">
-          <NButton type="success" size="small" @click="download3mf(board2Id)">{{ t('calibration.eightColor.downloadBoard2_3mf') }}</NButton>
-          <NButton type="info" size="small" @click="downloadMeta(board2Id)">{{ t('calibration.eightColor.downloadBoard2_meta') }}</NButton>
+          <NButton type="success" size="small" @click="download3mf(board2Id)">{{
+            t('calibration.eightColor.downloadBoard2_3mf')
+          }}</NButton>
+          <NButton type="info" size="small" @click="downloadMeta(board2Id)">{{
+            t('calibration.eightColor.downloadBoard2_meta')
+          }}</NButton>
         </div>
       </NSpace>
     </NCard>

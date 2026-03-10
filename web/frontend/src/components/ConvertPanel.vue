@@ -29,10 +29,10 @@ interface StageWeight {
 
 const stageWeights: Record<string, StageWeight> = {
   loading_resources: { start: 0.0, weight: 0.05 },
-  preprocessing: { start: 0.05, weight: 0.30 },
+  preprocessing: { start: 0.05, weight: 0.3 },
   matching: { start: 0.35, weight: 0.15 },
-  building_model: { start: 0.50, weight: 0.20 },
-  exporting: { start: 0.70, weight: 0.30 },
+  building_model: { start: 0.5, weight: 0.2 },
+  exporting: { start: 0.7, weight: 0.3 },
 }
 
 function computeOverallProgress(stage: string, stageProgress: number): number {
@@ -87,7 +87,8 @@ const showRunningProgress = computed(() => taskState.value === 'running')
 
 const convertButtonText = computed(() => {
   if (taskState.value === 'pending') return t('convert.queuing')
-  if (showRunningProgress.value) return `${stageText.value || t('convert.stages.unknown')} ${progressPercent.value}%`
+  if (showRunningProgress.value)
+    return `${stageText.value || t('convert.stages.unknown')} ${progressPercent.value}%`
   if (loading.value) return t('convert.submitTask')
   return t('convert.startConvert')
 })
@@ -162,11 +163,17 @@ async function handleDownload3MF() {
           @primary-click="handleConvert"
           @secondary-click="handleDownload3MF"
         />
-        <NText v-if="!selectedFile" depth="3" style="font-size: 13px"> {{ t('convert.uploadFirst') }} </NText>
+        <NText v-if="!selectedFile" depth="3" style="font-size: 13px">
+          {{ t('convert.uploadFirst') }}
+        </NText>
       </NSpace>
 
       <NAlert v-if="isVectorInput && !isRunning && !isCompleted" type="warning">
-        {{ t('convert.svgInputHint', { sizeInfo: vectorFileSizeText ? `, ${vectorFileSizeText}` : '' }) }}
+        {{
+          t('convert.svgInputHint', {
+            sizeInfo: vectorFileSizeText ? `, ${vectorFileSizeText}` : '',
+          })
+        }}
       </NAlert>
 
       <NAlert v-if="error" type="error" closable @close="error = null">

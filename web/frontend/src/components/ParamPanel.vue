@@ -139,7 +139,9 @@ watch(canEnableTransparentLayer, (can) => {
   <NCard :title="t('param.title')" size="small">
     <template #header-extra>
       <NSpace :size="8" align="center">
-        <NButton size="tiny" quaternary :disabled="loading" @click="resetParams"> {{ t('common.reset') }} </NButton>
+        <NButton size="tiny" quaternary :disabled="loading" @click="resetParams">
+          {{ t('common.reset') }}
+        </NButton>
         <ParamModeSwitch v-model="mode" />
       </NSpace>
     </template>
@@ -226,10 +228,17 @@ watch(canEnableTransparentLayer, (can) => {
                 {{ tooltips.double_sided }}
               </NTooltip>
             </template>
-            <NSwitch :value="modelValue.double_sided ?? false" @update:value="handleDoubleSidedChange" />
+            <NSwitch
+              :value="modelValue.double_sided ?? false"
+              @update:value="handleDoubleSidedChange"
+            />
           </NFormItem>
 
-          <NFormItem v-if="canEnableTransparentLayer" label-placement="left" :label-width="simpleLabelWidth">
+          <NFormItem
+            v-if="canEnableTransparentLayer"
+            label-placement="left"
+            :label-width="simpleLabelWidth"
+          >
             <template #label>
               <NTooltip>
                 <template #trigger>
@@ -525,9 +534,7 @@ watch(canEnableTransparentLayer, (can) => {
                 <template #trigger>
                   <span class="tip-label">{{ t('param.enableModel') }}</span>
                 </template>
-                {{
-                  modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint')
-                }}
+                {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
               </NTooltip>
             </template>
             <NSwitch
@@ -575,9 +582,7 @@ watch(canEnableTransparentLayer, (can) => {
                 <template #trigger>
                   <span class="tip-label">{{ t('param.enableModel') }}</span>
                 </template>
-                {{
-                  modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint')
-                }}
+                {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
               </NTooltip>
             </template>
             <NSwitch
@@ -588,15 +593,17 @@ watch(canEnableTransparentLayer, (can) => {
           </NFormItem>
         </div>
 
-        <NFormItem v-else-if="supportsModelGate" label-placement="left" :label-width="simpleLabelWidth">
+        <NFormItem
+          v-else-if="supportsModelGate"
+          label-placement="left"
+          :label-width="simpleLabelWidth"
+        >
           <template #label>
             <NTooltip>
               <template #trigger>
                 <span class="tip-label">{{ t('param.enableModel') }}</span>
               </template>
-              {{
-                modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint')
-              }}
+              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
             </NTooltip>
           </template>
           <NSwitch
@@ -679,7 +686,9 @@ watch(canEnableTransparentLayer, (can) => {
               <strong>{{ simpleOutputInfo.actualPxW }}×{{ simpleOutputInfo.actualPxH }}</strong>
               {{ t('param.pixels') }}
               <span v-if="imageDimensions"
-                >({{ t('param.originalSize') }} {{ imageDimensions.width }}×{{ imageDimensions.height }})</span
+                >({{ t('param.originalSize') }} {{ imageDimensions.width }}×{{
+                  imageDimensions.height
+                }})</span
               >
             </div>
             <div>
@@ -707,7 +716,10 @@ watch(canEnableTransparentLayer, (can) => {
       <ParamAdvancedSection v-else :disabled="disabled || loading">
         <!-- Image processing group (raster has more items) -->
         <NCollapse default-expanded-names="imgproc" style="margin-bottom: 8px">
-          <NCollapseItem :title="isRaster ? t('param.imageProcessing') : t('param.sizeSettings')" name="imgproc">
+          <NCollapseItem
+            :title="isRaster ? t('param.imageProcessing') : t('param.sizeSettings')"
+            name="imgproc"
+          >
             <NFormItem v-if="isRaster">
               <template #label>
                 <NTooltip>
@@ -724,8 +736,7 @@ watch(canEnableTransparentLayer, (can) => {
                 :step="0.1"
                 :precision="1"
                 @update:value="
-                  (v: number | null) =>
-                    update({ scale: v === null ? undefined : roundTo(v, 1) })
+                  (v: number | null) => update({ scale: v === null ? undefined : roundTo(v, 1) })
                 "
               />
             </NFormItem>
@@ -921,8 +932,7 @@ watch(canEnableTransparentLayer, (can) => {
                 :step="0.01"
                 :precision="2"
                 @update:value="
-                  (v: number | null) =>
-                    update({ pixel_mm: v === null ? undefined : roundTo(v, 2) })
+                  (v: number | null) => update({ pixel_mm: v === null ? undefined : roundTo(v, 2) })
                 "
               />
             </NFormItem>
@@ -1264,11 +1274,7 @@ watch(canEnableTransparentLayer, (can) => {
                   <template #trigger>
                     <span class="tip-label">{{ t('param.enableModel') }}</span>
                   </template>
-                  {{
-                    modelPackAvailable
-                      ? tooltips.model_enable
-                      : t('param.modelOnlyHint')
-                  }}
+                  {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
                 </NTooltip>
               </template>
               <NSwitch

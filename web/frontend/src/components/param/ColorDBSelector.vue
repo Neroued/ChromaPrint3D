@@ -39,7 +39,12 @@ const emit = defineEmits<{
       />
     </NFormItem>
 
-    <NFormItem :label="t('colordb.vendor')" class="selector-inline-item" label-placement="left" :label-width="96">
+    <NFormItem
+      :label="t('colordb.vendor')"
+      class="selector-inline-item"
+      label-placement="left"
+      :label-width="96"
+    >
       <NSelect
         size="small"
         :value="props.vendor"
@@ -76,7 +81,9 @@ const emit = defineEmits<{
     style="margin-bottom: 12px; font-size: 12px"
   >
     {{ t('colordb.presetFrom') }}
-    <a href="https://github.com/MOVIBALE/Lumina-Layers" target="_blank" rel="noopener">Lumina-Layers</a>
+    <a href="https://github.com/MOVIBALE/Lumina-Layers" target="_blank" rel="noopener"
+      >Lumina-Layers</a
+    >
     {{ t('colordb.openSource') }}
   </NAlert>
 </template>

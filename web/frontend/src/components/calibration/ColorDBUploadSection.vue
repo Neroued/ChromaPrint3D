@@ -94,7 +94,11 @@ async function handleDelete(name: string) {
     emit('colordb-updated')
     await loadSessionDbs()
   } catch (err: unknown) {
-    message.error(t('colordb.upload.messages.deleteFailed', { error: err instanceof Error ? err.message : String(err) }))
+    message.error(
+      t('colordb.upload.messages.deleteFailed', {
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
   } finally {
     deletingName.value = null
   }
@@ -151,7 +155,9 @@ const {
         message.success(t('colordb.upload.messages.batchUploadSuccess', { count: ok.length }))
       }
     } else if (ok.length > 0 && fail.length > 0) {
-      message.warning(t('colordb.upload.messages.batchUploadPartial', { ok: ok.length, fail: fail.length }))
+      message.warning(
+        t('colordb.upload.messages.batchUploadPartial', { ok: ok.length, fail: fail.length }),
+      )
     }
     loadSessionDbs()
   },
@@ -206,14 +212,23 @@ function handleGoToConvert() {
           :disabled="!canUpload"
           @click="handleUploadAndNotify"
         >
-          {{ isBatch ? t('colordb.upload.uploadAll', { count: fileList.length }) : t('colordb.upload.uploadSingle') }}
+          {{
+            isBatch
+              ? t('colordb.upload.uploadAll', { count: fileList.length })
+              : t('colordb.upload.uploadSingle')
+          }}
         </NButton>
         <NButton v-if="uploadCompleted" type="success" secondary @click="handleGoToConvert">
           {{ t('colordb.upload.goConvert') }}
         </NButton>
       </div>
 
-      <NAlert v-if="uploadError" type="error" :title="t('colordb.upload.failedTitle')" class="calibration-error-alert">
+      <NAlert
+        v-if="uploadError"
+        type="error"
+        :title="t('colordb.upload.failedTitle')"
+        class="calibration-error-alert"
+      >
         {{ uploadError }}
       </NAlert>
 
@@ -244,7 +259,10 @@ function handleGoToConvert() {
         {{ t('colordb.upload.listHint') }}
       </NText>
 
-      <NEmpty v-if="!loadingDbs && sessionDbs.length === 0" :description="t('colordb.upload.emptyHint')" />
+      <NEmpty
+        v-if="!loadingDbs && sessionDbs.length === 0"
+        :description="t('colordb.upload.emptyHint')"
+      />
 
       <template v-else>
         <div v-if="sessionDbs.length > 1" class="session-db-toolbar">
@@ -278,15 +296,18 @@ function handleGoToConvert() {
                   :checked="selectedNames.has(db.name)"
                   @update:checked="(v: boolean) => toggleSelect(db.name, v)"
                 />
-                <NTag size="small" type="info" :bordered="false">{{ db.num_entries }} {{ t('colordb.upload.entries') }}</NTag>
+                <NTag size="small" type="info" :bordered="false"
+                  >{{ db.num_entries }} {{ t('colordb.upload.entries') }}</NTag
+                >
               </NSpace>
             </template>
             <NSpace vertical :size="2">
               <NText strong>{{ db.name }}</NText>
               <NText depth="3" style="font-size: 12px">
-                {{ db.num_channels }} {{ t('colordb.upload.channels') }} · {{ db.max_color_layers }} {{ t('colordb.upload.colors') }} ·
-                {{ roundTo(db.layer_height_mm, 3) }}mm {{ t('colordb.upload.layerHeight') }} ·
-                {{ roundTo(db.line_width_mm, 3) }}mm {{ t('colordb.upload.lineWidth') }}
+                {{ db.num_channels }} {{ t('colordb.upload.channels') }} · {{ db.max_color_layers }}
+                {{ t('colordb.upload.colors') }} · {{ roundTo(db.layer_height_mm, 3) }}mm
+                {{ t('colordb.upload.layerHeight') }} · {{ roundTo(db.line_width_mm, 3) }}mm
+                {{ t('colordb.upload.lineWidth') }}
               </NText>
             </NSpace>
             <template #suffix>
@@ -296,12 +317,7 @@ function handleGoToConvert() {
                 @positive-click="handleDelete(db.name)"
               >
                 <template #trigger>
-                  <NButton
-                    size="small"
-                    type="error"
-                    quaternary
-                    :loading="deletingName === db.name"
-                  >
+                  <NButton size="small" type="error" quaternary :loading="deletingName === db.name">
                     {{ t('common.delete') }}
                   </NButton>
                 </template>

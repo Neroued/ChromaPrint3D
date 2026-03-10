@@ -140,10 +140,18 @@ const renderedForegroundSizeText = computed(() => {
   return '--'
 })
 const exportForegroundBlob = computed(
-  () => compositedFgBlob.value ?? processedFgBlob.value ?? thresholdPreviewBlob.value ?? foregroundBlob.value,
+  () =>
+    compositedFgBlob.value ??
+    processedFgBlob.value ??
+    thresholdPreviewBlob.value ??
+    foregroundBlob.value,
 )
 const exportForegroundUrl = computed(
-  () => compositedFgBlobUrl.value ?? processedFgBlobUrl.value ?? thresholdPreviewUrl.value ?? foregroundBlobUrl.value,
+  () =>
+    compositedFgBlobUrl.value ??
+    processedFgBlobUrl.value ??
+    thresholdPreviewUrl.value ??
+    foregroundBlobUrl.value,
 )
 const OUTLINE_REFERENCE_SHORT_SIDE = 1024
 const OUTLINE_MAX_EFFECTIVE_WIDTH = 96
@@ -158,10 +166,7 @@ const outlinePreviewScale = computed(() =>
 )
 const outlineEffectiveWidthPreview = computed(() => {
   const scaled = Math.round(outlineWidth.value * outlinePreviewScale.value)
-  return Math.min(
-    OUTLINE_MAX_EFFECTIVE_WIDTH,
-    Math.max(outlineWidth.value, scaled),
-  )
+  return Math.min(OUTLINE_MAX_EFFECTIVE_WIDTH, Math.max(outlineWidth.value, scaled))
 })
 const outlineAdaptiveHint = computed(() => {
   if (outlinePreviewShortSide.value <= 0) {
@@ -272,7 +277,9 @@ const hasEyeDropper = typeof window !== 'undefined' && 'EyeDropper' in window
 
 async function pickColorFromScreen() {
   try {
-    const eyeDropper = new (window as unknown as { EyeDropper: new () => { open(): Promise<{ sRGBHex: string }> } }).EyeDropper()
+    const eyeDropper = new (
+      window as unknown as { EyeDropper: new () => { open(): Promise<{ sRGBHex: string }> } }
+    ).EyeDropper()
     const result = await eyeDropper.open()
     outlineColor.value = result.sRGBHex
   } catch {
@@ -667,11 +674,16 @@ const timingText = computed(() => {
   const timing = taskStatus.value?.timing
   if (!timing) return null
   const parts: string[] = []
-  if (timing.decode_ms > 0) parts.push(t('matting.timing.decode', { ms: timing.decode_ms.toFixed(0) }))
-  if (timing.preprocess_ms > 0) parts.push(t('matting.timing.preprocess', { ms: timing.preprocess_ms.toFixed(0) }))
-  if (timing.inference_ms > 0) parts.push(t('matting.timing.inference', { ms: timing.inference_ms.toFixed(0) }))
-  if (timing.postprocess_ms > 0) parts.push(t('matting.timing.postprocess', { ms: timing.postprocess_ms.toFixed(0) }))
-  if (timing.encode_ms > 0) parts.push(t('matting.timing.encode', { ms: timing.encode_ms.toFixed(0) }))
+  if (timing.decode_ms > 0)
+    parts.push(t('matting.timing.decode', { ms: timing.decode_ms.toFixed(0) }))
+  if (timing.preprocess_ms > 0)
+    parts.push(t('matting.timing.preprocess', { ms: timing.preprocess_ms.toFixed(0) }))
+  if (timing.inference_ms > 0)
+    parts.push(t('matting.timing.inference', { ms: timing.inference_ms.toFixed(0) }))
+  if (timing.postprocess_ms > 0)
+    parts.push(t('matting.timing.postprocess', { ms: timing.postprocess_ms.toFixed(0) }))
+  if (timing.encode_ms > 0)
+    parts.push(t('matting.timing.encode', { ms: timing.encode_ms.toFixed(0) }))
   parts.push(t('matting.timing.total', { ms: timing.pipeline_ms.toFixed(0) }))
   return parts.join(' | ')
 })
@@ -698,16 +710,30 @@ onMounted(async () => {
     <NCard v-if="showModelCard" :title="t('matting.model.title')" size="small">
       <NSpace vertical :size="8">
         <NText depth="3" style="font-size: 12px">
-          {{ t('matting.model.installedCount', { installed: modelStatus?.installedModels ?? 0, total: modelStatus?.totalModels ?? 0 }) }}
+          {{
+            t('matting.model.installedCount', {
+              installed: modelStatus?.installedModels ?? 0,
+              total: modelStatus?.totalModels ?? 0,
+            })
+          }}
           <template v-if="pendingModelCount > 0">
-            {{ t('matting.model.pendingCount', { pending: pendingModelCount, missing: modelStatus?.missingModels ?? 0 }) }}
+            {{
+              t('matting.model.pendingCount', {
+                pending: pendingModelCount,
+                missing: modelStatus?.missingModels ?? 0,
+              })
+            }}
           </template>
         </NText>
         <NText v-if="modelConnectivitySummary" depth="3" style="font-size: 12px">
           {{ modelConnectivitySummary }}
         </NText>
         <NText v-if="modelConnectivity?.checkedAtMs" depth="3" style="font-size: 11px">
-          {{ t('matting.model.lastCheck', { time: formatConnectivityCheckedAt(modelConnectivity.checkedAtMs) }) }}
+          {{
+            t('matting.model.lastCheck', {
+              time: formatConnectivityCheckedAt(modelConnectivity.checkedAtMs),
+            })
+          }}
         </NText>
         <div v-if="modelConnectivity" class="model-connectivity-list">
           <NText
@@ -716,15 +742,21 @@ onMounted(async () => {
             depth="3"
             style="font-size: 11px; display: block"
           >
-            [{{ source.ok ? t('matting.model.available') : t('matting.model.unavailable') }}] {{ source.name }} ({{ source.reachableModels }}/{{
-              source.checkedModels
-            }}) | {{ source.responseTimeMs }}ms | {{ source.message }}
+            [{{ source.ok ? t('matting.model.available') : t('matting.model.unavailable') }}]
+            {{ source.name }} ({{ source.reachableModels }}/{{ source.checkedModels }}) |
+            {{ source.responseTimeMs }}ms | {{ source.message }}
           </NText>
         </div>
         <NText depth="3" style="font-size: 12px">
-          {{ t('matting.model.needDownload', { need: formatBytes(effectiveDownloadTotalBytes), done: formatBytes(downloadedSessionBytes) }) }}
+          {{
+            t('matting.model.needDownload', {
+              need: formatBytes(effectiveDownloadTotalBytes),
+              done: formatBytes(downloadedSessionBytes),
+            })
+          }}
           <template v-if="currentDownloadSpeedBytesPerSec">
-            | {{ t('matting.model.speed', { speed: formatSpeed(currentDownloadSpeedBytesPerSec) }) }}
+            |
+            {{ t('matting.model.speed', { speed: formatSpeed(currentDownloadSpeedBytesPerSec) }) }}
           </template>
         </NText>
         <NProgress
@@ -747,7 +779,10 @@ onMounted(async () => {
             type="primary"
             :loading="modelActionLoading"
             :disabled="
-              modelRunning || modelStatusLoading || modelConnectivityLoading || pendingModelCount <= 0
+              modelRunning ||
+              modelStatusLoading ||
+              modelConnectivityLoading ||
+              pendingModelCount <= 0
             "
             @click="handleStartModelDownload"
           >
@@ -770,8 +805,14 @@ onMounted(async () => {
           >
             {{ t('matting.model.cancelDownload') }}
           </NButton>
-          <NButton v-if="showRestartHint" type="success" @click="handleRestartApp"> {{ t('matting.model.restartNow') }} </NButton>
-          <NButton quaternary :disabled="modelStatusLoading || modelRunning" @click="refreshModelStatus">
+          <NButton v-if="showRestartHint" type="success" @click="handleRestartApp">
+            {{ t('matting.model.restartNow') }}
+          </NButton>
+          <NButton
+            quaternary
+            :disabled="modelStatusLoading || modelRunning"
+            @click="refreshModelStatus"
+          >
             {{ t('matting.model.refreshStatus') }}
           </NButton>
         </NSpace>
@@ -800,12 +841,19 @@ onMounted(async () => {
           >
             <NUploadDragger>
               <NSpace vertical align="center" justify="center" style="padding: 32px 16px">
-                <NText depth="3" style="font-size: 14px"> {{ t('matting.upload.dropHint') }} </NText>
+                <NText depth="3" style="font-size: 14px">
+                  {{ t('matting.upload.dropHint') }}
+                </NText>
                 <NText depth="3" style="font-size: 12px">
                   {{ t('matting.upload.formatHint', { formats: rasterImageFormatsText }) }}
                 </NText>
                 <NText depth="3" style="font-size: 11px">
-                  {{ t('matting.upload.sizeHint', { maxMb: backendMaxUploadMb, maxPixels: maxPixelText }) }}
+                  {{
+                    t('matting.upload.sizeHint', {
+                      maxMb: backendMaxUploadMb,
+                      maxPixels: maxPixelText,
+                    })
+                  }}
                 </NText>
               </NSpace>
             </NUploadDragger>
@@ -813,7 +861,9 @@ onMounted(async () => {
           <div v-else class="upload-preview">
             <div class="upload-preview-header">
               <NText depth="3" style="font-size: 12px">{{ imageInfo }}</NText>
-              <NButton size="tiny" quaternary type="error" @click="clearFile"> {{ t('matting.upload.removeImage') }} </NButton>
+              <NButton size="tiny" quaternary type="error" @click="clearFile">
+                {{ t('matting.upload.removeImage') }}
+              </NButton>
             </div>
             <ZoomableImageViewport
               :src="originalUrl ?? undefined"
@@ -849,13 +899,17 @@ onMounted(async () => {
             <div>
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
                 <NSwitch v-model:value="reframeEnabled" size="small" :disabled="loading" />
-                <NText depth="3" style="font-size: 12px"> {{ t('matting.settings.reframe') }} </NText>
+                <NText depth="3" style="font-size: 12px">
+                  {{ t('matting.settings.reframe') }}
+                </NText>
               </div>
               <NText depth="3" style="font-size: 11px; display: block">
                 {{ t('matting.settings.reframeHint') }}
               </NText>
               <div v-if="reframeEnabled" class="slider-input-row" style="margin-top: 8px">
-                <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.settings.padding') }} </NText>
+                <NText depth="3" style="font-size: 12px; white-space: nowrap">
+                  {{ t('matting.settings.padding') }}
+                </NText>
                 <NSlider
                   v-model:value="reframePaddingPx"
                   :min="0"
@@ -885,11 +939,7 @@ onMounted(async () => {
               {{ loading ? t('matting.actions.processing') : t('matting.actions.startMatting') }}
             </NButton>
             <NButtonGroup v-if="isCompleted && currentForegroundUrl" style="width: 100%">
-              <NButton
-                style="flex: 1"
-                :disabled="postprocessPending"
-                @click="handleDownloadMask"
-              >
+              <NButton style="flex: 1" :disabled="postprocessPending" @click="handleDownloadMask">
                 {{ t('matting.actions.downloadMask') }}
               </NButton>
               <NButton
@@ -918,7 +968,9 @@ onMounted(async () => {
     <NCard v-if="isCompleted" :title="t('matting.postprocess.title')" size="small">
       <template #header-extra>
         <NSpace :size="8" align="center">
-          <NButton size="tiny" quaternary @click="handleResetPostprocessParams"> {{ t('common.reset') }} </NButton>
+          <NButton size="tiny" quaternary @click="handleResetPostprocessParams">
+            {{ t('common.reset') }}
+          </NButton>
           <NSpin v-if="postprocessing" :size="16" />
         </NSpace>
       </template>
@@ -951,7 +1003,9 @@ onMounted(async () => {
         <div>
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
             {{ t('matting.postprocess.morphCloseSize') }}
-            <NText depth="3" style="font-size: 11px">（{{ t('matting.postprocess.morphCloseSizeHint') }}）</NText>
+            <NText depth="3" style="font-size: 11px"
+              >（{{ t('matting.postprocess.morphCloseSizeHint') }}）</NText
+            >
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -974,7 +1028,9 @@ onMounted(async () => {
         <div v-if="morphCloseSize > 0">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
             {{ t('matting.postprocess.morphCloseIterations') }}
-            <NText depth="3" style="font-size: 11px">（{{ t('matting.postprocess.morphCloseIterationsHint') }}）</NText>
+            <NText depth="3" style="font-size: 11px"
+              >（{{ t('matting.postprocess.morphCloseIterationsHint') }}）</NText
+            >
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -997,7 +1053,9 @@ onMounted(async () => {
         <div>
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
             {{ t('matting.postprocess.minRegionArea') }}
-            <NText depth="3" style="font-size: 11px">（{{ t('matting.postprocess.minRegionAreaHint') }}）</NText>
+            <NText depth="3" style="font-size: 11px"
+              >（{{ t('matting.postprocess.minRegionAreaHint') }}）</NText
+            >
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -1020,11 +1078,15 @@ onMounted(async () => {
         <div>
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
             <NSwitch v-model:value="outlineEnabled" size="small" />
-            <NText depth="3" style="font-size: 12px"> {{ t('matting.postprocess.outline') }} </NText>
+            <NText depth="3" style="font-size: 12px">
+              {{ t('matting.postprocess.outline') }}
+            </NText>
           </div>
           <template v-if="outlineEnabled">
             <div class="slider-input-row" style="margin-bottom: 8px">
-              <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.postprocess.outlineMode') }} </NText>
+              <NText depth="3" style="font-size: 12px; white-space: nowrap">
+                {{ t('matting.postprocess.outlineMode') }}
+              </NText>
               <NSelect
                 v-model:value="outlineMode"
                 :options="outlineModeOptions"
@@ -1033,7 +1095,9 @@ onMounted(async () => {
               />
             </div>
             <div class="slider-input-row">
-              <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.postprocess.outlineWidth') }} </NText>
+              <NText depth="3" style="font-size: 12px; white-space: nowrap">
+                {{ t('matting.postprocess.outlineWidth') }}
+              </NText>
               <NSlider
                 v-model:value="outlineWidth"
                 :min="1"
@@ -1054,7 +1118,9 @@ onMounted(async () => {
               {{ outlineAdaptiveHint }}
             </NText>
             <div class="slider-input-row">
-              <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.postprocess.outlineColor') }} </NText>
+              <NText depth="3" style="font-size: 12px; white-space: nowrap">
+                {{ t('matting.postprocess.outlineColor') }}
+              </NText>
               <NColorPicker
                 v-model:value="outlineColor"
                 :modes="['hex']"
@@ -1069,7 +1135,23 @@ onMounted(async () => {
                 :title="t('matting.postprocess.eyeDropper')"
                 @click="pickColorFromScreen"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m2 22 1-1h3l9-9" />
+                  <path d="M3 21v-3l9-9" />
+                  <path
+                    d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"
+                  />
+                </svg>
               </NButton>
             </div>
           </template>
@@ -1084,17 +1166,32 @@ onMounted(async () => {
     <div v-if="loading" style="text-align: center; padding: 40px 0">
       <NSpin size="large" />
       <NText depth="3" style="display: block; margin-top: 12px">
-        {{ taskStatus?.status === 'pending' ? t('matting.status.queuing') : t('matting.status.running') }}
+        {{
+          taskStatus?.status === 'pending'
+            ? t('matting.status.queuing')
+            : t('matting.status.running')
+        }}
       </NText>
     </div>
 
-    <NCard v-if="isCompleted && currentForegroundUrl" :title="t('matting.result.title')" size="small">
+    <NCard
+      v-if="isCompleted && currentForegroundUrl"
+      :title="t('matting.result.title')"
+      size="small"
+    >
       <template #header-extra>
         <NSpace :size="8" align="center">
           <NText depth="3" style="font-size: 12px">
-            {{ t('matting.result.afterMatting', { size: renderedForegroundSizeText, method: taskStatus!.method }) }}
+            {{
+              t('matting.result.afterMatting', {
+                size: renderedForegroundSizeText,
+                method: taskStatus!.method,
+              })
+            }}
           </NText>
-          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll"> {{ t('matting.result.resetView') }} </NButton>
+          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">
+            {{ t('matting.result.resetView') }}
+          </NButton>
         </NSpace>
       </template>
       <NText
@@ -1137,7 +1234,13 @@ onMounted(async () => {
         </div>
         <div class="preview-col">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            {{ processedFgBlobUrl ? t('matting.result.postprocessed') : thresholdPreviewUrl ? t('matting.result.thresholdPreview') : t('matting.result.mattingResult') }}
+            {{
+              processedFgBlobUrl
+                ? t('matting.result.postprocessed')
+                : thresholdPreviewUrl
+                  ? t('matting.result.thresholdPreview')
+                  : t('matting.result.mattingResult')
+            }}
           </NText>
           <ZoomableImageViewport
             :src="currentForegroundUrl ?? undefined"

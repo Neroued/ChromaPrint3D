@@ -69,7 +69,10 @@ async function handleBuildAndNotify() {
 
 async function downloadBuiltDB() {
   if (!builtDB.value) return
-  await downloadByUrl(getSessionColorDBDownloadPath(builtDB.value.name), `${builtDB.value.name}.json`)
+  await downloadByUrl(
+    getSessionColorDBDownloadPath(builtDB.value.name),
+    `${builtDB.value.name}.json`,
+  )
 }
 </script>
 
@@ -135,25 +138,43 @@ async function downloadBuiltDB() {
       </NForm>
 
       <div class="calibration-actions">
-        <NButton type="primary" :loading="building" :disabled="!canBuild" @click="handleBuildAndNotify">
+        <NButton
+          type="primary"
+          :loading="building"
+          :disabled="!canBuild"
+          @click="handleBuildAndNotify"
+        >
           {{ props.buildButtonText || t('colordb.build.defaultButtonText') }}
         </NButton>
       </div>
 
       <NSpin :show="building">
         <NAlert v-if="builtDB" type="success" :title="t('colordb.build.success')">
-          <p class="calibration-result-line">{{ t('colordb.build.successName', { name: builtDB.name }) }}</p>
-          <p class="calibration-result-line">{{ t('colordb.build.successChannels', { channels: builtDB.num_channels }) }}</p>
-          <p class="calibration-result-line">{{ t('colordb.build.successEntries', { entries: builtDB.num_entries }) }}</p>
+          <p class="calibration-result-line">
+            {{ t('colordb.build.successName', { name: builtDB.name }) }}
+          </p>
+          <p class="calibration-result-line">
+            {{ t('colordb.build.successChannels', { channels: builtDB.num_channels }) }}
+          </p>
+          <p class="calibration-result-line">
+            {{ t('colordb.build.successEntries', { entries: builtDB.num_entries }) }}
+          </p>
           <div class="calibration-actions calibration-actions--compact">
-            <NButton size="small" type="info" @click="downloadBuiltDB">{{ t('colordb.build.downloadJson') }}</NButton>
+            <NButton size="small" type="info" @click="downloadBuiltDB">{{
+              t('colordb.build.downloadJson')
+            }}</NButton>
           </div>
           <p class="calibration-result-tip">
             {{ t('colordb.build.autoAdded') }}
           </p>
         </NAlert>
 
-        <NAlert v-if="buildError" type="error" :title="t('colordb.build.failed')" class="calibration-error-alert">
+        <NAlert
+          v-if="buildError"
+          type="error"
+          :title="t('colordb.build.failed')"
+          class="calibration-error-alert"
+        >
           {{ buildError }}
         </NAlert>
       </NSpin>

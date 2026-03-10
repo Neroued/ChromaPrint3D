@@ -192,8 +192,10 @@ const timingText = computed(() => {
   const timing = taskStatus.value?.timing
   if (!timing) return null
   const parts: string[] = []
-  if (timing.decode_ms > 0) parts.push(t('vectorize.timing.decode', { ms: timing.decode_ms.toFixed(0) }))
-  if (timing.vectorize_ms > 0) parts.push(t('vectorize.timing.vectorize', { ms: timing.vectorize_ms.toFixed(0) }))
+  if (timing.decode_ms > 0)
+    parts.push(t('vectorize.timing.decode', { ms: timing.decode_ms.toFixed(0) }))
+  if (timing.vectorize_ms > 0)
+    parts.push(t('vectorize.timing.vectorize', { ms: timing.vectorize_ms.toFixed(0) }))
   parts.push(t('vectorize.timing.total', { ms: timing.pipeline_ms.toFixed(0) }))
   return parts.join(' | ')
 })
@@ -247,12 +249,19 @@ onMounted(async () => {
           >
             <NUploadDragger>
               <NSpace vertical align="center" justify="center" style="padding: 32px 16px">
-                <NText depth="3" style="font-size: 14px"> {{ t('vectorize.upload.dropHint') }} </NText>
+                <NText depth="3" style="font-size: 14px">
+                  {{ t('vectorize.upload.dropHint') }}
+                </NText>
                 <NText depth="3" style="font-size: 12px">
                   {{ t('vectorize.upload.formatHint', { formats: rasterImageFormatsText }) }}
                 </NText>
                 <NText depth="3" style="font-size: 11px">
-                  {{ t('vectorize.upload.sizeHint', { maxMb: backendMaxUploadMb, maxPixels: maxPixelText }) }}
+                  {{
+                    t('vectorize.upload.sizeHint', {
+                      maxMb: backendMaxUploadMb,
+                      maxPixels: maxPixelText,
+                    })
+                  }}
                 </NText>
               </NSpace>
             </NUploadDragger>
@@ -260,7 +269,9 @@ onMounted(async () => {
           <div v-else class="upload-preview">
             <div class="upload-preview-header">
               <NText depth="3" style="font-size: 12px">{{ imageInfo }}</NText>
-              <NButton size="tiny" quaternary type="error" @click="clearFile"> {{ t('vectorize.upload.removeImage') }} </NButton>
+              <NButton size="tiny" quaternary type="error" @click="clearFile">
+                {{ t('vectorize.upload.removeImage') }}
+              </NButton>
             </div>
             <ZoomableImageViewport
               :src="originalUrl ?? undefined"
@@ -275,7 +286,9 @@ onMounted(async () => {
       <NGridItem span="2 m:1">
         <NCard :title="t('vectorize.settings.title')" size="small">
           <template #header-extra>
-            <NButton size="tiny" quaternary :disabled="loading" @click="handleResetParams"> {{ t('common.reset') }} </NButton>
+            <NButton size="tiny" quaternary :disabled="loading" @click="handleResetParams">
+              {{ t('common.reset') }}
+            </NButton>
           </template>
           <NSpace vertical :size="12">
             <div>
@@ -334,7 +347,9 @@ onMounted(async () => {
               <div
                 style="display: flex; align-items: center; justify-content: space-between; gap: 8px"
               >
-                <NText depth="3" style="font-size: 12px">{{ t('vectorize.settings.enableStroke') }}</NText>
+                <NText depth="3" style="font-size: 12px">{{
+                  t('vectorize.settings.enableStroke')
+                }}</NText>
                 <NSwitch v-model:value="params.svg_enable_stroke" :disabled="loading" />
               </div>
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
@@ -345,7 +360,9 @@ onMounted(async () => {
               <div
                 style="display: flex; align-items: center; justify-content: space-between; gap: 8px"
               >
-                <NText depth="3" style="font-size: 12px">{{ t('vectorize.settings.enableCoverageFix') }}</NText>
+                <NText depth="3" style="font-size: 12px">{{
+                  t('vectorize.settings.enableCoverageFix')
+                }}</NText>
                 <NSwitch v-model:value="params.enable_coverage_fix" :disabled="loading" />
               </div>
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
@@ -606,12 +623,19 @@ onMounted(async () => {
               :disabled="!canExecute"
               @click="handleVectorize"
             >
-              {{ loading ? t('vectorize.actions.processing') : t('vectorize.actions.startVectorize') }}
+              {{
+                loading ? t('vectorize.actions.processing') : t('vectorize.actions.startVectorize')
+              }}
             </NButton>
             <NButton v-if="isCompleted && svgBlobUrl" block @click="handleDownloadSvg">
               {{ t('vectorize.actions.downloadSvg') }}{{ svgSizeText ? ` (${svgSizeText})` : '' }}
             </NButton>
-            <NButton v-if="isCompleted && svgContent" type="success" block @click="handleUseSvgForConvert">
+            <NButton
+              v-if="isCompleted && svgContent"
+              type="success"
+              block
+              @click="handleUseSvgForConvert"
+            >
               {{ t('vectorize.actions.useSvgForConvert') }}
             </NButton>
           </NSpace>
@@ -626,7 +650,11 @@ onMounted(async () => {
     <div v-if="loading" style="text-align: center; padding: 40px 0">
       <NSpin size="large" />
       <NText depth="3" style="display: block; margin-top: 12px">
-        {{ taskStatus?.status === 'pending' ? t('vectorize.status.queuing') : t('vectorize.status.running') }}
+        {{
+          taskStatus?.status === 'pending'
+            ? t('vectorize.status.queuing')
+            : t('vectorize.status.running')
+        }}
       </NText>
     </div>
 
@@ -634,10 +662,13 @@ onMounted(async () => {
       <template #header-extra>
         <NSpace :size="8" align="center">
           <NText depth="3" style="font-size: 12px">
-            {{ taskStatus!.width }} x {{ taskStatus!.height }} | {{ t('vectorize.result.shapes', { count: taskStatus!.num_shapes }) }}
-            | SVG {{ svgSizeText }}
+            {{ taskStatus!.width }} x {{ taskStatus!.height }} |
+            {{ t('vectorize.result.shapes', { count: taskStatus!.num_shapes }) }} | SVG
+            {{ svgSizeText }}
           </NText>
-          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll"> {{ t('vectorize.result.resetView') }} </NButton>
+          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">
+            {{ t('vectorize.result.resetView') }}
+          </NButton>
         </NSpace>
       </template>
       <NText

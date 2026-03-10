@@ -97,7 +97,9 @@ export async function validateImageUploadFile(
   if (scene === 'raster-tool' && inputType === 'vector') {
     return {
       ok: false,
-      message: i18n.global.t('imageUpload.validation.rasterOnly', { formats: RASTER_IMAGE_FORMATS_TEXT }),
+      message: i18n.global.t('imageUpload.validation.rasterOnly', {
+        formats: RASTER_IMAGE_FORMATS_TEXT,
+      }),
     }
   }
 
@@ -114,7 +116,9 @@ export async function validateImageUploadFile(
   if (!isRasterFile(file, ext)) {
     return {
       ok: false,
-      message: i18n.global.t('imageUpload.validation.formatUnsupported', { formats: RASTER_IMAGE_FORMATS_TEXT }),
+      message: i18n.global.t('imageUpload.validation.formatUnsupported', {
+        formats: RASTER_IMAGE_FORMATS_TEXT,
+      }),
     }
   }
 
@@ -130,7 +134,9 @@ export async function validateImageUploadFile(
   if (pixels > maxPixels) {
     return {
       ok: false,
-      message: i18n.global.t('imageUpload.validation.tooManyPixels', { maxPixels: formatLimitPixels(maxPixels) }),
+      message: i18n.global.t('imageUpload.validation.tooManyPixels', {
+        maxPixels: formatLimitPixels(maxPixels),
+      }),
     }
   }
 

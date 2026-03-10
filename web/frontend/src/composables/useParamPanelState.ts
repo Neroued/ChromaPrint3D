@@ -5,7 +5,13 @@ import type { SelectOption } from 'naive-ui'
 import { createInitialConvertParams } from '../domain/params/convertDefaults'
 import { formatFloat, roundTo } from '../runtime/number'
 import { useAppStore } from '../stores/app'
-import { getPixelSizePresets, type ColorDBInfo, type ConvertAnyParams, type DefaultConfig, type PaletteChannel } from '../types'
+import {
+  getPixelSizePresets,
+  type ColorDBInfo,
+  type ConvertAnyParams,
+  type DefaultConfig,
+  type PaletteChannel,
+} from '../types'
 import { fetchAvailableColorDBs, fetchParamPanelBootstrap } from '../services/paramService'
 
 interface ChannelOption {
@@ -94,7 +100,12 @@ export function useParamPanelState() {
     return dbs.map((db) => {
       const suffix = db.source === 'session' ? t('param.sessionSuffix') : ''
       return {
-        label: t('param.dbOptionLabel', { name: db.name, entries: db.num_entries, channels: db.num_channels }) + suffix,
+        label:
+          t('param.dbOptionLabel', {
+            name: db.name,
+            entries: db.num_entries,
+            channels: db.num_channels,
+          }) + suffix,
         value: db.name,
       }
     })
@@ -409,7 +420,10 @@ export function useParamPanelState() {
     },
     set: (next) => {
       update({
-        slic_compactness: Math.min(slicCompactnessUpperBound, Math.max(0.1, roundTo(Number(next), 1))),
+        slic_compactness: Math.min(
+          slicCompactnessUpperBound,
+          Math.max(0.1, roundTo(Number(next), 1)),
+        ),
       })
     },
   })
@@ -501,9 +515,7 @@ export function useParamPanelState() {
         colorDBs.value
           .filter(
             (db) =>
-              db.source !== 'session' &&
-              db.material_type === selectedMaterial.value &&
-              db.vendor,
+              db.source !== 'session' && db.material_type === selectedMaterial.value && db.vendor,
           )
           .map((db) => db.vendor!),
       ),

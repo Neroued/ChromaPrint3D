@@ -72,7 +72,7 @@ export function useColorDBUploadFlow(options: UseColorDBUploadFlowOptions = {}) 
     if (uploaded.length === 0) {
       uploadError.value =
         files.length === 1
-          ? results[0]?.error ?? t('colordb.upload.messages.singleUploadFailed')
+          ? (results[0]?.error ?? t('colordb.upload.messages.singleUploadFailed'))
           : t('colordb.upload.messages.allUploadFailed')
     }
 

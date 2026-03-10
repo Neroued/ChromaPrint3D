@@ -96,7 +96,9 @@ const currentLayerTitle = computed(() => {
 const currentLayerMeta = computed(() => {
   if (!layerPreviews.value) return ''
   const orderText =
-    layerPreviews.value.layer_order === 'Bottom2Top' ? t('result.layerOrder.bottomToTop') : t('result.layerOrder.topToBottom')
+    layerPreviews.value.layer_order === 'Bottom2Top'
+      ? t('result.layerOrder.bottomToTop')
+      : t('result.layerOrder.topToBottom')
   return `${layerPreviews.value.width}×${layerPreviews.value.height} px | ${orderText}`
 })
 
@@ -135,7 +137,8 @@ async function loadCurrentImage(view: ResultImageView | null): Promise<void> {
   }
 
   const requestTaskId = taskId.value
-  const imageUrl = view === 'source-mask' ? getSourceMaskPath(requestTaskId) : getPreviewPath(requestTaskId)
+  const imageUrl =
+    view === 'source-mask' ? getSourceMaskPath(requestTaskId) : getPreviewPath(requestTaskId)
   try {
     const blob = await fetchBlobWithSession(imageUrl)
     if (currentImageRequestId !== requestId || taskId.value !== requestTaskId) return
@@ -200,9 +203,10 @@ function prefetchNeighborLayerArtifacts(centerArtifactKey: string | null) {
   const centerIndex = summary.artifacts.indexOf(centerArtifactKey)
   if (centerIndex < 0) return
 
-  const candidates = [summary.artifacts[centerIndex - 1], summary.artifacts[centerIndex + 1]].filter(
-    (item): item is string => Boolean(item),
-  )
+  const candidates = [
+    summary.artifacts[centerIndex - 1],
+    summary.artifacts[centerIndex + 1],
+  ].filter((item): item is string => Boolean(item))
   for (const candidate of candidates) {
     void loadLayerArtifactToCache(candidate)
   }
@@ -331,7 +335,9 @@ function handleSetImageView(view: ResultImageView) {
                   {{ t('result.sourceMask') }}
                 </NButton>
               </NButtonGroup>
-              <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">{{ t('result.resetView') }}</NButton>
+              <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">{{
+                t('result.resetView')
+              }}</NButton>
             </NSpace>
           </template>
           <div class="result-image-card__content">
@@ -349,7 +355,13 @@ function handleSetImageView(view: ResultImageView) {
           </div>
         </NCard>
 
-        <NCard v-if="hasLayerPreviews" :title="t('result.layerPreview')" size="small" embedded class="result-image-card">
+        <NCard
+          v-if="hasLayerPreviews"
+          :title="t('result.layerPreview')"
+          size="small"
+          embedded
+          class="result-image-card"
+        >
           <template #header-extra>
             <NSpace
               :size="10"
@@ -383,7 +395,9 @@ function handleSetImageView(view: ResultImageView) {
                 class="layer-preview-slider"
                 @update:value="handleLayerSliderUpdate"
               />
-              <NText depth="3" class="layer-preview-slider-label">{{ t('result.layerBottom') }}</NText>
+              <NText depth="3" class="layer-preview-slider-label">{{
+                t('result.layerBottom')
+              }}</NText>
             </div>
 
             <div class="result-image-card__footer">
@@ -407,7 +421,13 @@ function handleSetImageView(view: ResultImageView) {
       </NText>
 
       <!-- Match statistics -->
-      <NDescriptions label-placement="left" bordered :column="2" size="small" :title="t('result.stats.title')">
+      <NDescriptions
+        label-placement="left"
+        bordered
+        :column="2"
+        size="small"
+        :title="t('result.stats.title')"
+      >
         <NDescriptionsItem :label="t('result.stats.totalClusters')">
           {{ result.stats.clusters_total }}
         </NDescriptionsItem>
