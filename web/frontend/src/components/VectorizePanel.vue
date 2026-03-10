@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import {
+  NAlert,
   NButton,
   NCard,
-  NSpace,
-  NUpload,
-  NUploadDragger,
-  NText,
-  NAlert,
-  NSpin,
+  NCollapse,
+  NCollapseItem,
+  NDivider,
+  NForm,
+  NFormItem,
   NGrid,
   NGridItem,
   NInputNumber,
+  NSpace,
+  NSpin,
   NSwitch,
-  NCollapse,
-  NCollapseItem,
+  NText,
+  NTooltip,
+  NUpload,
+  NUploadDragger,
 } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -291,331 +295,395 @@ onMounted(async () => {
             </NButton>
           </template>
           <NSpace vertical :size="12">
-            <div>
-              <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                {{ t('vectorize.settings.numColors') }}
+            <div class="settings-scroll">
+              <NText depth="3" style="font-size: 11px">
+                {{ t('vectorize.settings.quickTip') }}
               </NText>
-              <NInputNumber
-                v-model:value="params.num_colors"
-                :min="2"
-                :max="256"
-                :disabled="loading"
-                size="small"
-                style="width: 100%"
-              />
-              <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                {{ t('vectorize.settings.numColorsHint') }}
-              </NText>
-            </div>
-            <div>
-              <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                {{ t('vectorize.settings.curveFitError') }}
-              </NText>
-              <NInputNumber
-                v-model:value="params.curve_fit_error"
-                :min="0.1"
-                :max="5"
-                :step="0.1"
-                :precision="2"
-                :disabled="loading"
-                size="small"
-                style="width: 100%"
-              />
-              <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                {{ t('vectorize.settings.curveFitErrorHint') }}
-              </NText>
-            </div>
-            <div>
-              <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                {{ t('vectorize.settings.contourSimplify') }}
-              </NText>
-              <NInputNumber
-                v-model:value="params.contour_simplify"
-                :min="0"
-                :max="10"
-                :step="0.05"
-                :precision="2"
-                :disabled="loading"
-                size="small"
-                style="width: 100%"
-              />
-              <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                {{ t('vectorize.settings.contourSimplifyHint') }}
-              </NText>
-            </div>
-            <div>
-              <div
-                style="display: flex; align-items: center; justify-content: space-between; gap: 8px"
-              >
-                <NText depth="3" style="font-size: 12px">{{
-                  t('vectorize.settings.enableStroke')
-                }}</NText>
-                <NSwitch v-model:value="params.svg_enable_stroke" :disabled="loading" />
-              </div>
-              <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                {{ t('vectorize.settings.enableStrokeHint') }}
-              </NText>
-            </div>
-            <div>
-              <div
-                style="display: flex; align-items: center; justify-content: space-between; gap: 8px"
-              >
-                <NText depth="3" style="font-size: 12px">{{
-                  t('vectorize.settings.enableCoverageFix')
-                }}</NText>
-                <NSwitch v-model:value="params.enable_coverage_fix" :disabled="loading" />
-              </div>
-              <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                {{ t('vectorize.settings.enableCoverageFixHint') }}
-              </NText>
-            </div>
-            <NText depth="3" style="font-size: 11px">
-              {{ t('vectorize.settings.defaultHint') }}
-            </NText>
-            <NAlert type="info" :show-icon="false">
-              <NText depth="3" style="font-size: 12px; display: block">
-                {{ t('vectorize.settings.tuningOrder') }}
-              </NText>
-              <NText depth="3" style="font-size: 11px; display: block">
-                {{ t('vectorize.settings.tuningStep1') }}
-              </NText>
-              <NText depth="3" style="font-size: 11px; display: block">
-                {{ t('vectorize.settings.tuningStep2') }}
-              </NText>
-              <NText depth="3" style="font-size: 11px; display: block">
-                {{ t('vectorize.settings.tuningStep3') }}
-              </NText>
-            </NAlert>
-            <NCollapse>
-              <NCollapseItem :title="t('vectorize.advanced.title')" name="advanced">
-                <NSpace vertical :size="10">
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.smoothingSpatial') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.smoothing_spatial"
-                      :min="0"
-                      :max="50"
-                      :step="0.5"
-                      :precision="1"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.smoothingSpatialHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.smoothingColor') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.smoothing_color"
-                      :min="0"
-                      :max="80"
-                      :step="0.5"
-                      :precision="1"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.smoothingColorHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.thinLineRadius') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.thin_line_max_radius"
-                      :min="0.5"
-                      :max="10"
-                      :step="0.1"
-                      :precision="1"
-                      :disabled="loading || !params.svg_enable_stroke"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.thinLineRadiusHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.maxWorkingPixels') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.max_working_pixels"
-                      :min="0"
-                      :max="100000000"
-                      :step="100000"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.maxWorkingPixelsHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.slicRegionSize') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.slic_region_size"
-                      :min="0"
-                      :max="100"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.slicRegionSizeHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.edgeSensitivity') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.edge_sensitivity"
-                      :min="0"
-                      :max="1"
-                      :step="0.05"
-                      :precision="2"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.edgeSensitivityHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.refinePasses') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.refine_passes"
-                      :min="0"
-                      :max="20"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.refinePassesHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.mergeColorDist') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.max_merge_color_dist"
-                      :min="0"
-                      :max="2000"
-                      :step="10"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.mergeColorDistHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.minRegionArea') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.min_region_area"
-                      :min="0"
-                      :max="1000000"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.minRegionAreaHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.minContourArea') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.min_contour_area"
-                      :min="0"
-                      :max="1000000"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.minContourAreaHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.minHoleArea') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.min_hole_area"
-                      :min="0"
-                      :max="100000"
-                      :step="0.5"
-                      :precision="1"
-                      :disabled="loading"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.minHoleAreaHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.minCoverageRatio') }}
-                    </NText>
-                    <NInputNumber
-                      v-model:value="params.min_coverage_ratio"
-                      :min="0"
-                      :max="1"
-                      :step="0.001"
-                      :precision="3"
-                      :disabled="loading || !params.enable_coverage_fix"
-                      size="small"
-                      style="width: 100%"
-                    />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.minCoverageRatioHint') }}
-                    </NText>
-                  </div>
-                  <div>
-                    <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      {{ t('vectorize.advanced.svgStrokeWidth') }}
-                    </NText>
+
+              <!-- Core Parameters -->
+              <NForm label-placement="left" :label-width="140" :disabled="loading" size="small">
+                <NFormItem>
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{ t('vectorize.settings.numColors') }}</span>
+                      </template>
+                      {{ t('vectorize.settings.numColorsHint') }}
+                    </NTooltip>
+                  </template>
+                  <NInputNumber
+                    v-model:value="params.num_colors"
+                    :min="2"
+                    :max="256"
+                    style="width: 100%"
+                  />
+                </NFormItem>
+                <NFormItem>
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{ t('vectorize.settings.curveFitError') }}</span>
+                      </template>
+                      {{ t('vectorize.settings.curveFitErrorHint') }}
+                    </NTooltip>
+                  </template>
+                  <NInputNumber
+                    v-model:value="params.curve_fit_error"
+                    :min="0.1"
+                    :max="5"
+                    :step="0.1"
+                    :precision="2"
+                    style="width: 100%"
+                  />
+                </NFormItem>
+                <NFormItem>
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{ t('vectorize.settings.contourSimplify') }}</span>
+                      </template>
+                      {{ t('vectorize.settings.contourSimplifyHint') }}
+                    </NTooltip>
+                  </template>
+                  <NInputNumber
+                    v-model:value="params.contour_simplify"
+                    :min="0"
+                    :max="10"
+                    :step="0.05"
+                    :precision="2"
+                    style="width: 100%"
+                  />
+                </NFormItem>
+              </NForm>
+
+              <!-- Output Enhancement -->
+              <NDivider title-placement="left" style="margin: 4px 0; font-size: 12px">
+                {{ t('vectorize.settings.outputEnhancement') }}
+              </NDivider>
+
+              <NForm label-placement="left" :label-width="140" :disabled="loading" size="small">
+                <NFormItem>
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{ t('vectorize.settings.enableStroke') }}</span>
+                      </template>
+                      {{ t('vectorize.settings.enableStrokeHint') }}
+                    </NTooltip>
+                  </template>
+                  <NSwitch v-model:value="params.svg_enable_stroke" />
+                </NFormItem>
+                <template v-if="params.svg_enable_stroke">
+                  <NFormItem>
+                    <template #label>
+                      <NTooltip>
+                        <template #trigger>
+                          <span class="tip-label">{{
+                            t('vectorize.advanced.svgStrokeWidth')
+                          }}</span>
+                        </template>
+                        {{ t('vectorize.advanced.svgStrokeWidthHint') }}
+                      </NTooltip>
+                    </template>
                     <NInputNumber
                       v-model:value="params.svg_stroke_width"
                       :min="0"
                       :max="20"
                       :step="0.1"
                       :precision="1"
-                      :disabled="loading || !params.svg_enable_stroke"
-                      size="small"
                       style="width: 100%"
                     />
-                    <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      {{ t('vectorize.advanced.svgStrokeWidthHint') }}
-                    </NText>
-                  </div>
-                </NSpace>
-              </NCollapseItem>
-            </NCollapse>
+                  </NFormItem>
+                  <NFormItem>
+                    <template #label>
+                      <NTooltip>
+                        <template #trigger>
+                          <span class="tip-label">{{
+                            t('vectorize.advanced.thinLineRadius')
+                          }}</span>
+                        </template>
+                        {{ t('vectorize.advanced.thinLineRadiusHint') }}
+                      </NTooltip>
+                    </template>
+                    <NInputNumber
+                      v-model:value="params.thin_line_max_radius"
+                      :min="0.5"
+                      :max="10"
+                      :step="0.1"
+                      :precision="1"
+                      style="width: 100%"
+                    />
+                  </NFormItem>
+                </template>
+                <NFormItem>
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{
+                          t('vectorize.settings.enableCoverageFix')
+                        }}</span>
+                      </template>
+                      {{ t('vectorize.settings.enableCoverageFixHint') }}
+                    </NTooltip>
+                  </template>
+                  <NSwitch v-model:value="params.enable_coverage_fix" />
+                </NFormItem>
+                <NFormItem v-if="params.enable_coverage_fix">
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{
+                          t('vectorize.advanced.minCoverageRatio')
+                        }}</span>
+                      </template>
+                      {{ t('vectorize.advanced.minCoverageRatioHint') }}
+                    </NTooltip>
+                  </template>
+                  <NInputNumber
+                    v-model:value="params.min_coverage_ratio"
+                    :min="0"
+                    :max="1"
+                    :step="0.001"
+                    :precision="3"
+                    style="width: 100%"
+                  />
+                </NFormItem>
+              </NForm>
+
+              <!-- Advanced Parameters -->
+              <NCollapse>
+                <NCollapseItem :title="t('vectorize.advanced.title')" name="advanced">
+                  <NCollapse>
+                    <NCollapseItem
+                      :title="t('vectorize.advanced.preprocessing')"
+                      name="preprocessing"
+                    >
+                      <NForm
+                        label-placement="left"
+                        :label-width="140"
+                        :disabled="loading"
+                        size="small"
+                      >
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.smoothingSpatial')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.smoothingSpatialHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.smoothing_spatial"
+                            :min="0"
+                            :max="50"
+                            :step="0.5"
+                            :precision="1"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.smoothingColor')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.smoothingColorHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.smoothing_color"
+                            :min="0"
+                            :max="80"
+                            :step="0.5"
+                            :precision="1"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.maxWorkingPixels')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.maxWorkingPixelsHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.max_working_pixels"
+                            :min="0"
+                            :max="100000000"
+                            :step="100000"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                      </NForm>
+                    </NCollapseItem>
+
+                    <NCollapseItem
+                      :title="t('vectorize.advanced.segmentation')"
+                      name="segmentation"
+                    >
+                      <NForm
+                        label-placement="left"
+                        :label-width="140"
+                        :disabled="loading"
+                        size="small"
+                      >
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.slicRegionSize')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.slicRegionSizeHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.slic_region_size"
+                            :min="0"
+                            :max="100"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.edgeSensitivity')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.edgeSensitivityHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.edge_sensitivity"
+                            :min="0"
+                            :max="1"
+                            :step="0.05"
+                            :precision="2"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.refinePasses')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.refinePassesHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.refine_passes"
+                            :min="0"
+                            :max="20"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                      </NForm>
+                    </NCollapseItem>
+
+                    <NCollapseItem :title="t('vectorize.advanced.filtering')" name="filtering">
+                      <NForm
+                        label-placement="left"
+                        :label-width="140"
+                        :disabled="loading"
+                        size="small"
+                      >
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.mergeColorDist')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.mergeColorDistHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.max_merge_color_dist"
+                            :min="0"
+                            :max="2000"
+                            :step="10"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.minRegionArea')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.minRegionAreaHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.min_region_area"
+                            :min="0"
+                            :max="1000000"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.minContourArea')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.minContourAreaHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.min_contour_area"
+                            :min="0"
+                            :max="1000000"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.minHoleArea')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.minHoleAreaHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.min_hole_area"
+                            :min="0"
+                            :max="100000"
+                            :step="0.5"
+                            :precision="1"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                      </NForm>
+                    </NCollapseItem>
+                  </NCollapse>
+                </NCollapseItem>
+              </NCollapse>
+            </div>
+
             <NButton
               type="primary"
               block
@@ -710,6 +778,17 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.settings-scroll {
+  max-height: min(520px, 60vh);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tip-label {
+  cursor: help;
+  border-bottom: 1px dashed var(--n-text-color-3);
+}
+
 .upload-preview {
   text-align: center;
 }
