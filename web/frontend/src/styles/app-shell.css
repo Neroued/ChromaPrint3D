@@ -111,7 +111,9 @@
   border-right: 1px solid var(--app-tab-group-border);
   border-radius: 0;
   background: transparent;
-  transition: background-color 0.16s ease, color 0.16s ease;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
 
 .nested-tabs .n-tabs-tab {

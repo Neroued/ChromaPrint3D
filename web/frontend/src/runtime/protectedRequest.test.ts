@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  fetchBlobWithSession,
-  fetchTextWithSession,
-  fetchWithSession,
-} from './protectedRequest'
+import { fetchBlobWithSession, fetchTextWithSession, fetchWithSession } from './protectedRequest'
 import { getSessionHeaderName, mergeSessionHeader, setSessionToken } from './session'
 
 describe('runtime protectedRequest', () => {

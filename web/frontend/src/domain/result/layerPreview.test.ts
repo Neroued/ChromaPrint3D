@@ -7,9 +7,7 @@ import {
   getTopLayerPosition,
 } from './layerPreview'
 
-function makeSummary(
-  patch: Partial<LayerPreviewsSummary> = {},
-): LayerPreviewsSummary {
+function makeSummary(patch: Partial<LayerPreviewsSummary> = {}): LayerPreviewsSummary {
   return {
     enabled: true,
     layers: 4,

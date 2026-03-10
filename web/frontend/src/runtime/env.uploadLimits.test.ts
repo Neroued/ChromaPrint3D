@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electronRuntime = vi.hoisted(() => ({
-  api: undefined as { env?: { uploadMaxMb?: number | string; uploadMaxPixels?: number | string } } | undefined,
+  api: undefined as
+    | { env?: { uploadMaxMb?: number | string; uploadMaxPixels?: number | string } }
+    | undefined,
 }))
 
 vi.mock('./platform', () => ({

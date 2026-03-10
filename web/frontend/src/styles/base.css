@@ -118,24 +118,28 @@ body::after {
 }
 
 body::before {
-  background-image: radial-gradient(circle at 50% 50%, rgba(11, 127, 207, 0.08) 0%, transparent 50%),
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(11, 127, 207, 0.08) 0%, transparent 50%),
     radial-gradient(circle at 80% 20%, rgba(44, 143, 214, 0.08) 0%, transparent 40%);
   animation: bg-move-1 25s ease-in-out infinite alternate;
 }
 
 body::after {
-  background-image: radial-gradient(circle at 20% 80%, rgba(44, 154, 99, 0.05) 0%, transparent 40%),
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(44, 154, 99, 0.05) 0%, transparent 40%),
     radial-gradient(circle at 80% 80%, rgba(197, 138, 24, 0.05) 0%, transparent 50%);
   animation: bg-move-2 30s ease-in-out infinite alternate;
 }
 
 :root[data-theme='dark'] body::before {
-  background-image: radial-gradient(circle at 50% 50%, rgba(58, 166, 242, 0.06) 0%, transparent 50%),
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(58, 166, 242, 0.06) 0%, transparent 50%),
     radial-gradient(circle at 80% 20%, rgba(86, 180, 244, 0.06) 0%, transparent 40%);
 }
 
 :root[data-theme='dark'] body::after {
-  background-image: radial-gradient(circle at 20% 80%, rgba(67, 185, 128, 0.04) 0%, transparent 40%),
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(67, 185, 128, 0.04) 0%, transparent 40%),
     radial-gradient(circle at 80% 80%, rgba(224, 166, 58, 0.04) 0%, transparent 50%);
 }
 

@@ -133,13 +133,7 @@ export function normalizeVectorizeParams(
       false,
       2,
     ),
-    refine_passes: normalizeNumber(
-      params.refine_passes,
-      defaults.refine_passes ?? 6,
-      0,
-      20,
-      true,
-    ),
+    refine_passes: normalizeNumber(params.refine_passes, defaults.refine_passes ?? 6, 0, 20, true),
     max_merge_color_dist: normalizeNumber(
       params.max_merge_color_dist,
       defaults.max_merge_color_dist ?? 150,
@@ -169,7 +163,14 @@ export function normalizeVectorizeParams(
       0,
       1000000,
     ),
-    min_hole_area: normalizeNumber(params.min_hole_area, defaults.min_hole_area ?? 4, 0, 1000000, false, 1),
+    min_hole_area: normalizeNumber(
+      params.min_hole_area,
+      defaults.min_hole_area ?? 4,
+      0,
+      1000000,
+      false,
+      1,
+    ),
     contour_simplify: normalizeNumber(
       params.contour_simplify,
       defaults.contour_simplify ?? 0.45,
@@ -190,7 +191,10 @@ export function normalizeVectorizeParams(
       false,
       3,
     ),
-    svg_enable_stroke: normalizeBoolean(params.svg_enable_stroke, defaults.svg_enable_stroke ?? true),
+    svg_enable_stroke: normalizeBoolean(
+      params.svg_enable_stroke,
+      defaults.svg_enable_stroke ?? true,
+    ),
     svg_stroke_width: normalizeNumber(
       params.svg_stroke_width,
       defaults.svg_stroke_width ?? 0.5,

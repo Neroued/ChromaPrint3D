@@ -1,4 +1,9 @@
-import type { ColorDBInfo, Generate8ColorBoardRequest, GenerateBoardRequest, GenerateBoardResponse } from '../types'
+import type {
+  ColorDBInfo,
+  Generate8ColorBoardRequest,
+  GenerateBoardRequest,
+  GenerateBoardResponse,
+} from '../types'
 import { request } from './base'
 
 export async function generateBoard(payload: GenerateBoardRequest): Promise<GenerateBoardResponse> {

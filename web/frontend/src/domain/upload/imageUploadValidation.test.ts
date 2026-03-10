@@ -10,14 +10,9 @@ vi.mock('../../runtime/env', () => ({
   getUploadMaxPixels: () => runtimeLimits.maxPixels,
 }))
 
-import {
-  validateImageUploadFile,
-  type UploadValidationResult,
-} from './imageUploadValidation'
+import { validateImageUploadFile, type UploadValidationResult } from './imageUploadValidation'
 
-type MockImageBehavior =
-  | { kind: 'load'; width: number; height: number }
-  | { kind: 'error' }
+type MockImageBehavior = { kind: 'load'; width: number; height: number } | { kind: 'error' }
 
 class MockImage {
   onload: (() => void) | null = null

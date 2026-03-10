@@ -44,7 +44,9 @@ describe('api session token lifecycle', () => {
     const headerName = getSessionHeaderName()
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(buildOkResponse({ status: 'ok', version: 'test' }, { [headerName]: 'session-B' }))
+      .mockResolvedValue(
+        buildOkResponse({ status: 'ok', version: 'test' }, { [headerName]: 'session-B' }),
+      )
     vi.stubGlobal('fetch', fetchMock)
 
     await fetchHealth()
