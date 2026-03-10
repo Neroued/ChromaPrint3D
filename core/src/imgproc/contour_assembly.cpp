@@ -317,15 +317,19 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             std::vector<Vec2f> points;
             double signed_area;
             double abs_area;
+            double original_signed_area;
         };
 
         std::vector<ClassifiedLoop> classified;
         for (auto& lp : loops) {
             double sa = PolylineSignedArea(lp);
-            classified.push_back({std::move(lp), sa, std::abs(sa)});
+            classified.push_back({std::move(lp), sa, std::abs(sa), sa});
         }
 
-        // Ensure outer contours are CCW (positive area), holes are CW (negative)
+        // Make all contours CCW (positive area) for consistent Bezier fitting,
+        // but preserve original winding direction as the ground truth for outer vs hole.
+        // In the BoundaryGraph convention (label on left), the original signed area
+        // determines the role: negative = outer contour, positive = hole.
         for (auto& cl : classified) {
             if (cl.signed_area < 0) {
                 std::reverse(cl.points.begin(), cl.points.end());
@@ -333,13 +337,12 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             }
         }
 
-        // Sort by area descending — largest is likely the main outer contour
+        // Sort by area descending
         std::sort(classified.begin(), classified.end(),
                   [](const auto& a, const auto& b) { return a.abs_area > b.abs_area; });
 
-        // Build hierarchy: for each contour, determine if it's inside another.
-        // If a contour is inside an outer, it's a hole of that outer.
-        // Use point-in-polygon test on the centroid.
+        // Classify outer vs hole using original winding direction, then use
+        // centroid-based PointInPolygon only to assign each hole to its parent outer.
         struct ContourInfo {
             int parent   = -1;
             bool is_hole = false;
@@ -347,19 +350,21 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
 
         std::vector<ContourInfo> info(classified.size());
 
-        for (int i = 1; i < static_cast<int>(classified.size()); ++i) {
+        for (int i = 0; i < static_cast<int>(classified.size()); ++i) {
+            bool is_hole_by_winding = classified[i].original_signed_area > 0;
+            if (!is_hole_by_winding) continue;
+
+            info[i].is_hole = true;
+
             Vec2f centroid{0, 0};
             for (const auto& p : classified[i].points) { centroid = centroid + p; }
             centroid = centroid * (1.0f / static_cast<float>(classified[i].points.size()));
 
-            for (int j = i - 1; j >= 0; --j) {
-                if (info[j].is_hole) continue;
+            for (int j = 0; j < static_cast<int>(classified.size()); ++j) {
+                if (j == i || info[j].is_hole) continue;
                 if (PointInPolygon(centroid, classified[j].points)) {
-                    if (!info[j].is_hole) {
-                        info[i].parent  = j;
-                        info[i].is_hole = true;
-                        break;
-                    }
+                    info[i].parent = j;
+                    break;
                 }
             }
         }
