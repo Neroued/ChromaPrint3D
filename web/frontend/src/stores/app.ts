@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { fetchHealth } from '../api/health'
 import { getStorageItem, setStorageItem } from '../runtime/storage'
 import { detectSystemDarkMode } from '../runtime/theme'
+import type { WritableComputedRef } from 'vue'
 import i18n from '../locales'
 import { LOCALE_STORAGE_KEY, type SupportedLocale } from '../locales'
 import type { ConvertAnyParams, ImageDimensions, InputType, TaskStatus } from '../types'
@@ -91,15 +92,17 @@ export const useAppStore = defineStore('app', () => {
     await setStorageItem(THEME_STORAGE_KEY, dark ? 'dark' : 'light')
   }
 
+  const localeRef = i18n.global.locale as unknown as WritableComputedRef<SupportedLocale>
+
   async function initLocale() {
     const stored = await getStorageItem(LOCALE_STORAGE_KEY)
     if (stored === 'zh-CN' || stored === 'en') {
-      i18n.global.locale.value = stored as SupportedLocale
+      localeRef.value = stored
     }
   }
 
   async function setLocale(loc: SupportedLocale) {
-    i18n.global.locale.value = loc
+    localeRef.value = loc
     await setStorageItem(LOCALE_STORAGE_KEY, loc)
   }
 
