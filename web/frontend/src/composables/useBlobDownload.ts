@@ -1,4 +1,5 @@
 import { downloadFromUrl, downloadObjectUrl } from '../runtime/download'
+import i18n from '../locales'
 
 function toMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message
@@ -10,7 +11,7 @@ export function useBlobDownload(onError?: (message: string) => void) {
     try {
       await downloadFromUrl(url, filename)
     } catch (err) {
-      onError?.(toMessage(err, '下载失败，请重试'))
+      onError?.(toMessage(err, i18n.global.t('common.downloadFailed')))
       throw err
     }
   }
@@ -19,7 +20,7 @@ export function useBlobDownload(onError?: (message: string) => void) {
     try {
       await downloadObjectUrl(url, filename)
     } catch (err) {
-      onError?.(toMessage(err, '下载失败，请重试'))
+      onError?.(toMessage(err, i18n.global.t('common.downloadFailed')))
       throw err
     }
   }

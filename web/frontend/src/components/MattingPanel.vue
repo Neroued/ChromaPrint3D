@@ -20,6 +20,7 @@ import {
   NProgress,
 } from 'naive-ui'
 import type { SelectOption, UploadFileInfo } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useAsyncTask } from '../composables/useAsyncTask'
 import { usePanZoomLinkage } from '../composables/usePanZoomLinkage'
 import { usePanZoomGroups } from '../composables/usePanZoomGroups'
@@ -45,6 +46,8 @@ import {
   postprocessMatting,
   submitMatting,
 } from '../services/mattingService'
+
+const { t } = useI18n()
 
 // ── File state ───────────────────────────────────────────────────────────
 
@@ -89,11 +92,11 @@ const outlineColor = ref('#FFFFFF')
 const outlineMode = ref<OutlineMode>('center')
 const formatThresholdTooltip = (value: number) => formatFloat(value, 2)
 
-const outlineModeOptions: SelectOption[] = [
-  { label: '居中描边', value: 'center' },
-  { label: '内描边', value: 'inner' },
-  { label: '外描边', value: 'outer' },
-]
+const outlineModeOptions = computed<SelectOption[]>(() => [
+  { label: t('matting.strokeCenter'), value: 'center' },
+  { label: t('matting.strokeInner'), value: 'inner' },
+  { label: t('matting.strokeOuter'), value: 'outer' },
+])
 
 const postprocessing = ref(false)
 const processedFgBlobUrl = ref<string | null>(null)
@@ -162,9 +165,13 @@ const outlineEffectiveWidthPreview = computed(() => {
 })
 const outlineAdaptiveHint = computed(() => {
   if (outlinePreviewShortSide.value <= 0) {
-    return '会按图像短边自动放大，超大图可保持可见描边。'
+    return t('matting.adaptiveHint')
   }
-  return `当前短边 ${outlinePreviewShortSide.value}px，预估实际线宽约 ${outlineEffectiveWidthPreview.value}px（基准 ${outlineWidth.value}px）`
+  return t('matting.adaptiveDetail', {
+    shortSide: outlinePreviewShortSide.value,
+    effectiveWidth: outlineEffectiveWidthPreview.value,
+    base: outlineWidth.value,
+  })
 })
 
 // ── Canvas threshold preview ─────────────────────────────────────────────
@@ -370,7 +377,7 @@ async function fetchForegroundBlob(id: string) {
     foregroundBlobUrl.value = createUrl(blob)
   } catch (e: unknown) {
     if (taskId.value !== id) return
-    error.value = e instanceof Error ? e.message : '获取结果失败'
+    error.value = e instanceof Error ? e.message : t('matting.fetchFailed')
   }
 }
 
@@ -468,7 +475,7 @@ async function runPostprocess() {
     }
   } catch (e: unknown) {
     if (taskId.value !== id) return
-    error.value = e instanceof Error ? e.message : '后处理失败'
+    error.value = e instanceof Error ? e.message : t('matting.postprocessFailed')
   } finally {
     postprocessing.value = false
   }
@@ -615,7 +622,7 @@ async function downloadBlob(url: string, filename: string) {
   try {
     await downloadByUrl(url, filename)
   } catch (downloadError: unknown) {
-    error.value = toErrorMessage(downloadError, '下载失败，请重试')
+    error.value = toErrorMessage(downloadError, t('matting.downloadFailed'))
   }
 }
 
@@ -657,15 +664,15 @@ function handleUseForegroundForConvert() {
 // ── Computed helpers ─────────────────────────────────────────────────────
 
 const timingText = computed(() => {
-  const t = taskStatus.value?.timing
-  if (!t) return null
+  const timing = taskStatus.value?.timing
+  if (!timing) return null
   const parts: string[] = []
-  if (t.decode_ms > 0) parts.push(`解码 ${t.decode_ms.toFixed(0)}ms`)
-  if (t.preprocess_ms > 0) parts.push(`预处理 ${t.preprocess_ms.toFixed(0)}ms`)
-  if (t.inference_ms > 0) parts.push(`推理 ${t.inference_ms.toFixed(0)}ms`)
-  if (t.postprocess_ms > 0) parts.push(`后处理 ${t.postprocess_ms.toFixed(0)}ms`)
-  if (t.encode_ms > 0) parts.push(`编码 ${t.encode_ms.toFixed(0)}ms`)
-  parts.push(`总计 ${t.pipeline_ms.toFixed(0)}ms`)
+  if (timing.decode_ms > 0) parts.push(t('matting.timing.decode', { ms: timing.decode_ms.toFixed(0) }))
+  if (timing.preprocess_ms > 0) parts.push(t('matting.timing.preprocess', { ms: timing.preprocess_ms.toFixed(0) }))
+  if (timing.inference_ms > 0) parts.push(t('matting.timing.inference', { ms: timing.inference_ms.toFixed(0) }))
+  if (timing.postprocess_ms > 0) parts.push(t('matting.timing.postprocess', { ms: timing.postprocess_ms.toFixed(0) }))
+  if (timing.encode_ms > 0) parts.push(t('matting.timing.encode', { ms: timing.encode_ms.toFixed(0) }))
+  parts.push(t('matting.timing.total', { ms: timing.pipeline_ms.toFixed(0) }))
   return parts.join(' | ')
 })
 
@@ -681,26 +688,26 @@ onMounted(async () => {
       selectedMethod.value = first.key
     }
   } catch {
-    error.value = '无法获取抠图方法列表'
+    error.value = t('matting.fetchMethodsFailed')
   }
 })
 </script>
 
 <template>
   <NSpace vertical :size="16">
-    <NCard v-if="showModelCard" title="抠图模型下载（Electron）" size="small">
+    <NCard v-if="showModelCard" :title="t('matting.model.title')" size="small">
       <NSpace vertical :size="8">
         <NText depth="3" style="font-size: 12px">
-          已安装 {{ modelStatus?.installedModels ?? 0 }} / {{ modelStatus?.totalModels ?? 0 }} 个模型
+          {{ t('matting.model.installedCount', { installed: modelStatus?.installedModels ?? 0, total: modelStatus?.totalModels ?? 0 }) }}
           <template v-if="pendingModelCount > 0">
-            （待处理 {{ pendingModelCount }} 个，缺失 {{ modelStatus?.missingModels ?? 0 }} 个）
+            {{ t('matting.model.pendingCount', { pending: pendingModelCount, missing: modelStatus?.missingModels ?? 0 }) }}
           </template>
         </NText>
         <NText v-if="modelConnectivitySummary" depth="3" style="font-size: 12px">
           {{ modelConnectivitySummary }}
         </NText>
         <NText v-if="modelConnectivity?.checkedAtMs" depth="3" style="font-size: 11px">
-          最近检测：{{ formatConnectivityCheckedAt(modelConnectivity.checkedAtMs) }}
+          {{ t('matting.model.lastCheck', { time: formatConnectivityCheckedAt(modelConnectivity.checkedAtMs) }) }}
         </NText>
         <div v-if="modelConnectivity" class="model-connectivity-list">
           <NText
@@ -709,17 +716,15 @@ onMounted(async () => {
             depth="3"
             style="font-size: 11px; display: block"
           >
-            [{{ source.ok ? '可用' : '不可用' }}] {{ source.name }} ({{ source.reachableModels }}/{{
+            [{{ source.ok ? t('matting.model.available') : t('matting.model.unavailable') }}] {{ source.name }} ({{ source.reachableModels }}/{{
               source.checkedModels
             }}) | {{ source.responseTimeMs }}ms | {{ source.message }}
           </NText>
         </div>
         <NText depth="3" style="font-size: 12px">
-          需下载：{{ formatBytes(effectiveDownloadTotalBytes) }} | 已下载：{{
-            formatBytes(downloadedSessionBytes)
-          }}
+          {{ t('matting.model.needDownload', { need: formatBytes(effectiveDownloadTotalBytes), done: formatBytes(downloadedSessionBytes) }) }}
           <template v-if="currentDownloadSpeedBytesPerSec">
-            | 网速：{{ formatSpeed(currentDownloadSpeedBytesPerSec) }}
+            | {{ t('matting.model.speed', { speed: formatSpeed(currentDownloadSpeedBytesPerSec) }) }}
           </template>
         </NText>
         <NProgress
@@ -732,7 +737,7 @@ onMounted(async () => {
           {{ modelProgress.message }}
         </NText>
         <NAlert v-if="showRestartHint" type="warning" :bordered="false">
-          模型已下载完成，请重启应用后再使用深度学习抠图模型。
+          {{ t('matting.model.restartHint') }}
         </NAlert>
         <NAlert v-if="modelError" type="error" closable @close="modelError = null">
           {{ modelError }}
@@ -746,7 +751,7 @@ onMounted(async () => {
             "
             @click="handleStartModelDownload"
           >
-            下载模型
+            {{ t('matting.model.downloadBtn') }}
           </NButton>
           <NButton
             secondary
@@ -754,7 +759,7 @@ onMounted(async () => {
             :disabled="modelRunning || modelActionLoading || modelStatusLoading"
             @click="checkModelConnectivity(true)"
           >
-            下载前检查
+            {{ t('matting.model.preCheck') }}
           </NButton>
           <NButton
             v-if="modelRunning"
@@ -763,22 +768,22 @@ onMounted(async () => {
             :disabled="!modelRunning"
             @click="handleCancelModelDownload"
           >
-            取消下载
+            {{ t('matting.model.cancelDownload') }}
           </NButton>
-          <NButton v-if="showRestartHint" type="success" @click="handleRestartApp"> 立即重启 </NButton>
+          <NButton v-if="showRestartHint" type="success" @click="handleRestartApp"> {{ t('matting.model.restartNow') }} </NButton>
           <NButton quaternary :disabled="modelStatusLoading || modelRunning" @click="refreshModelStatus">
-            刷新状态
+            {{ t('matting.model.refreshStatus') }}
           </NButton>
         </NSpace>
         <NText depth="3" style="font-size: 11px">
-          模型文件会下载到当前用户数据目录，不随安装包分发。
+          {{ t('matting.model.storageTip') }}
         </NText>
       </NSpace>
     </NCard>
 
     <NGrid :cols="2" :x-gap="16" responsive="screen" item-responsive>
       <NGridItem span="2 m:1">
-        <NCard title="图片上传" size="small">
+        <NCard :title="t('matting.upload.title')" size="small">
           <NUpload
             v-if="!file"
             :accept="rasterImageAccept"
@@ -795,12 +800,12 @@ onMounted(async () => {
           >
             <NUploadDragger>
               <NSpace vertical align="center" justify="center" style="padding: 32px 16px">
-                <NText depth="3" style="font-size: 14px"> 点击或拖拽图片到此处上传 </NText>
+                <NText depth="3" style="font-size: 14px"> {{ t('matting.upload.dropHint') }} </NText>
                 <NText depth="3" style="font-size: 12px">
-                  支持 {{ rasterImageFormatsText }} 格式
+                  {{ t('matting.upload.formatHint', { formats: rasterImageFormatsText }) }}
                 </NText>
                 <NText depth="3" style="font-size: 11px">
-                  文件最大 {{ backendMaxUploadMb }}MB，位图最大 {{ maxPixelText }} 像素
+                  {{ t('matting.upload.sizeHint', { maxMb: backendMaxUploadMb, maxPixels: maxPixelText }) }}
                 </NText>
               </NSpace>
             </NUploadDragger>
@@ -808,7 +813,7 @@ onMounted(async () => {
           <div v-else class="upload-preview">
             <div class="upload-preview-header">
               <NText depth="3" style="font-size: 12px">{{ imageInfo }}</NText>
-              <NButton size="tiny" quaternary type="error" @click="clearFile"> 移除图片 </NButton>
+              <NButton size="tiny" quaternary type="error" @click="clearFile"> {{ t('matting.upload.removeImage') }} </NButton>
             </div>
             <ZoomableImageViewport
               :src="originalUrl ?? undefined"
@@ -821,16 +826,16 @@ onMounted(async () => {
       </NGridItem>
 
       <NGridItem span="2 m:1">
-        <NCard title="抠图设置" size="small">
+        <NCard :title="t('matting.settings.title')" size="small">
           <NSpace vertical :size="12">
             <div>
               <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                抠图方法
+                {{ t('matting.settings.method') }}
               </NText>
               <NSelect
                 v-model:value="selectedMethod"
                 :options="methodOptions"
-                placeholder="选择抠图方法"
+                :placeholder="t('matting.settings.methodPlaceholder')"
                 :disabled="loading"
               />
               <NText
@@ -844,13 +849,13 @@ onMounted(async () => {
             <div>
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
                 <NSwitch v-model:value="reframeEnabled" size="small" :disabled="loading" />
-                <NText depth="3" style="font-size: 12px"> 抠图后重构画布（裁剪空白并留边） </NText>
+                <NText depth="3" style="font-size: 12px"> {{ t('matting.settings.reframe') }} </NText>
               </div>
               <NText depth="3" style="font-size: 11px; display: block">
-                该设置会在抠图完成后自动应用，减少空白区域并为边缘后处理预留空间。
+                {{ t('matting.settings.reframeHint') }}
               </NText>
               <div v-if="reframeEnabled" class="slider-input-row" style="margin-top: 8px">
-                <NText depth="3" style="font-size: 12px; white-space: nowrap"> 外边缘留白(px) </NText>
+                <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.settings.padding') }} </NText>
                 <NSlider
                   v-model:value="reframePaddingPx"
                   :min="0"
@@ -877,7 +882,7 @@ onMounted(async () => {
               :disabled="!canExecute"
               @click="handleMatting"
             >
-              {{ loading ? '处理中...' : '开始抠图' }}
+              {{ loading ? t('matting.actions.processing') : t('matting.actions.startMatting') }}
             </NButton>
             <NButtonGroup v-if="isCompleted && currentForegroundUrl" style="width: 100%">
               <NButton
@@ -885,14 +890,14 @@ onMounted(async () => {
                 :disabled="postprocessPending"
                 @click="handleDownloadMask"
               >
-                下载 Mask
+                {{ t('matting.actions.downloadMask') }}
               </NButton>
               <NButton
                 style="flex: 1"
                 :disabled="postprocessPending"
                 @click="handleDownloadForeground"
               >
-                下载前景
+                {{ t('matting.actions.downloadForeground') }}
               </NButton>
             </NButtonGroup>
             <NButton
@@ -902,7 +907,7 @@ onMounted(async () => {
               :disabled="postprocessPending"
               @click="handleUseForegroundForConvert"
             >
-              使用前景结果进行叠色模型生成
+              {{ t('matting.actions.useForeground') }}
             </NButton>
           </NSpace>
         </NCard>
@@ -910,17 +915,17 @@ onMounted(async () => {
     </NGrid>
 
     <!-- Postprocess controls -->
-    <NCard v-if="isCompleted" title="后处理参数" size="small">
+    <NCard v-if="isCompleted" :title="t('matting.postprocess.title')" size="small">
       <template #header-extra>
         <NSpace :size="8" align="center">
-          <NButton size="tiny" quaternary @click="handleResetPostprocessParams"> 重置 </NButton>
+          <NButton size="tiny" quaternary @click="handleResetPostprocessParams"> {{ t('common.reset') }} </NButton>
           <NSpin v-if="postprocessing" :size="16" />
         </NSpace>
       </template>
       <NSpace vertical :size="12">
         <div v-if="hasAlpha">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            阈值
+            {{ t('matting.postprocess.threshold') }}
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -945,8 +950,8 @@ onMounted(async () => {
         </div>
         <div>
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            闭运算核大小
-            <NText depth="3" style="font-size: 11px">（0 = 不执行，用于连接分离区域）</NText>
+            {{ t('matting.postprocess.morphCloseSize') }}
+            <NText depth="3" style="font-size: 11px">（{{ t('matting.postprocess.morphCloseSizeHint') }}）</NText>
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -968,8 +973,8 @@ onMounted(async () => {
         </div>
         <div v-if="morphCloseSize > 0">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            闭运算迭代次数
-            <NText depth="3" style="font-size: 11px">（多次小核迭代比单次大核更平滑）</NText>
+            {{ t('matting.postprocess.morphCloseIterations') }}
+            <NText depth="3" style="font-size: 11px">（{{ t('matting.postprocess.morphCloseIterationsHint') }}）</NText>
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -991,8 +996,8 @@ onMounted(async () => {
         </div>
         <div>
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            过滤孤立区域
-            <NText depth="3" style="font-size: 11px">（0 = 不过滤，移除面积小于该值的区域）</NText>
+            {{ t('matting.postprocess.minRegionArea') }}
+            <NText depth="3" style="font-size: 11px">（{{ t('matting.postprocess.minRegionAreaHint') }}）</NText>
           </NText>
           <div class="slider-input-row">
             <NSlider
@@ -1015,11 +1020,11 @@ onMounted(async () => {
         <div>
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
             <NSwitch v-model:value="outlineEnabled" size="small" />
-            <NText depth="3" style="font-size: 12px"> 描边 </NText>
+            <NText depth="3" style="font-size: 12px"> {{ t('matting.postprocess.outline') }} </NText>
           </div>
           <template v-if="outlineEnabled">
             <div class="slider-input-row" style="margin-bottom: 8px">
-              <NText depth="3" style="font-size: 12px; white-space: nowrap"> 模式 </NText>
+              <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.postprocess.outlineMode') }} </NText>
               <NSelect
                 v-model:value="outlineMode"
                 :options="outlineModeOptions"
@@ -1028,7 +1033,7 @@ onMounted(async () => {
               />
             </div>
             <div class="slider-input-row">
-              <NText depth="3" style="font-size: 12px; white-space: nowrap"> 基准线宽 </NText>
+              <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.postprocess.outlineWidth') }} </NText>
               <NSlider
                 v-model:value="outlineWidth"
                 :min="1"
@@ -1049,7 +1054,7 @@ onMounted(async () => {
               {{ outlineAdaptiveHint }}
             </NText>
             <div class="slider-input-row">
-              <NText depth="3" style="font-size: 12px; white-space: nowrap"> 颜色 </NText>
+              <NText depth="3" style="font-size: 12px; white-space: nowrap"> {{ t('matting.postprocess.outlineColor') }} </NText>
               <NColorPicker
                 v-model:value="outlineColor"
                 :modes="['hex']"
@@ -1061,7 +1066,7 @@ onMounted(async () => {
                 v-if="hasEyeDropper"
                 size="small"
                 quaternary
-                title="从屏幕取色"
+                :title="t('matting.postprocess.eyeDropper')"
                 @click="pickColorFromScreen"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
@@ -1079,17 +1084,17 @@ onMounted(async () => {
     <div v-if="loading" style="text-align: center; padding: 40px 0">
       <NSpin size="large" />
       <NText depth="3" style="display: block; margin-top: 12px">
-        {{ taskStatus?.status === 'pending' ? '排队等待中...' : '正在进行抠图处理...' }}
+        {{ taskStatus?.status === 'pending' ? t('matting.status.queuing') : t('matting.status.running') }}
       </NText>
     </div>
 
-    <NCard v-if="isCompleted && currentForegroundUrl" title="抠图结果" size="small">
+    <NCard v-if="isCompleted && currentForegroundUrl" :title="t('matting.result.title')" size="small">
       <template #header-extra>
         <NSpace :size="8" align="center">
           <NText depth="3" style="font-size: 12px">
-            抠图后 {{ renderedForegroundSizeText }} | {{ taskStatus!.method }}
+            {{ t('matting.result.afterMatting', { size: renderedForegroundSizeText, method: taskStatus!.method }) }}
           </NText>
-          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll"> 重置视图 </NButton>
+          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll"> {{ t('matting.result.resetView') }} </NButton>
         </NSpace>
       </template>
       <NText
@@ -1100,20 +1105,20 @@ onMounted(async () => {
         {{ timingText }}
       </NText>
       <NText depth="3" style="font-size: 11px; display: block; margin-bottom: 8px">
-        滚轮缩放，拖拽移动，可观察抠图细节
+        {{ t('matting.result.zoomHint') }}
       </NText>
       <div class="preview-row">
         <div class="preview-col">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
             <NText depth="3" style="font-size: 12px">
-              {{ leftViewMode === 'alpha' ? 'Alpha' : '原图' }}
+              {{ leftViewMode === 'alpha' ? 'Alpha' : t('matting.result.original') }}
             </NText>
             <NButtonGroup v-if="hasAlpha" size="tiny">
               <NButton
                 :type="leftViewMode === 'original' ? 'primary' : 'default'"
                 @click="leftViewMode = 'original'"
               >
-                原图
+                {{ t('matting.result.original') }}
               </NButton>
               <NButton
                 :type="leftViewMode === 'alpha' ? 'primary' : 'default'"
@@ -1132,7 +1137,7 @@ onMounted(async () => {
         </div>
         <div class="preview-col">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            {{ processedFgBlobUrl ? '后处理结果' : thresholdPreviewUrl ? '阈值预览' : '抠图结果' }}
+            {{ processedFgBlobUrl ? t('matting.result.postprocessed') : thresholdPreviewUrl ? t('matting.result.thresholdPreview') : t('matting.result.mattingResult') }}
           </NText>
           <ZoomableImageViewport
             :src="currentForegroundUrl ?? undefined"

@@ -20,7 +20,7 @@ export function useRasterToolUpload(options: UseRasterToolUploadOptions) {
   const { createUrl, revokeUrl } = useObjectUrlLifecycle()
 
   const backendMaxUploadMb = getUploadMaxMb()
-  const maxPixelText = getUploadMaxPixels().toLocaleString('zh-CN')
+  const maxPixelText = getUploadMaxPixels().toLocaleString()
 
   const imageInfo = computed(() => {
     if (!file.value) return null

@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { UploadFileInfo } from 'naive-ui'
 import { uploadColorDB } from '../api/session'
 import type { ColorDBInfo } from '../types'
@@ -16,6 +17,7 @@ type UseColorDBUploadFlowOptions = {
 }
 
 export function useColorDBUploadFlow(options: UseColorDBUploadFlowOptions = {}) {
+  const { t } = useI18n()
   const fileList = ref<UploadFileInfo[]>([])
   const uploading = ref(false)
   const uploadError = ref<string | null>(null)
@@ -70,8 +72,8 @@ export function useColorDBUploadFlow(options: UseColorDBUploadFlowOptions = {}) 
     if (uploaded.length === 0) {
       uploadError.value =
         files.length === 1
-          ? results[0]?.error ?? '上传失败'
-          : '所有文件上传失败'
+          ? results[0]?.error ?? t('colordb.upload.messages.singleUploadFailed')
+          : t('colordb.upload.messages.allUploadFailed')
     }
 
     if (options.onBatchDone) {

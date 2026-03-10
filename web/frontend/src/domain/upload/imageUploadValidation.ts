@@ -1,5 +1,6 @@
 import type { ImageDimensions, InputType } from '../../types'
 import { getUploadMaxBytes, getUploadMaxPixels } from '../../runtime/env'
+import i18n from '../../locales'
 
 const RASTER_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'tif', 'tiff'])
 const RASTER_MIME_TYPES = new Set([
@@ -68,7 +69,7 @@ export function readRasterImageDimensions(file: File): Promise<ImageDimensions |
 }
 
 function formatLimitPixels(maxPixels: number): string {
-  return maxPixels.toLocaleString('zh-CN')
+  return maxPixels.toLocaleString()
 }
 
 export async function validateImageUploadFile(
@@ -82,12 +83,12 @@ export async function validateImageUploadFile(
   const ext = getFileExtension(file.name)
 
   if (file.size <= 0) {
-    return { ok: false, message: '文件为空，请重新选择。' }
+    return { ok: false, message: i18n.global.t('imageUpload.validation.empty') }
   }
   if (file.size > maxUploadBytes) {
     return {
       ok: false,
-      message: `文件大小超过后端上传限制（${maxUploadMB}MB）。`,
+      message: i18n.global.t('imageUpload.validation.tooLarge', { maxMb: maxUploadMB }),
     }
   }
 
@@ -96,7 +97,7 @@ export async function validateImageUploadFile(
   if (scene === 'raster-tool' && inputType === 'vector') {
     return {
       ok: false,
-      message: `当前页面仅支持位图格式（${RASTER_IMAGE_FORMATS_TEXT}）。`,
+      message: i18n.global.t('imageUpload.validation.rasterOnly', { formats: RASTER_IMAGE_FORMATS_TEXT }),
     }
   }
 
@@ -104,7 +105,7 @@ export async function validateImageUploadFile(
     if (ext !== SVG_EXTENSION && file.type.toLowerCase() !== SVG_MIME_TYPE && file.type !== '') {
       return {
         ok: false,
-        message: 'SVG 文件类型不受支持，请重新导出标准 SVG 后重试。',
+        message: i18n.global.t('imageUpload.validation.svgUnsupported'),
       }
     }
     return { ok: true, inputType, dimensions: null }
@@ -113,7 +114,7 @@ export async function validateImageUploadFile(
   if (!isRasterFile(file, ext)) {
     return {
       ok: false,
-      message: `不支持该图片格式，请使用 ${RASTER_IMAGE_FORMATS_TEXT}。`,
+      message: i18n.global.t('imageUpload.validation.formatUnsupported', { formats: RASTER_IMAGE_FORMATS_TEXT }),
     }
   }
 
@@ -121,7 +122,7 @@ export async function validateImageUploadFile(
   if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
     return {
       ok: false,
-      message: '图片无法解码，请确认文件未损坏且为受支持格式。',
+      message: i18n.global.t('imageUpload.validation.decodeFailed'),
     }
   }
 
@@ -129,7 +130,7 @@ export async function validateImageUploadFile(
   if (pixels > maxPixels) {
     return {
       ok: false,
-      message: `图片像素超过后端上限（${formatLimitPixels(maxPixels)} 像素）。`,
+      message: i18n.global.t('imageUpload.validation.tooManyPixels', { maxPixels: formatLimitPixels(maxPixels) }),
     }
   }
 

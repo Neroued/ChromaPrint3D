@@ -14,9 +14,12 @@ import {
   NUpload,
   useMessage,
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../../composables/useBlobDownload'
 import { useColorDBBuildFlow } from '../../composables/useColorDBBuildFlow'
 import { getSessionColorDBDownloadPath } from '../../services/sessionColorDBService'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -25,9 +28,9 @@ const props = withDefaults(
     buildButtonText?: string
   }>(),
   {
-    title: '构建 ColorDB',
+    title: '',
     tips: '',
-    buildButtonText: '构建 ColorDB',
+    buildButtonText: '',
   },
 )
 
@@ -52,7 +55,7 @@ const {
   handleBuild,
 } = useColorDBBuildFlow({
   onBuilt: (result) => {
-    message.success(`ColorDB "${result.name}" 构建成功，已自动添加到可用数据库`)
+    message.success(t('colordb.build.messages.success', { name: result.name }))
     emit('colordb-updated')
   },
 })
@@ -60,7 +63,7 @@ const {
 async function handleBuildAndNotify() {
   const result = await handleBuild()
   if (!result && buildError.value) {
-    message.error(`构建失败: ${buildError.value}`)
+    message.error(t('colordb.build.messages.failed', { error: buildError.value }))
   }
 }
 
@@ -71,7 +74,7 @@ async function downloadBuiltDB() {
 </script>
 
 <template>
-  <NCard :title="props.title" class="calibration-card">
+  <NCard :title="props.title || t('colordb.build.defaultTitle')" class="calibration-card">
     <NSpace vertical :size="16">
       <NAlert v-if="props.tips" type="info" :bordered="false">
         {{ props.tips }}
@@ -80,7 +83,7 @@ async function downloadBuiltDB() {
       <NGrid :cols="2" :x-gap="16" :y-gap="12" responsive="screen" item-responsive>
         <NGi span="2 m:1">
           <NForm label-placement="top" class="calibration-form-block">
-            <NFormItem label="上传校准板照片">
+            <NFormItem :label="t('colordb.build.uploadPhoto')">
               <NUpload
                 accept="image/*"
                 :max="1"
@@ -88,18 +91,18 @@ async function downloadBuiltDB() {
                 list-type="text"
                 @change="handleImageUpload"
               >
-                <NButton>选择图片</NButton>
+                <NButton>{{ t('colordb.build.selectImage') }}</NButton>
               </NUpload>
             </NFormItem>
             <NText v-if="calibImage" depth="3" class="calibration-file-name">
-              已选择：{{ calibImage.name }}
+              {{ t('colordb.build.selectedFile', { name: calibImage.name }) }}
             </NText>
           </NForm>
         </NGi>
 
         <NGi span="2 m:1">
           <NForm label-placement="top" class="calibration-form-block">
-            <NFormItem label="上传 Meta JSON 文件">
+            <NFormItem :label="t('colordb.build.uploadMeta')">
               <NUpload
                 accept=".json"
                 :max="1"
@@ -107,11 +110,11 @@ async function downloadBuiltDB() {
                 list-type="text"
                 @change="handleMetaUpload"
               >
-                <NButton>选择 JSON</NButton>
+                <NButton>{{ t('colordb.build.selectJson') }}</NButton>
               </NUpload>
             </NFormItem>
             <NText v-if="calibMeta" depth="3" class="calibration-file-name">
-              已选择：{{ calibMeta.name }}
+              {{ t('colordb.build.selectedFile', { name: calibMeta.name }) }}
             </NText>
           </NForm>
         </NGi>
@@ -119,13 +122,13 @@ async function downloadBuiltDB() {
 
       <NForm label-placement="top" class="calibration-form-block">
         <NFormItem
-          label="ColorDB 名称"
+          :label="t('colordb.build.nameLabel')"
           :validation-status="dbNameError ? 'error' : undefined"
-          :feedback="dbNameError || '仅支持字母、数字和下划线'"
+          :feedback="dbNameError || t('colordb.build.nameInvalid')"
         >
           <NInput
             v-model:value="dbName"
-            placeholder="例如：my_printer_profile"
+            :placeholder="t('colordb.build.namePlaceholder')"
             class="calibration-db-input"
           />
         </NFormItem>
@@ -133,24 +136,24 @@ async function downloadBuiltDB() {
 
       <div class="calibration-actions">
         <NButton type="primary" :loading="building" :disabled="!canBuild" @click="handleBuildAndNotify">
-          {{ props.buildButtonText }}
+          {{ props.buildButtonText || t('colordb.build.defaultButtonText') }}
         </NButton>
       </div>
 
       <NSpin :show="building">
-        <NAlert v-if="builtDB" type="success" title="构建成功">
-          <p class="calibration-result-line">名称：{{ builtDB.name }}</p>
-          <p class="calibration-result-line">通道数：{{ builtDB.num_channels }}</p>
-          <p class="calibration-result-line">条目数：{{ builtDB.num_entries }}</p>
+        <NAlert v-if="builtDB" type="success" :title="t('colordb.build.success')">
+          <p class="calibration-result-line">{{ t('colordb.build.successName', { name: builtDB.name }) }}</p>
+          <p class="calibration-result-line">{{ t('colordb.build.successChannels', { channels: builtDB.num_channels }) }}</p>
+          <p class="calibration-result-line">{{ t('colordb.build.successEntries', { entries: builtDB.num_entries }) }}</p>
           <div class="calibration-actions calibration-actions--compact">
-            <NButton size="small" type="info" @click="downloadBuiltDB">下载 ColorDB JSON</NButton>
+            <NButton size="small" type="info" @click="downloadBuiltDB">{{ t('colordb.build.downloadJson') }}</NButton>
           </div>
           <p class="calibration-result-tip">
-            已自动添加到当前会话的可用数据库列表中，可在“叠色模型生成”页面直接使用。
+            {{ t('colordb.build.autoAdded') }}
           </p>
         </NAlert>
 
-        <NAlert v-if="buildError" type="error" title="构建失败" class="calibration-error-alert">
+        <NAlert v-if="buildError" type="error" :title="t('colordb.build.failed')" class="calibration-error-alert">
           {{ buildError }}
         </NAlert>
       </NSpin>

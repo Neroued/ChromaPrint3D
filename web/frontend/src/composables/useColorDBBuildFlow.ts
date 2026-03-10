@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { UploadFileInfo } from 'naive-ui'
 import { buildColorDB } from '../api/calibration'
 import type { ColorDBInfo } from '../types'
@@ -9,6 +10,7 @@ type UseColorDBBuildFlowOptions = {
 }
 
 export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
+  const { t } = useI18n()
   const calibImage = ref<File | null>(null)
   const calibMeta = ref<File | null>(null)
   const dbName = ref('')
@@ -18,8 +20,8 @@ export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
 
   const dbNameError = computed(() => {
     const value = dbName.value.trim()
-    if (!value) return '请输入 ColorDB 名称'
-    if (!isValidColorDBName(value)) return '仅支持字母、数字和下划线'
+    if (!value) return t('colordb.build.nameRequired')
+    if (!isValidColorDBName(value)) return t('colordb.build.nameInvalid')
     return ''
   })
 

@@ -1,0 +1,630 @@
+/**
+ * 中文语言包（基准语言）
+ *
+ * ## 命名空间与组件对应关系
+ *   common      — 全局公共文案（在线/离线、深色、通用按钮等）
+ *   app         — App.vue（顶部 header、tab 名称、footer）
+ *   convert     — ConvertPanel
+ *   param       — ParamPanel 及子组件（ParamSimpleSection / ParamAdvancedSection / ParamModeSwitch）
+ *   calibration — CalibrationPanel / Calibration8ColorPanel
+ *   vectorize   — VectorizePanel
+ *   matting     — MattingPanel
+ *   colordb     — ColorDBSelector / ColorDBBuildSection / ColorDBUploadSection
+ *   imageUpload — ImageUpload
+ *   result      — ResultPanel
+ *
+ * ## key 命名约定
+ *   - 使用 camelCase
+ *   - 层级用嵌套对象表示，模板中通过 '.' 访问，如 t('app.tabs.convert')
+ *
+ * ## 带参数插值示例
+ *   locale:  activeTasks: '{count} 个任务进行中'
+ *   组件:    t('app.activeTasks', { count: activeTasks })
+ *
+ * ## 后续迁移步骤（交给后续模型）
+ *   1. 在本文件对应命名空间下补充 key-value
+ *   2. 在 en.ts 中同步添加对应英文翻译
+ *   3. 在组件 <script setup> 中: const { t } = useI18n()
+ *   4. 将硬编码中文替换为 t('namespace.key') 或 t('namespace.key', { param })
+ */
+
+export default {
+    common: {
+        serverOnline: '服务器在线',
+        serverOffline: '服务器离线',
+        darkMode: '深色',
+        activeTasks: '{count} 个任务进行中',
+        historyTasks: '{count} 个历史任务',
+        reset: '重置',
+        delete: '删除',
+        download: '下载',
+        upload: '上传',
+        confirm: '确认删除',
+        cancel: '取消',
+        processing: '处理中',
+        success: '成功',
+        failure: '失败',
+        custom: '自定义',
+        all: '全部',
+        pollFailed: '任务状态轮询失败，请重试（{message}）',
+        downloadFailed: '下载失败，请重试',
+    },
+
+    app: {
+        tabs: {
+            convert: '叠色模型生成',
+            preprocess: '图像预处理工具',
+            vectorize: '图像矢量化',
+            matting: '图像抠图',
+            calibrationTools: '校准工具',
+            calibration: '四色及以下模式',
+            calibration8color: '八色模式',
+            colordbUpload: '上传 ColorDB',
+        },
+        convertEntry: {
+            hint: '需要导入已有 ColorDB JSON？',
+            goUpload: '前往上传 ColorDB',
+        },
+        colordbUploadSection: {
+            title: '上传已有 ColorDB',
+            tips: '如果你已有可用 ColorDB JSON，可直接上传并在当前会话使用。上传成功后可返回\u201c叠色模型生成\u201d页面选择该数据库。',
+        },
+    },
+
+    convert: {
+        stages: {
+            loading_resources: '加载资源',
+            preprocessing: '预处理',
+            matching: '颜色匹配',
+            building_model: '构建模型',
+            exporting: '导出结果',
+            unknown: '处理中',
+        },
+        queuing: '排队中',
+        submitTask: '提交任务',
+        startConvert: '开始转换',
+        download3mf: '下载3MF文件',
+        uploadFirst: '请先上传文件',
+        svgInputHint: '当前输入为矢量图 (SVG{sizeInfo})，路径较多的复杂矢量图转换耗时可能较长，请耐心等待。',
+    },
+
+    param: {
+        title: '参数配置',
+        mode: {
+            simple: '简易',
+            advanced: '高级',
+        },
+        channelFilter: '颜色通道筛选',
+        pixelSizePresets: {
+            nozzle02: '0.22 mm (0.2mm 喷嘴)',
+            nozzle04: '0.42 mm (0.4mm 喷嘴)',
+        },
+        nozzleSize: '喷嘴尺寸',
+        faceDirection: '观赏面朝向',
+        faceUp: '朝上',
+        faceDown: '朝下',
+        baseLayers: '底板层数',
+        doubleSided: '双面生成',
+        transparentLayer: '透明镀层',
+        off: '关闭',
+        targetWidthMm: '目标宽度 (mm)',
+        targetHeightMm: '目标高度 (mm)',
+        tessellationTolerance: '三角化容差 (mm)',
+        clusterMethod: '聚类方法',
+        clusterCount: '聚类数',
+        superpixelCount: '超像素数量',
+        compactness: '紧凑度',
+        halftone: '半色调抖动',
+        enableModel: '启用模型',
+        modelOnlyHint: '仅 BambooLab PLA 数据库支持模型增强',
+        gradientDither: '渐变抖动',
+        ditherStrength: '抖动强度',
+        gradientDitherStrength: '渐变抖动强度',
+        imageProcessing: '图像处理',
+        sizeSettings: '尺寸设置',
+        scaleFactor: '缩放倍率',
+        maxWidthPx: '最大宽度 (px)',
+        maxHeightPx: '最大高度 (px)',
+        vectorParams: '矢量图参数',
+        bambuPresets: 'Bambu Studio 预设',
+        geometryParams: '几何参数',
+        pixelSizeMm: '像素尺寸 (mm)',
+        layerHeightMm: '层高 (mm)',
+        flipY: '垂直翻转',
+        colorMatching: '颜色匹配',
+        colorSpace: '色彩空间',
+        kCandidates: 'K 候选数',
+        iterations: '迭代次数',
+        minRegionRatio: '小区域并入比例',
+        modelGating: '模型门控',
+        modelOnly: '仅使用模型',
+        modelThreshold: '模型阈值',
+        modelMargin: '模型边距',
+        outputOptions: '输出选项',
+        generatePreview: '生成预览图',
+        generateSourceMask: '生成源掩码',
+        outputPixels: '输出约',
+        pixels: '像素',
+        originalSize: '原图',
+        actualSize: '实际尺寸',
+        upscaleWarning: '图像分辨率较低，将放大 {ratio}x，可能导致输出模糊',
+        options: {
+            off: '关闭',
+            slic: 'SLIC 超像素',
+            kmeans: 'K-Means 聚类',
+        },
+        dbOptionLabel: '{name} ({entries} 色, {channels} 通道)',
+        sessionSuffix: ' (自定义)',
+        loadConfigFailed: '加载配置失败',
+        tooltips: {
+            print_mode:
+                '决定色层数和层高。0.08mm x 5 层: 层高 0.08mm，5 层叠色；0.04mm x 10 层: 层高 0.04mm，10 层叠色。两者总叠色厚度相同 (0.4mm)',
+            color_space: '颜色匹配时使用的色彩空间。Lab 更符合人眼感知（推荐）；RGB 为直接 RGB 距离计算',
+            max_width: '图像缩放后的最大宽度（像素），超出时等比缩小。值越小处理越快，输出模型越小',
+            max_height: '图像缩放后的最大高度（像素），超出时等比缩小。值越小处理越快，输出模型越小',
+            target_width_mm: '输出 3MF 模型的目标物理宽度（毫米），图像将被缩放以适应此尺寸',
+            target_height_mm: '输出 3MF 模型的目标物理高度（毫米），图像将被缩放以适应此尺寸',
+            pixel_mm_simple:
+                '每个像素对应的物理线宽（毫米），由打印机喷嘴尺寸决定。0.4mm 喷嘴推荐 0.42mm，0.2mm 喷嘴推荐 0.22mm',
+            cluster_method:
+                '非抖动匹配时的聚类算法。SLIC 以空间连续性优先，边缘通常更稳定；K-Means 仅按颜色聚类',
+            cluster_count: 'K-Means 聚类数。值越大颜色越精细，0 或 1 表示不聚类（逐像素匹配）',
+            slic_target_superpixels:
+                'SLIC 目标超像素数量。值越大区域越细，边缘保留更好，但计算耗时更高',
+            slic_compactness:
+                'SLIC 紧凑度，控制颜色相似与空间规则性的权衡。值越小更贴合颜色边界，值越大区域更规整',
+            slic_iterations: 'SLIC 迭代次数。更高可提升稳定性，但会增加耗时',
+            slic_min_region_ratio:
+                'SLIC 小区域并入比例（相对单个超像素期望面积）。增大可减少碎片区域，过大可能吞并细节',
+            dither:
+                '半色调抖动通过在相邻像素间交替使用不同配方来模拟更丰富的颜色过渡。选择 SLIC 时该选项会自动关闭',
+            dither_strength:
+                '抖动强度，控制颜色偏移幅度。值越大抖动效果越明显，但过高可能产生颗粒感。推荐 0.6-0.9',
+            db_names: '用于颜色匹配的 ColorDB，支持多选。匹配时会在所有选中的数据库中寻找最佳配方',
+            allowed_channels: '选择参与配方生成的颜色通道。未选中的通道将被排除，默认使用全部通道',
+            scale: '在最大宽高限制之前先对图像进行等比缩放，1.0 表示不缩放',
+            k_candidates:
+                '颜色匹配时从 KD-Tree 中取 K 个最近邻候选，再从中选择最优。值越大匹配越精确但越慢',
+            flip_y: '构建 3D 模型时翻转 Y 轴方向，开启时图像顶部对应模型顶部',
+            pixel_mm:
+                '每个像素对应的实际尺寸（毫米），决定输出模型的物理大小。0 表示自动从 ColorDB 配置推导',
+            layer_height_mm: '3D 打印的层高（毫米），决定模型 Z 方向分辨率。0 表示自动从打印模式推导',
+            base_layers:
+                '底板层数。留空表示沿用数据库默认；设置为 0 表示不生成底板；大于 0 将显式覆盖默认底板层数',
+            double_sided: '双面生成。开启后会在底板两侧生成镜像颜色层，形成双面可视结构',
+            transparent_layer_mm:
+                '透明镀层厚度。仅在观赏面朝下时可用，在颜色层最下方打印一层透明材料以获得透亮效果',
+            model_enable:
+                '是否启用神经网络模型辅助匹配。开启后，当 ColorDB 匹配质量不佳时会尝试用模型预测更优配方',
+            model_only: '跳过 ColorDB 匹配，完全使用模型预测配方。需要加载模型包',
+            model_threshold:
+                '色差 (DeltaE) 阈值，仅当 ColorDB 匹配色差超过此值时才启用模型。负值使用模型包默认值',
+            model_margin:
+                '模型结果需优于 ColorDB 结果至少此色差值才会被采用。负值使用模型包默认值',
+            generate_preview: '生成匹配后的颜色预览图（PNG），展示每个像素最终匹配到的颜色',
+            generate_source_mask:
+                '生成来源掩码图（PNG），白色像素表示使用了模型预测的配方，黑色表示使用了 ColorDB 匹配',
+            tessellation_tolerance_mm:
+                '矢量曲线三角化时的容差（毫米），值越小曲线越平滑但网格越多。默认 0.03，推荐 0.03-0.12',
+            gradient_dither: '对 SVG 渐变区域进行抖动处理，改善渐变在有限调色板下的过渡效果',
+            gradient_dither_strength: '渐变区域的抖动强度。值越大渐变过渡越平滑，但可能产生颗粒感',
+        },
+    },
+
+    calibration: {
+        nozzleSize: '喷嘴尺寸',
+        faceDirection: '观赏面朝向',
+        faceUp: '观赏面朝上',
+        faceDown: '观赏面朝下',
+        colorPlaceholder: '颜色名称（例如 White）',
+        materialPlaceholder: '材质（例如 PLA Basic）',
+        generateBoard: '生成校准板',
+        boardGenerated: '校准板已生成',
+        download3mf: '下载 3MF 模型',
+        downloadMeta: '下载 Meta JSON',
+        buildColorDB: '构建 ColorDB',
+        printAndShoot: '打印与拍摄',
+        fillAllColors: '请填写所有颜色名称',
+        generateSuccess: '校准板生成成功',
+        generateFailed: '生成失败: {error}',
+        currentStep: '当前步骤：第 {step} 步 / 3',
+
+        fourColor: {
+            title: '四色校准流程',
+            tag: '4 色',
+            steps: {
+                generate: { title: '生成校准板', description: '确认颜色与材质，生成 3MF 与 Meta' },
+                print: { title: '打印与拍摄', description: '打印校准板并拍摄清晰照片' },
+                build: {
+                    title: '构建 ColorDB',
+                    description: '上传照片和 Meta 生成数据库并自动加入会话',
+                },
+            },
+            step1Title: '步骤 1：生成校准板',
+            addChannel: '添加通道',
+            maxChannels: '最多支持 {max} 个通道',
+            minChannels: '至少需要 {min} 个通道',
+            step2Title: '步骤 2：打印与拍摄',
+            notice: '注意',
+            noticeText: '上传的 Meta 文件必须与拍摄照片来自同一块校准板，不匹配会导致构建结果错误。',
+            exampleTitle: '示例：已打印校准板照片',
+            exampleAlt: '四色校准板照片示例',
+            exampleDesc:
+                '示例为 Red/Yellow/Blue/White 四色校准板照片，请尽量保持均匀光照和清晰边界。',
+            step3Title: '步骤 3：构建 ColorDB',
+            step3Tips: '上传照片和匹配的 Meta 文件后，系统会自动构建并添加到当前会话。',
+            step3BuildButton: '构建并添加 ColorDB',
+            nextHint: {
+                step1: '先确认颜色/材质并生成校准板。',
+                step2: '打印并拍照后，完成第 3 步（构建 ColorDB）。',
+                step3: 'ColorDB 已就绪，可切换到\u201c叠色模型生成\u201d页面开始使用。',
+            },
+        },
+
+        eightColor: {
+            title: '八色校准流程',
+            steps: {
+                generate: { title: '生成两张校准板', description: '按同一组颜色生成板 1 / 板 2' },
+                print: { title: '打印与拍摄', description: '建议先板 1，追求更高精度再补板 2' },
+                build: {
+                    title: '构建 ColorDB',
+                    description: '每张校准板可分别构建一个 ColorDB 并自动加入会话',
+                },
+            },
+            step1Title: '步骤 1：生成八色校准板',
+            tip: '八色校准推荐生成两张校准板（各 40 x 40）。板 1 覆盖主色域，板 2 用于补充细节颜色。',
+            generateBoard1: '生成校准板 1（推荐优先）',
+            board1Generated: '板 1 已生成',
+            downloadBoard1_3mf: '下载板 1 的 3MF',
+            downloadBoard1_meta: '下载板 1 的 Meta',
+            generateBoard2: '生成校准板 2',
+            board2Generated: '板 2 已生成',
+            downloadBoard2_3mf: '下载板 2 的 3MF',
+            downloadBoard2_meta: '下载板 2 的 Meta',
+            step2Title: '步骤 2：打印与拍摄说明',
+            keyPoints: '关键点',
+            keyPointText1:
+                '每张校准板都对应各自的 Meta 文件。构建 ColorDB 时，照片和 Meta 必须来自同一张板。',
+            keyPointText2:
+                '板 1 足以得到较好效果；若追求更完整的色域覆盖，可继续打印板 2 并再构建一个 ColorDB。',
+            step3Title: '步骤 3：构建 ColorDB',
+            step3Tips: '你可以为板 1 和板 2 各构建一个 ColorDB，后续在叠色模型生成里组合使用。',
+            step3BuildButton: '构建并添加 ColorDB',
+            boardGenerateSuccess: '校准板 {index} 生成成功',
+            nextHint: {
+                step1: '建议先生成并打印校准板 1。',
+                step2: '上传与板号匹配的照片 + Meta 文件，构建一个或两个 ColorDB。',
+                step3: 'ColorDB 已就绪，可到\u201c叠色模型生成\u201d页面组合使用。',
+            },
+        },
+    },
+
+    vectorize: {
+        upload: {
+            title: '图片上传',
+            dropHint: '点击或拖拽图片到此处上传',
+            formatHint: '支持 {formats} 格式',
+            sizeHint: '文件最大 {maxMb}MB，位图最大 {maxPixels} 像素',
+            removeImage: '移除图片',
+        },
+        settings: {
+            title: '矢量化设置',
+            numColors: '颜色数量',
+            numColorsHint:
+                '越小越\u201c卡通化\u201d，越大越接近原图但文件更大、处理更慢。建议先用 12~24。',
+            curveFitError: '曲线拟合精度（值越小越贴近原边界）',
+            curveFitErrorHint:
+                '越小越贴边界（细节更多，路径更复杂）；越大越平滑（更简洁，但可能丢拐角）。建议 0.6~1.0。',
+            contourSimplify: '轮廓简化强度（值越大节点越少）',
+            contourSimplifyHint:
+                '控制\u201c减少节点\u201d的力度。值大：SVG 更小更顺滑；值小：保细节更好。建议 0.35~0.8。',
+            enableStroke: '启用细线描边增强',
+            enableStrokeHint:
+                '适合线稿、手绘、细边缘。若出现\u201c边缘描得太重\u201d，可先关闭再比较。',
+            enableCoverageFix: '启用覆盖修复',
+            enableCoverageFixHint:
+                '用于修补\u201c区域缺块/漏填充\u201d。一般建议保持开启，仅在边缘过厚时再尝试关闭。',
+            defaultHint: '建议先调\u201c颜色数量 + 曲线拟合精度 + 轮廓简化\u201d，其余保持默认。',
+            tuningOrder: '推荐调参顺序：',
+            tuningStep1: '1) 先调\u201c颜色数量\u201d控制整体色块层次；',
+            tuningStep2: '2) 再调\u201c曲线拟合精度\u201d平衡边缘贴合与平滑；',
+            tuningStep3: '3) 最后用\u201c轮廓简化强度\u201d控制文件大小和节点数量。',
+        },
+        advanced: {
+            title: '高级参数（通常保持默认）',
+            smoothingSpatial: '预处理空间平滑（Mean Shift sp）',
+            smoothingSpatialHint:
+                '控制\u201c按空间邻近\u201d做平滑。增大可去噪并让色块更整齐，但可能糊掉小细节。',
+            smoothingColor: '预处理颜色平滑（Mean Shift sr）',
+            smoothingColorHint:
+                '控制\u201c颜色差异\u201d可被合并的力度。增大后颜色更统一，但可能丢失微小色阶。',
+            thinLineRadius: '细线检测半径（像素）',
+            thinLineRadiusHint:
+                '决定多细的结构会被当作\u201c线条\u201d处理。值大保细线更积极，也可能把窄色块当线条。',
+            maxWorkingPixels: '大图预处理像素上限',
+            maxWorkingPixelsHint:
+                '输入像素超过该值时会先缩小再矢量化，可显著减少 SVG 体积；设为 0 可禁用。',
+            slicRegionSize: 'SLIC 超像素尺寸',
+            slicRegionSizeHint:
+                '超像素的目标大小。越小越精细（保细节更多但更慢），越大越快但边缘粗糙。建议 15~30。',
+            edgeSensitivity: '边缘对齐灵敏度',
+            edgeSensitivityHint:
+                'SLIC 超像素在边缘处降低空间权重的力度。值越大超像素边界越贴合图像边缘；设为 0 则退化为标准 SLIC。建议 0.6~1.0。',
+            refinePasses: '边界细化迭代次数',
+            refinePassesHint:
+                '对边界像素进行逐像素重分配的轮次。次数越多边缘越锐利但更慢；设为 0 禁用细化。建议 4~8。',
+            mergeColorDist: '合并颜色容差',
+            mergeColorDistHint:
+                '小区域合并时允许的最大 LAB 颜色距离²。值越小越保留高对比小细节（如细线、文字），值越大碎块更少但可能吞噬细特征。建议 100~300。',
+            minRegionArea: '最小区域面积（像素²）',
+            minRegionAreaHint:
+                '小于该面积的碎块会被并入邻近区域。增大可减少噪点，但会吞掉小细节。',
+            minContourArea: '最小轮廓面积（像素²）',
+            minContourAreaHint:
+                '小于该面积的闭合形状直接忽略。适合清理噪点，过大可能丢失小图案。',
+            minHoleArea: '最小孔洞面积（像素²）',
+            minHoleAreaHint: '小于该面积的孔洞会被填平。想保留镂空细节时请适当调小。',
+            minCoverageRatio: '最低覆盖率（低于该值触发覆盖修复）',
+            minCoverageRatioHint:
+                '越接近 1，系统越容易触发\u201c补漏填充\u201d。出现缺块时可调高（如 0.999）。',
+            svgStrokeWidth: '结果描边宽度（像素）',
+            svgStrokeWidthHint:
+                '仅在\u201c启用细线描边增强\u201d时生效。太大容易糊边，通常 0.3~0.8 更自然。',
+        },
+        actions: {
+            processing: '处理中...',
+            startVectorize: '开始矢量化',
+            downloadSvg: '下载 SVG',
+            useSvgForConvert: '使用 SVG 结果进行叠色模型生成',
+        },
+        status: {
+            queuing: '排队等待中...',
+            running: '正在进行矢量化处理...',
+        },
+        result: {
+            title: '矢量化结果',
+            shapes: '{count} 个形状',
+            resetView: '重置视图',
+            zoomHint: '滚轮缩放，拖拽移动，可对比矢量化效果',
+            original: '原图',
+            svgResult: 'SVG 结果',
+        },
+        timing: {
+            decode: '解码 {ms}ms',
+            vectorize: '矢量化 {ms}ms',
+            total: '总计 {ms}ms',
+        },
+        fetchFailed: '获取结果失败',
+    },
+
+    matting: {
+        strokeCenter: '居中描边',
+        strokeInner: '内描边',
+        strokeOuter: '外描边',
+        adaptiveHint: '会按图像短边自动放大，超大图可保持可见描边。',
+        adaptiveDetail:
+            '当前短边 {shortSide}px，预估实际线宽约 {effectiveWidth}px（基准 {base}px）',
+        fetchFailed: '获取结果失败',
+        postprocessFailed: '后处理失败',
+        downloadFailed: '下载失败，请重试',
+        fetchMethodsFailed: '无法获取抠图方法列表',
+        connectivity: {
+            summary: '连通性检查：可用源 {available}/{total}（检测模型 {models} 个）',
+            noSource: '连通性检查未发现可用下载源，请检查网络后重试。',
+            checkLabel: '连通性检查',
+            checkFailed: '连通性检查失败',
+        },
+        model: {
+            title: '抠图模型下载（Electron）',
+            installedCount: '已安装 {installed} / {total} 个模型',
+            pendingCount: '（待处理 {pending} 个，缺失 {missing} 个）',
+            lastCheck: '最近检测：{time}',
+            available: '可用',
+            unavailable: '不可用',
+            needDownload: '需下载：{need} | 已下载：{done}',
+            speed: '网速：{speed}',
+            restartHint: '模型已下载完成，请重启应用后再使用深度学习抠图模型。',
+            downloadBtn: '下载模型',
+            preCheck: '下载前检查',
+            cancelDownload: '取消下载',
+            restartNow: '立即重启',
+            refreshStatus: '刷新状态',
+            storageTip: '模型文件会下载到当前用户数据目录，不随安装包分发。',
+            statusFailed: '获取模型状态失败',
+            sourceUnreachable: '下载源不可达，请先执行连通性检查并确认至少一个下载源可用。',
+            downloadFailed: '模型下载失败',
+            cancelFailed: '取消下载失败',
+            restartFailed: '重启应用失败',
+        },
+        upload: {
+            title: '图片上传',
+            dropHint: '点击或拖拽图片到此处上传',
+            formatHint: '支持 {formats} 格式',
+            sizeHint: '文件最大 {maxMb}MB，位图最大 {maxPixels} 像素',
+            removeImage: '移除图片',
+        },
+        settings: {
+            title: '抠图设置',
+            method: '抠图方法',
+            methodPlaceholder: '选择抠图方法',
+            reframe: '抠图后重构画布（裁剪空白并留边）',
+            reframeHint: '该设置会在抠图完成后自动应用，减少空白区域并为边缘后处理预留空间。',
+            padding: '外边缘留白(px)',
+        },
+        actions: {
+            processing: '处理中...',
+            startMatting: '开始抠图',
+            downloadMask: '下载 Mask',
+            downloadForeground: '下载前景',
+            useForeground: '使用前景结果进行叠色模型生成',
+        },
+        status: {
+            queuing: '排队等待中...',
+            running: '正在进行抠图处理...',
+        },
+        postprocess: {
+            title: '后处理参数',
+            threshold: '阈值',
+            morphCloseSize: '闭运算核大小',
+            morphCloseSizeHint: '0 = 不执行，用于连接分离区域',
+            morphCloseIterations: '闭运算迭代次数',
+            morphCloseIterationsHint: '多次小核迭代比单次大核更平滑',
+            minRegionArea: '过滤孤立区域',
+            minRegionAreaHint: '0 = 不过滤，移除面积小于该值的区域',
+            outline: '描边',
+            outlineMode: '模式',
+            outlineWidth: '基准线宽',
+            outlineColor: '颜色',
+            eyeDropper: '从屏幕取色',
+        },
+        result: {
+            title: '抠图结果',
+            afterMatting: '抠图后 {size} | {method}',
+            resetView: '重置视图',
+            zoomHint: '滚轮缩放，拖拽移动，可观察抠图细节',
+            original: '原图',
+            postprocessed: '后处理结果',
+            thresholdPreview: '阈值预览',
+            mattingResult: '抠图结果',
+        },
+        timing: {
+            decode: '解码 {ms}ms',
+            preprocess: '预处理 {ms}ms',
+            inference: '推理 {ms}ms',
+            postprocess: '后处理 {ms}ms',
+            encode: '编码 {ms}ms',
+            total: '总计 {ms}ms',
+        },
+    },
+
+    colordb: {
+        materialType: '材质类型',
+        vendor: '厂商',
+        database: '颜色数据库',
+        selectDatabase: '选择颜色数据库',
+        presetFrom: '当前预设来自',
+        openSource: '开源项目',
+
+        build: {
+            defaultTitle: '构建 ColorDB',
+            defaultButtonText: '构建 ColorDB',
+            uploadPhoto: '上传校准板照片',
+            selectImage: '选择图片',
+            selectJson: '选择 JSON',
+            selectedFile: '已选择：{name}',
+            uploadMeta: '上传 Meta JSON 文件',
+            nameLabel: 'ColorDB 名称',
+            namePlaceholder: '例如：my_printer_profile',
+            nameRequired: '请输入 ColorDB 名称',
+            nameInvalid: '仅支持字母、数字和下划线',
+            success: '构建成功',
+            successName: '名称：{name}',
+            successChannels: '通道数：{channels}',
+            successEntries: '条目数：{entries}',
+            downloadJson: '下载 ColorDB JSON',
+            autoAdded:
+                '已自动添加到当前会话的可用数据库列表中，可在\u201c叠色模型生成\u201d页面直接使用。',
+            failed: '构建失败',
+            messages: {
+                success: 'ColorDB \u201c{name}\u201d 构建成功，已自动添加到可用数据库',
+                failed: '构建失败: {error}',
+            },
+        },
+
+        upload: {
+            defaultTitle: '上传 ColorDB',
+            defaultTips:
+                '如果你已经有 ColorDB JSON 文件，可以直接上传使用。支持单文件上传或多文件批量上传。',
+            selectLabel: '选择 ColorDB JSON 文件',
+            selectButton: '选择文件',
+            selectedCount: '已选择 {count} 个文件，将使用各文件内部名称批量上传。',
+            uploadAll: '上传全部（{count} 个）',
+            uploadSingle: '上传 ColorDB',
+            goConvert: '前往叠色模型生成',
+            failedTitle: '上传失败',
+            listTitle: '已上传的 ColorDB',
+            listHint: '以下是当前会话中已上传的自定义 ColorDB，关闭浏览器或会话过期后将自动清除。',
+            emptyHint: '暂无已上传的 ColorDB',
+            selectAll: '全选',
+            deleteSelected: '删除选中（{count}）',
+            deleteConfirm: '确定要删除选中的 {count} 个 ColorDB 吗？删除后无法恢复。',
+            deleteItemConfirm: '确定要删除 \u201c{name}\u201d 吗？删除后无法恢复。',
+            refreshList: '刷新列表',
+            entries: '条',
+            channels: '通道',
+            colors: '色层',
+            layerHeight: '层高',
+            lineWidth: '线宽',
+            messages: {
+                deleted: '已删除 \u201c{name}\u201d',
+                deleteFailed: '删除失败: {error}',
+                batchDeleted: '已删除 {count} 个 ColorDB',
+                batchDeletePartial: '删除 {ok} 个成功，{fail} 个失败',
+                uploadSuccess: 'ColorDB \u201c{name}\u201d 上传成功',
+                batchUploadSuccess: '{count} 个 ColorDB 全部上传成功',
+                batchUploadPartial: '{ok} 个成功，{fail} 个失败',
+                uploadFailed: '上传失败: {error}',
+                singleUploadFailed: '上传失败',
+                allUploadFailed: '所有文件上传失败',
+            },
+        },
+    },
+
+    imageUpload: {
+        title: '输入文件',
+        dropHint: '点击或拖拽文件到此处上传',
+        formatHint: '支持 {formats} 格式',
+        sizeHint: '文件最大 {maxMb}MB，位图最大 {maxPixels} 像素',
+        vectorType: '矢量图',
+        rasterType: '位图',
+        resetView: '重置视图',
+        removeFile: '移除文件',
+        zoomHint: '滚轮缩放，拖拽移动',
+        validation: {
+            empty: '文件为空，请重新选择。',
+            tooLarge: '文件大小超过后端上传限制（{maxMb}MB）。',
+            rasterOnly: '当前页面仅支持位图格式（{formats}）。',
+            svgUnsupported: 'SVG 文件类型不受支持，请重新导出标准 SVG 后重试。',
+            formatUnsupported: '不支持该图片格式，请使用 {formats}。',
+            decodeFailed: '图片无法解码，请确认文件未损坏且为受支持格式。',
+            tooManyPixels: '图片像素超过后端上限（{maxPixels} 像素）。',
+        },
+    },
+
+    result: {
+        title: '转换结果',
+        zoomHint: '滚轮缩放，拖拽移动；右侧滑块实时切换分层',
+        preview: '预览图',
+        sourceMask: '颜色源掩码',
+        resetView: '重置视图',
+        imageLoading: '图像加载中...',
+        layerPreview: '分层预览',
+        layerTop: '顶部',
+        layerBottom: '底部',
+        layerLoading: '图层加载中...',
+        layerOrder: {
+            bottomToTop: '层序：底部到顶部',
+            topToBottom: '层序：顶部到底部',
+        },
+        pixelSize: '像素 {value} mm',
+        stats: {
+            title: '匹配统计',
+            totalClusters: '聚类总数',
+            dbMatch: '数据库匹配',
+            modelFallback: '模型回退',
+            modelQuery: '模型查询',
+            dbAvgDelta: '数据库平均色差',
+            modelAvgDelta: '模型平均色差',
+        },
+        linkMode: {
+            all: '全部联动',
+            independent: '全部独立',
+            custom: '自定义分组',
+        },
+        linkGroup: {
+            a: 'A 组',
+            b: 'B 组',
+            independent: '独立',
+        },
+    },
+}

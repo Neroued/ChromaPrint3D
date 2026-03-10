@@ -1,4 +1,5 @@
 import { ref, computed, onUnmounted, type Ref, type ComputedRef } from 'vue'
+import i18n from '../locales'
 
 export interface AsyncTaskOptions<TStatus> {
   pollInterval?: number
@@ -110,7 +111,7 @@ export function useAsyncTask<TStatus extends { status: string; error?: string | 
         loading.value = false
         error.value = isFatalPollError(e)
           ? message
-          : `任务状态轮询失败，请重试（${message}）`
+          : i18n.global.t('common.pollFailed', { message })
       }
     }
   }

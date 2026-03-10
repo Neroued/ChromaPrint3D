@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { NRadioGroup, NRadioButton } from 'naive-ui'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: 'simple' | 'advanced'
@@ -16,7 +19,7 @@ const emit = defineEmits<{
     size="small"
     @update:value="(v: 'simple' | 'advanced') => emit('update:modelValue', v)"
   >
-    <NRadioButton value="simple">简易</NRadioButton>
-    <NRadioButton value="advanced">高级</NRadioButton>
+    <NRadioButton value="simple">{{ t('param.mode.simple') }}</NRadioButton>
+    <NRadioButton value="advanced">{{ t('param.mode.advanced') }}</NRadioButton>
   </NRadioGroup>
 </template>

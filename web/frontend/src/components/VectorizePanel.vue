@@ -17,6 +17,7 @@ import {
   NCollapseItem,
 } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useAsyncTask } from '../composables/useAsyncTask'
 import { usePanZoomLinkage } from '../composables/usePanZoomLinkage'
 import { usePanZoomGroups } from '../composables/usePanZoomGroups'
@@ -38,6 +39,8 @@ import {
   getVectorizeSvgPath,
   submitVectorize,
 } from '../services/vectorizeService'
+
+const { t } = useI18n()
 
 // ── File state ───────────────────────────────────────────────────────────
 
@@ -127,7 +130,7 @@ async function fetchSvgBlob(id: string) {
     svgBlobUrl.value = createUrl(blob)
   } catch (e: unknown) {
     if (taskId.value !== id) return
-    error.value = toErrorMessage(e, '获取结果失败')
+    error.value = toErrorMessage(e, t('vectorize.fetchFailed'))
   }
 }
 
@@ -186,12 +189,12 @@ const fileBaseName = computed(() => {
 })
 
 const timingText = computed(() => {
-  const t = taskStatus.value?.timing
-  if (!t) return null
+  const timing = taskStatus.value?.timing
+  if (!timing) return null
   const parts: string[] = []
-  if (t.decode_ms > 0) parts.push(`解码 ${t.decode_ms.toFixed(0)}ms`)
-  if (t.vectorize_ms > 0) parts.push(`矢量化 ${t.vectorize_ms.toFixed(0)}ms`)
-  parts.push(`总计 ${t.pipeline_ms.toFixed(0)}ms`)
+  if (timing.decode_ms > 0) parts.push(t('vectorize.timing.decode', { ms: timing.decode_ms.toFixed(0) }))
+  if (timing.vectorize_ms > 0) parts.push(t('vectorize.timing.vectorize', { ms: timing.vectorize_ms.toFixed(0) }))
+  parts.push(t('vectorize.timing.total', { ms: timing.pipeline_ms.toFixed(0) }))
   return parts.join(' | ')
 })
 
@@ -227,7 +230,7 @@ onMounted(async () => {
   <NSpace vertical :size="16">
     <NGrid :cols="2" :x-gap="16" responsive="screen" item-responsive>
       <NGridItem span="2 m:1">
-        <NCard title="图片上传" size="small">
+        <NCard :title="t('vectorize.upload.title')" size="small">
           <NUpload
             v-if="!file"
             :accept="rasterImageAccept"
@@ -244,12 +247,12 @@ onMounted(async () => {
           >
             <NUploadDragger>
               <NSpace vertical align="center" justify="center" style="padding: 32px 16px">
-                <NText depth="3" style="font-size: 14px"> 点击或拖拽图片到此处上传 </NText>
+                <NText depth="3" style="font-size: 14px"> {{ t('vectorize.upload.dropHint') }} </NText>
                 <NText depth="3" style="font-size: 12px">
-                  支持 {{ rasterImageFormatsText }} 格式
+                  {{ t('vectorize.upload.formatHint', { formats: rasterImageFormatsText }) }}
                 </NText>
                 <NText depth="3" style="font-size: 11px">
-                  文件最大 {{ backendMaxUploadMb }}MB，位图最大 {{ maxPixelText }} 像素
+                  {{ t('vectorize.upload.sizeHint', { maxMb: backendMaxUploadMb, maxPixels: maxPixelText }) }}
                 </NText>
               </NSpace>
             </NUploadDragger>
@@ -257,7 +260,7 @@ onMounted(async () => {
           <div v-else class="upload-preview">
             <div class="upload-preview-header">
               <NText depth="3" style="font-size: 12px">{{ imageInfo }}</NText>
-              <NButton size="tiny" quaternary type="error" @click="clearFile"> 移除图片 </NButton>
+              <NButton size="tiny" quaternary type="error" @click="clearFile"> {{ t('vectorize.upload.removeImage') }} </NButton>
             </div>
             <ZoomableImageViewport
               :src="originalUrl ?? undefined"
@@ -270,14 +273,14 @@ onMounted(async () => {
       </NGridItem>
 
       <NGridItem span="2 m:1">
-        <NCard title="矢量化设置" size="small">
+        <NCard :title="t('vectorize.settings.title')" size="small">
           <template #header-extra>
-            <NButton size="tiny" quaternary :disabled="loading" @click="handleResetParams"> 重置 </NButton>
+            <NButton size="tiny" quaternary :disabled="loading" @click="handleResetParams"> {{ t('common.reset') }} </NButton>
           </template>
           <NSpace vertical :size="12">
             <div>
               <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                颜色数量
+                {{ t('vectorize.settings.numColors') }}
               </NText>
               <NInputNumber
                 v-model:value="params.num_colors"
@@ -288,12 +291,12 @@ onMounted(async () => {
                 style="width: 100%"
               />
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                越小越“卡通化”，越大越接近原图但文件更大、处理更慢。建议先用 12~24。
+                {{ t('vectorize.settings.numColorsHint') }}
               </NText>
             </div>
             <div>
               <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                曲线拟合精度（值越小越贴近原边界）
+                {{ t('vectorize.settings.curveFitError') }}
               </NText>
               <NInputNumber
                 v-model:value="params.curve_fit_error"
@@ -306,13 +309,12 @@ onMounted(async () => {
                 style="width: 100%"
               />
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                越小越贴边界（细节更多，路径更复杂）；越大越平滑（更简洁，但可能丢拐角）。
-                建议 0.6~1.0。
+                {{ t('vectorize.settings.curveFitErrorHint') }}
               </NText>
             </div>
             <div>
               <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                轮廓简化强度（值越大节点越少）
+                {{ t('vectorize.settings.contourSimplify') }}
               </NText>
               <NInputNumber
                 v-model:value="params.contour_simplify"
@@ -325,54 +327,54 @@ onMounted(async () => {
                 style="width: 100%"
               />
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                控制“减少节点”的力度。值大：SVG 更小更顺滑；值小：保细节更好。建议 0.35~0.8。
+                {{ t('vectorize.settings.contourSimplifyHint') }}
               </NText>
             </div>
             <div>
               <div
                 style="display: flex; align-items: center; justify-content: space-between; gap: 8px"
               >
-                <NText depth="3" style="font-size: 12px">启用细线描边增强</NText>
+                <NText depth="3" style="font-size: 12px">{{ t('vectorize.settings.enableStroke') }}</NText>
                 <NSwitch v-model:value="params.svg_enable_stroke" :disabled="loading" />
               </div>
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                适合线稿、手绘、细边缘。若出现“边缘描得太重”，可先关闭再比较。
+                {{ t('vectorize.settings.enableStrokeHint') }}
               </NText>
             </div>
             <div>
               <div
                 style="display: flex; align-items: center; justify-content: space-between; gap: 8px"
               >
-                <NText depth="3" style="font-size: 12px">启用覆盖修复</NText>
+                <NText depth="3" style="font-size: 12px">{{ t('vectorize.settings.enableCoverageFix') }}</NText>
                 <NSwitch v-model:value="params.enable_coverage_fix" :disabled="loading" />
               </div>
               <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                用于修补“区域缺块/漏填充”。一般建议保持开启，仅在边缘过厚时再尝试关闭。
+                {{ t('vectorize.settings.enableCoverageFixHint') }}
               </NText>
             </div>
             <NText depth="3" style="font-size: 11px">
-              建议先调“颜色数量 + 曲线拟合精度 + 轮廓简化”，其余保持默认。
+              {{ t('vectorize.settings.defaultHint') }}
             </NText>
             <NAlert type="info" :show-icon="false">
               <NText depth="3" style="font-size: 12px; display: block">
-                推荐调参顺序：
+                {{ t('vectorize.settings.tuningOrder') }}
               </NText>
               <NText depth="3" style="font-size: 11px; display: block">
-                1) 先调“颜色数量”控制整体色块层次；
+                {{ t('vectorize.settings.tuningStep1') }}
               </NText>
               <NText depth="3" style="font-size: 11px; display: block">
-                2) 再调“曲线拟合精度”平衡边缘贴合与平滑；
+                {{ t('vectorize.settings.tuningStep2') }}
               </NText>
               <NText depth="3" style="font-size: 11px; display: block">
-                3) 最后用“轮廓简化强度”控制文件大小和节点数量。
+                {{ t('vectorize.settings.tuningStep3') }}
               </NText>
             </NAlert>
             <NCollapse>
-              <NCollapseItem title="高级参数（通常保持默认）" name="advanced">
+              <NCollapseItem :title="t('vectorize.advanced.title')" name="advanced">
                 <NSpace vertical :size="10">
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      预处理空间平滑（Mean Shift sp）
+                      {{ t('vectorize.advanced.smoothingSpatial') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.smoothing_spatial"
@@ -385,12 +387,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      控制“按空间邻近”做平滑。增大可去噪并让色块更整齐，但可能糊掉小细节。
+                      {{ t('vectorize.advanced.smoothingSpatialHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      预处理颜色平滑（Mean Shift sr）
+                      {{ t('vectorize.advanced.smoothingColor') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.smoothing_color"
@@ -403,12 +405,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      控制“颜色差异”可被合并的力度。增大后颜色更统一，但可能丢失微小色阶。
+                      {{ t('vectorize.advanced.smoothingColorHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      细线检测半径（像素）
+                      {{ t('vectorize.advanced.thinLineRadius') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.thin_line_max_radius"
@@ -421,12 +423,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      决定多细的结构会被当作“线条”处理。值大保细线更积极，也可能把窄色块当线条。
+                      {{ t('vectorize.advanced.thinLineRadiusHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      大图预处理像素上限
+                      {{ t('vectorize.advanced.maxWorkingPixels') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.max_working_pixels"
@@ -438,12 +440,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      输入像素超过该值时会先缩小再矢量化，可显著减少 SVG 体积；设为 0 可禁用。
+                      {{ t('vectorize.advanced.maxWorkingPixelsHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      SLIC 超像素尺寸
+                      {{ t('vectorize.advanced.slicRegionSize') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.slic_region_size"
@@ -454,13 +456,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      超像素的目标大小。越小越精细（保细节更多但更慢），越大越快但边缘粗糙。建议
-                      15~30。
+                      {{ t('vectorize.advanced.slicRegionSizeHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      边缘对齐灵敏度
+                      {{ t('vectorize.advanced.edgeSensitivity') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.edge_sensitivity"
@@ -473,14 +474,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      SLIC
-                      超像素在边缘处降低空间权重的力度。值越大超像素边界越贴合图像边缘；设为 0
-                      则退化为标准 SLIC。建议 0.6~1.0。
+                      {{ t('vectorize.advanced.edgeSensitivityHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      边界细化迭代次数
+                      {{ t('vectorize.advanced.refinePasses') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.refine_passes"
@@ -491,13 +490,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      对边界像素进行逐像素重分配的轮次。次数越多边缘越锐利但更慢；设为 0
-                      禁用细化。建议 4~8。
+                      {{ t('vectorize.advanced.refinePassesHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      合并颜色容差
+                      {{ t('vectorize.advanced.mergeColorDist') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.max_merge_color_dist"
@@ -509,13 +507,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      小区域合并时允许的最大 LAB 颜色距离²。值越小越保留高对比小细节（如细线、文字），值越大碎块更少但可能吞噬细特征。建议
-                      100~300。
+                      {{ t('vectorize.advanced.mergeColorDistHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      最小区域面积（像素²）
+                      {{ t('vectorize.advanced.minRegionArea') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.min_region_area"
@@ -526,12 +523,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      小于该面积的碎块会被并入邻近区域。增大可减少噪点，但会吞掉小细节。
+                      {{ t('vectorize.advanced.minRegionAreaHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      最小轮廓面积（像素²）
+                      {{ t('vectorize.advanced.minContourArea') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.min_contour_area"
@@ -542,12 +539,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      小于该面积的闭合形状直接忽略。适合清理噪点，过大可能丢失小图案。
+                      {{ t('vectorize.advanced.minContourAreaHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      最小孔洞面积（像素²）
+                      {{ t('vectorize.advanced.minHoleArea') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.min_hole_area"
@@ -560,12 +557,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      小于该面积的孔洞会被填平。想保留镂空细节时请适当调小。
+                      {{ t('vectorize.advanced.minHoleAreaHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      最低覆盖率（低于该值触发覆盖修复）
+                      {{ t('vectorize.advanced.minCoverageRatio') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.min_coverage_ratio"
@@ -578,12 +575,12 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      越接近 1，系统越容易触发“补漏填充”。出现缺块时可调高（如 0.999）。
+                      {{ t('vectorize.advanced.minCoverageRatioHint') }}
                     </NText>
                   </div>
                   <div>
                     <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-                      结果描边宽度（像素）
+                      {{ t('vectorize.advanced.svgStrokeWidth') }}
                     </NText>
                     <NInputNumber
                       v-model:value="params.svg_stroke_width"
@@ -596,7 +593,7 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                     <NText depth="3" style="font-size: 11px; display: block; margin-top: 4px">
-                      仅在“启用细线描边增强”时生效。太大容易糊边，通常 0.3~0.8 更自然。
+                      {{ t('vectorize.advanced.svgStrokeWidthHint') }}
                     </NText>
                   </div>
                 </NSpace>
@@ -609,13 +606,13 @@ onMounted(async () => {
               :disabled="!canExecute"
               @click="handleVectorize"
             >
-              {{ loading ? '处理中...' : '开始矢量化' }}
+              {{ loading ? t('vectorize.actions.processing') : t('vectorize.actions.startVectorize') }}
             </NButton>
             <NButton v-if="isCompleted && svgBlobUrl" block @click="handleDownloadSvg">
-              下载 SVG{{ svgSizeText ? ` (${svgSizeText})` : '' }}
+              {{ t('vectorize.actions.downloadSvg') }}{{ svgSizeText ? ` (${svgSizeText})` : '' }}
             </NButton>
             <NButton v-if="isCompleted && svgContent" type="success" block @click="handleUseSvgForConvert">
-              使用 SVG 结果进行叠色模型生成
+              {{ t('vectorize.actions.useSvgForConvert') }}
             </NButton>
           </NSpace>
         </NCard>
@@ -629,18 +626,18 @@ onMounted(async () => {
     <div v-if="loading" style="text-align: center; padding: 40px 0">
       <NSpin size="large" />
       <NText depth="3" style="display: block; margin-top: 12px">
-        {{ taskStatus?.status === 'pending' ? '排队等待中...' : '正在进行矢量化处理...' }}
+        {{ taskStatus?.status === 'pending' ? t('vectorize.status.queuing') : t('vectorize.status.running') }}
       </NText>
     </div>
 
-    <NCard v-if="isCompleted && svgBlobUrl" title="矢量化结果" size="small">
+    <NCard v-if="isCompleted && svgBlobUrl" :title="t('vectorize.result.title')" size="small">
       <template #header-extra>
         <NSpace :size="8" align="center">
           <NText depth="3" style="font-size: 12px">
-            {{ taskStatus!.width }} x {{ taskStatus!.height }} | {{ taskStatus!.num_shapes }} 个形状
+            {{ taskStatus!.width }} x {{ taskStatus!.height }} | {{ t('vectorize.result.shapes', { count: taskStatus!.num_shapes }) }}
             | SVG {{ svgSizeText }}
           </NText>
-          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll"> 重置视图 </NButton>
+          <NButton size="tiny" quaternary @click="panZoomGroups.resetAll"> {{ t('vectorize.result.resetView') }} </NButton>
         </NSpace>
       </template>
       <NText
@@ -651,12 +648,12 @@ onMounted(async () => {
         {{ timingText }}
       </NText>
       <NText depth="3" style="font-size: 11px; display: block; margin-bottom: 8px">
-        滚轮缩放，拖拽移动，可对比矢量化效果
+        {{ t('vectorize.result.zoomHint') }}
       </NText>
       <div class="preview-row">
         <div class="preview-col">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            原图
+            {{ t('vectorize.result.original') }}
           </NText>
           <ZoomableImageViewport
             :src="originalUrl ?? undefined"
@@ -667,7 +664,7 @@ onMounted(async () => {
         </div>
         <div class="preview-col">
           <NText depth="3" style="font-size: 12px; margin-bottom: 4px; display: block">
-            SVG 结果
+            {{ t('vectorize.result.svgResult') }}
           </NText>
           <ZoomableImageViewport
             :src="svgBlobUrl ?? undefined"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import {
   NCard,
@@ -24,6 +25,7 @@ import { fetchBlobWithSession } from '../runtime/protectedRequest'
 import { getLayerPreviewPath, getPreviewPath, getSourceMaskPath } from '../services/resultService'
 import { useAppStore } from '../stores/app'
 
+const { t } = useI18n()
 const appStore = useAppStore()
 const { completedTask } = storeToRefs(appStore)
 const isCompleted = computed(() => completedTask.value?.status === 'completed')
@@ -64,7 +66,7 @@ const currentImageView = computed<ResultImageView | null>(() => {
 })
 
 const currentImageTitle = computed(() =>
-  currentImageView.value === 'source-mask' ? '颜色源掩码' : '预览图',
+  currentImageView.value === 'source-mask' ? t('result.sourceMask') : t('result.preview'),
 )
 
 const currentImageUrl = computed(() => {
@@ -94,7 +96,7 @@ const currentLayerTitle = computed(() => {
 const currentLayerMeta = computed(() => {
   if (!layerPreviews.value) return ''
   const orderText =
-    layerPreviews.value.layer_order === 'Bottom2Top' ? '层序：底部到顶部' : '层序：顶部到底部'
+    layerPreviews.value.layer_order === 'Bottom2Top' ? t('result.layerOrder.bottomToTop') : t('result.layerOrder.topToBottom')
   return `${layerPreviews.value.width}×${layerPreviews.value.height} px | ${orderText}`
 })
 
@@ -288,10 +290,10 @@ function handleSetImageView(view: ResultImageView) {
 </script>
 
 <template>
-  <NCard v-if="isCompleted && result" title="转换结果" size="small">
+  <NCard v-if="isCompleted && result" :title="t('result.title')" size="small">
     <template #header-extra>
       <NText v-if="showImageSection" depth="3" class="result-header-tip">
-        滚轮缩放，拖拽移动；右侧滑块实时切换分层
+        {{ t('result.zoomHint') }}
       </NText>
     </template>
     <NSpace vertical :size="16">
@@ -317,7 +319,7 @@ function handleSetImageView(view: ResultImageView) {
                   :strong="currentImageView === 'preview'"
                   @click="handleSetImageView('preview')"
                 >
-                  预览图
+                  {{ t('result.preview') }}
                 </NButton>
                 <NButton
                   size="small"
@@ -326,10 +328,10 @@ function handleSetImageView(view: ResultImageView) {
                   :strong="currentImageView === 'source-mask'"
                   @click="handleSetImageView('source-mask')"
                 >
-                  颜色源掩码
+                  {{ t('result.sourceMask') }}
                 </NButton>
               </NButtonGroup>
-              <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">重置视图</NButton>
+              <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">{{ t('result.resetView') }}</NButton>
             </NSpace>
           </template>
           <div class="result-image-card__content">
@@ -341,13 +343,13 @@ function handleSetImageView(view: ResultImageView) {
             />
             <div class="result-image-card__footer">
               <NText v-if="currentImageLoading" depth="3" class="layer-preview-loading">
-                图像加载中...
+                {{ t('result.imageLoading') }}
               </NText>
             </div>
           </div>
         </NCard>
 
-        <NCard v-if="hasLayerPreviews" title="分层预览" size="small" embedded class="result-image-card">
+        <NCard v-if="hasLayerPreviews" :title="t('result.layerPreview')" size="small" embedded class="result-image-card">
           <template #header-extra>
             <NSpace
               :size="10"
@@ -372,7 +374,7 @@ function handleSetImageView(view: ResultImageView) {
             </div>
 
             <div class="layer-preview-controls">
-              <NText depth="3" class="layer-preview-slider-label">顶部</NText>
+              <NText depth="3" class="layer-preview-slider-label">{{ t('result.layerTop') }}</NText>
               <NSlider
                 :value="currentTopLayerPosition"
                 :min="1"
@@ -381,12 +383,12 @@ function handleSetImageView(view: ResultImageView) {
                 class="layer-preview-slider"
                 @update:value="handleLayerSliderUpdate"
               />
-              <NText depth="3" class="layer-preview-slider-label">底部</NText>
+              <NText depth="3" class="layer-preview-slider-label">{{ t('result.layerBottom') }}</NText>
             </div>
 
             <div class="result-image-card__footer">
               <NText v-if="isLayerImageLoading" depth="3" class="layer-preview-loading">
-                图层加载中...
+                {{ t('result.layerLoading') }}
               </NText>
             </div>
           </div>
@@ -400,28 +402,28 @@ function handleSetImageView(view: ResultImageView) {
           mm
         </template>
         <template v-if="result.resolved_pixel_mm > 0">
-          | 像素 {{ result.resolved_pixel_mm.toFixed(2) }} mm
+          | {{ t('result.pixelSize', { value: result.resolved_pixel_mm.toFixed(2) }) }}
         </template>
       </NText>
 
       <!-- Match statistics -->
-      <NDescriptions label-placement="left" bordered :column="2" size="small" title="匹配统计">
-        <NDescriptionsItem label="聚类总数">
+      <NDescriptions label-placement="left" bordered :column="2" size="small" :title="t('result.stats.title')">
+        <NDescriptionsItem :label="t('result.stats.totalClusters')">
           {{ result.stats.clusters_total }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="数据库匹配">
+        <NDescriptionsItem :label="t('result.stats.dbMatch')">
           {{ result.stats.db_only }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="模型回退">
+        <NDescriptionsItem :label="t('result.stats.modelFallback')">
           {{ result.stats.model_fallback }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="模型查询">
+        <NDescriptionsItem :label="t('result.stats.modelQuery')">
           {{ result.stats.model_queries }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="数据库平均色差">
+        <NDescriptionsItem :label="t('result.stats.dbAvgDelta')">
           {{ result.stats.avg_db_de.toFixed(2) }}
         </NDescriptionsItem>
-        <NDescriptionsItem label="模型平均色差">
+        <NDescriptionsItem :label="t('result.stats.modelAvgDelta')">
           {{ result.stats.avg_model_de.toFixed(2) }}
         </NDescriptionsItem>
       </NDescriptions>

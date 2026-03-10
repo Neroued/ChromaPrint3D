@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { NCard, NText, NSpace, NAlert } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useAsyncTask } from '../composables/useAsyncTask'
 import { useBlobDownload } from '../composables/useBlobDownload'
 import { fetchConvertTaskStatus, submitConvertTask } from '../services/convertService'
@@ -13,14 +14,12 @@ import type { TaskStatus } from '../types'
 const appStore = useAppStore()
 const { selectedFile, params, inputType, completedTask } = storeToRefs(appStore)
 const { downloadByUrl } = useBlobDownload()
+const { t } = useI18n()
 
-const stageLabels: Record<string, string> = {
-  loading_resources: '加载资源',
-  preprocessing: '预处理',
-  matching: '颜色匹配',
-  building_model: '构建模型',
-  exporting: '导出结果',
-  unknown: '处理中',
+function getStageLabel(stage: string): string {
+  const key = `convert.stages.${stage}`
+  const result = t(key)
+  return result !== key ? result : stage
 }
 
 interface StageWeight {
@@ -80,17 +79,17 @@ const progressPercent = computed(() => {
 
 const stageText = computed(() => {
   if (!taskStatus.value) return ''
-  return stageLabels[taskStatus.value.stage] || taskStatus.value.stage
+  return getStageLabel(taskStatus.value.stage)
 })
 
 const taskState = computed(() => taskStatus.value?.status ?? '')
 const showRunningProgress = computed(() => taskState.value === 'running')
 
 const convertButtonText = computed(() => {
-  if (taskState.value === 'pending') return '排队中'
-  if (showRunningProgress.value) return `${stageText.value || '处理中'} ${progressPercent.value}%`
-  if (loading.value) return '提交任务'
-  return '开始转换'
+  if (taskState.value === 'pending') return t('convert.queuing')
+  if (showRunningProgress.value) return `${stageText.value || t('convert.stages.unknown')} ${progressPercent.value}%`
+  if (loading.value) return t('convert.submitTask')
+  return t('convert.startConvert')
 })
 
 const canSubmit = computed(() => {
@@ -156,19 +155,18 @@ async function handleDownload3MF() {
           :primary-show-progress="showRunningProgress"
           :primary-progress-percent="progressPercent"
           :secondary-visible="isCompleted && Boolean(result?.has_3mf)"
-          secondary-label="下载3MF文件"
+          :secondary-label="t('convert.download3mf')"
           secondary-type="success"
           :secondary-disabled="!canDownload3mf || isDownloading3mf"
           :secondary-loading="isDownloading3mf"
           @primary-click="handleConvert"
           @secondary-click="handleDownload3MF"
         />
-        <NText v-if="!selectedFile" depth="3" style="font-size: 13px"> 请先上传文件 </NText>
+        <NText v-if="!selectedFile" depth="3" style="font-size: 13px"> {{ t('convert.uploadFirst') }} </NText>
       </NSpace>
 
       <NAlert v-if="isVectorInput && !isRunning && !isCompleted" type="warning">
-        当前输入为矢量图 (SVG{{ vectorFileSizeText ? `, ${vectorFileSizeText}` : ''
-        }})，路径较多的复杂矢量图转换耗时可能较长，请耐心等待。
+        {{ t('convert.svgInputHint', { sizeInfo: vectorFileSizeText ? `, ${vectorFileSizeText}` : '' }) }}
       </NAlert>
 
       <NAlert v-if="error" type="error" closable @close="error = null">

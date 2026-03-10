@@ -1,20 +1,27 @@
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { SelectOption } from 'naive-ui'
 import type { PanZoomGroupMap } from './usePanZoomGroups'
+import i18n from '../locales'
 
 export type LinkageMode = 'linked' | 'independent' | 'custom'
 
-export const linkageModeOptions: SelectOption[] = [
-  { label: '全部联动', value: 'linked' },
-  { label: '全部独立', value: 'independent' },
-  { label: '自定义分组', value: 'custom' },
-]
+export function getLinkageModeOptions(): SelectOption[] {
+  const { t } = i18n.global
+  return [
+    { label: t('result.linkMode.all'), value: 'linked' },
+    { label: t('result.linkMode.independent'), value: 'independent' },
+    { label: t('result.linkMode.custom'), value: 'custom' },
+  ]
+}
 
-export const linkageGroupOptions: SelectOption[] = [
-  { label: 'A 组', value: 'A' },
-  { label: 'B 组', value: 'B' },
-  { label: '独立', value: '__self__' },
-]
+export function getLinkageGroupOptions(): SelectOption[] {
+  const { t } = i18n.global
+  return [
+    { label: t('result.linkGroup.a'), value: 'A' },
+    { label: t('result.linkGroup.b'), value: 'B' },
+    { label: t('result.linkGroup.independent'), value: '__self__' },
+  ]
+}
 
 type PanZoomGroupsController = {
   setGroups: (groups: PanZoomGroupMap) => void
@@ -60,10 +67,13 @@ export function usePanZoomLinkage<TViewId extends string>({
     { immediate: true },
   )
 
+  const computedLinkageModeOptions = computed(() => getLinkageModeOptions())
+  const computedLinkageGroupOptions = computed(() => getLinkageGroupOptions())
+
   return {
     linkageMode,
-    linkageModeOptions,
-    linkageGroupOptions,
+    linkageModeOptions: computedLinkageModeOptions,
+    linkageGroupOptions: computedLinkageGroupOptions,
     applyLinkageMode,
     groupValueFor,
     setViewGroup,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 import {
   NConfigProvider,
   NLayout,
@@ -18,6 +19,10 @@ import {
   NSwitch,
   NButton,
   darkTheme,
+  zhCN,
+  dateZhCN,
+  enUS,
+  dateEnUS,
 } from 'naive-ui'
 import ImageUpload from './components/ImageUpload.vue'
 import ParamPanel from './components/ParamPanel.vue'
@@ -39,6 +44,8 @@ import {
   getSitePublicSecurityRecordUrl,
 } from './runtime/env'
 
+const { t, locale } = useI18n()
+
 const appStore = useAppStore()
 const { activeTab, serverOnline, serverVersion, activeTasks, totalTasks, isDark } =
   storeToRefs(appStore)
@@ -47,6 +54,8 @@ const activeTheme = computed(() => (isDark.value ? darkTheme : null))
 const activeThemeOverrides = computed(() =>
   isDark.value ? darkThemeOverrides : lightThemeOverrides,
 )
+const naiveLocale = computed(() => (locale.value === 'zh-CN' ? zhCN : enUS))
+const naiveDateLocale = computed(() => (locale.value === 'zh-CN' ? dateZhCN : dateEnUS))
 const runtimeLabel = isElectronRuntime() ? 'Electron' : 'Browser'
 const siteIcpNumber = getSiteIcpNumber()
 const siteIcpUrl = getSiteIcpUrl()
@@ -81,10 +90,19 @@ function goToColorDBUpload() {
 function goToConvert() {
   activeTab.value = 'convert'
 }
+
+function toggleLocale() {
+  appStore.setLocale(locale.value === 'zh-CN' ? 'en' : 'zh-CN')
+}
 </script>
 
 <template>
-  <NConfigProvider :theme="activeTheme" :theme-overrides="activeThemeOverrides">
+  <NConfigProvider
+    :theme="activeTheme"
+    :theme-overrides="activeThemeOverrides"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
+  >
     <NMessageProvider>
       <NLayout class="app-shell">
         <NLayoutHeader bordered class="app-shell__header">
@@ -97,17 +115,24 @@ function goToConvert() {
             </NSpace>
             <NSpace align="center" :size="10" class="app-shell__header-status">
               <NText v-if="serverOnline && totalTasks > 0" depth="3" class="app-shell__meta-text">
-                {{ activeTasks > 0 ? `${activeTasks} 个任务进行中` : `${totalTasks} 个历史任务` }}
+                {{
+                  activeTasks > 0
+                    ? t('common.activeTasks', { count: activeTasks })
+                    : t('common.historyTasks', { count: totalTasks })
+                }}
               </NText>
               <NTag size="small" :bordered="false" type="info">
                 {{ runtimeLabel }}
               </NTag>
               <NSpace align="center" :size="6">
-                <NText depth="3" class="app-shell__meta-text">深色</NText>
+                <NText depth="3" class="app-shell__meta-text">{{ t('common.darkMode') }}</NText>
                 <NSwitch v-model:value="isDark" size="small" />
               </NSpace>
+              <NButton size="small" quaternary @click="toggleLocale">
+                {{ locale === 'zh-CN' ? 'EN' : '中' }}
+              </NButton>
               <NTag :type="serverOnline ? 'success' : 'error'" size="small" round>
-                {{ serverOnline ? '服务器在线' : '服务器离线' }}
+                {{ serverOnline ? t('common.serverOnline') : t('common.serverOffline') }}
               </NTag>
             </NSpace>
           </div>
@@ -122,12 +147,12 @@ function goToConvert() {
               animated
               class="top-level-tabs fade-in-up"
             >
-              <NTabPane name="convert" tab="叠色模型生成" display-directive="show">
+              <NTabPane name="convert" :tab="t('app.tabs.convert')" display-directive="show">
                 <NSpace vertical :size="20" class="tab-pane-content">
                   <div class="convert-colordb-entry">
-                    <NText depth="3">需要导入已有 ColorDB JSON？</NText>
+                    <NText depth="3">{{ t('app.convertEntry.hint') }}</NText>
                     <NButton tertiary size="small" @click="goToColorDBUpload">
-                      前往上传 ColorDB
+                      {{ t('app.convertEntry.goUpload') }}
                     </NButton>
                   </div>
                   <NGrid :cols="2" :x-gap="16" :y-gap="16" responsive="screen" item-responsive>
@@ -145,7 +170,7 @@ function goToConvert() {
                 </NSpace>
               </NTabPane>
 
-              <NTabPane name="preprocess" tab="图像预处理工具" display-directive="show">
+              <NTabPane name="preprocess" :tab="t('app.tabs.preprocess')" display-directive="show">
                 <div class="tab-pane-content">
                   <NTabs
                     v-model:value="activePreprocessTab"
@@ -153,7 +178,7 @@ function goToConvert() {
                     animated
                     class="nested-tabs fade-in-up"
                   >
-                    <NTabPane name="vectorize" tab="图像矢量化" display-directive="show">
+                    <NTabPane name="vectorize" :tab="t('app.tabs.vectorize')" display-directive="show">
                       <div class="nested-tab-pane-content">
                         <VectorizePanel />
                       </div>
@@ -161,7 +186,7 @@ function goToConvert() {
                     <NTabPane name="matting" display-directive="show">
                       <template #tab>
                         <NSpace :size="4" align="center">
-                          <span>图像抠图</span>
+                          <span>{{ t('app.tabs.matting') }}</span>
                           <NTag size="tiny" type="warning" :bordered="false">Beta</NTag>
                         </NSpace>
                       </template>
@@ -173,7 +198,7 @@ function goToConvert() {
                 </div>
               </NTabPane>
 
-              <NTabPane name="calibration-tools" tab="校准工具" display-directive="show">
+              <NTabPane name="calibration-tools" :tab="t('app.tabs.calibrationTools')" display-directive="show">
                 <div class="tab-pane-content">
                   <NTabs
                     v-model:value="activeCalibrationTab"
@@ -181,12 +206,12 @@ function goToConvert() {
                     animated
                     class="nested-tabs fade-in-up"
                   >
-                    <NTabPane name="calibration" tab="四色及以下模式" display-directive="show">
+                    <NTabPane name="calibration" :tab="t('app.tabs.calibration')" display-directive="show">
                       <div class="nested-tab-pane-content">
                         <CalibrationPanel @colordb-updated="handleColorDBUpdated" />
                       </div>
                     </NTabPane>
-                    <NTabPane name="calibration-8color" tab="八色模式" display-directive="show">
+                    <NTabPane name="calibration-8color" :tab="t('app.tabs.calibration8color')" display-directive="show">
                       <div class="nested-tab-pane-content">
                         <Calibration8ColorPanel @colordb-updated="handleColorDBUpdated" />
                       </div>
@@ -195,12 +220,12 @@ function goToConvert() {
                 </div>
               </NTabPane>
 
-              <NTabPane name="colordb-upload" tab="上传 ColorDB" display-directive="show">
+              <NTabPane name="colordb-upload" :tab="t('app.tabs.colordbUpload')" display-directive="show">
                 <div class="tab-pane-content">
                   <NSpace vertical :size="20" class="calibration-layout">
                     <ColorDBUploadSection
-                      title="上传已有 ColorDB"
-                      tips="如果你已有可用 ColorDB JSON，可直接上传并在当前会话使用。上传成功后可返回“叠色模型生成”页面选择该数据库。"
+                      :title="t('app.colordbUploadSection.title')"
+                      :tips="t('app.colordbUploadSection.tips')"
                       @colordb-updated="handleColorDBUpdated"
                       @go-convert="goToConvert"
                     />

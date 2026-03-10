@@ -15,6 +15,7 @@ import {
   NTag,
   useMessage,
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../composables/useBlobDownload'
 import { generateBoard, getBoardMetaPath, getBoardModelPath } from '../services/calibrationService'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
@@ -35,6 +36,7 @@ function createChannel(color: string, material: string): EditablePaletteChannel 
   }
 }
 
+const { t } = useI18n()
 const message = useMessage()
 const { downloadByUrl } = useBlobDownload((error) => message.error(error))
 
@@ -65,9 +67,9 @@ const currentStep = computed(() => {
 })
 
 const nextActionHint = computed(() => {
-  if (!boardId.value) return '先确认颜色/材质并生成校准板。'
-  if (!hasReadyColorDB.value) return '打印并拍照后，完成第 3 步（构建 ColorDB）。'
-  return 'ColorDB 已就绪，可切换到“叠色模型生成”页面开始使用。'
+  if (!boardId.value) return t('calibration.fourColor.nextHint.step1')
+  if (!hasReadyColorDB.value) return t('calibration.fourColor.nextHint.step2')
+  return t('calibration.fourColor.nextHint.step3')
 })
 
 function toPaletteRequest(paletteRows: EditablePaletteChannel[]): PaletteChannel[] {
@@ -79,7 +81,7 @@ function toPaletteRequest(paletteRows: EditablePaletteChannel[]): PaletteChannel
 
 function addChannel() {
   if (palette.value.length >= maxChannels) {
-    message.warning(`最多支持 ${maxChannels} 个通道`)
+    message.warning(t('calibration.fourColor.maxChannels', { max: maxChannels }))
     return
   }
   palette.value.push(createChannel('', 'PLA Basic'))
@@ -87,7 +89,7 @@ function addChannel() {
 
 function removeChannel(index: number) {
   if (palette.value.length <= minChannels) {
-    message.warning(`至少需要 ${minChannels} 个通道`)
+    message.warning(t('calibration.fourColor.minChannels', { min: minChannels }))
     return
   }
   palette.value.splice(index, 1)
@@ -96,7 +98,7 @@ function removeChannel(index: number) {
 async function handleGenerate() {
   for (const channel of palette.value) {
     if (!channel.color.trim()) {
-      message.error('请填写所有颜色名称')
+      message.error(t('calibration.fillAllColors'))
       return
     }
   }
@@ -110,9 +112,9 @@ async function handleGenerate() {
       face_orientation: faceOrientation.value,
     })
     boardId.value = response.board_id
-    message.success('校准板生成成功')
+    message.success(t('calibration.generateSuccess'))
   } catch (error: unknown) {
-    message.error(`生成失败: ${error instanceof Error ? error.message : String(error)}`)
+    message.error(t('calibration.generateFailed', { error: error instanceof Error ? error.message : String(error) }))
   } finally {
     generating.value = false
   }
@@ -151,17 +153,17 @@ function handleColorDBUpdated() {
       <template #header>
         <div class="calibration-header">
           <NSpace align="center" :size="8">
-            <span>四色校准流程</span>
-            <NTag size="small" :bordered="false" type="info">4 色</NTag>
+            <span>{{ t('calibration.fourColor.title') }}</span>
+            <NTag size="small" :bordered="false" type="info">{{ t('calibration.fourColor.tag') }}</NTag>
           </NSpace>
-          <p class="calibration-subtitle">当前步骤：第 {{ currentStep }} 步 / 3</p>
+          <p class="calibration-subtitle">{{ t('calibration.currentStep', { step: currentStep }) }}</p>
         </div>
       </template>
 
       <NSteps :current="currentStep" size="small" class="calibration-steps">
-        <NStep title="生成校准板" description="确认颜色与材质，生成 3MF 与 Meta" />
-        <NStep title="打印与拍摄" description="打印校准板并拍摄清晰照片" />
-        <NStep title="构建 ColorDB" description="上传照片和 Meta 生成数据库并自动加入会话" />
+        <NStep :title="t('calibration.fourColor.steps.generate.title')" :description="t('calibration.fourColor.steps.generate.description')" />
+        <NStep :title="t('calibration.fourColor.steps.print.title')" :description="t('calibration.fourColor.steps.print.description')" />
+        <NStep :title="t('calibration.fourColor.steps.build.title')" :description="t('calibration.fourColor.steps.build.description')" />
       </NSteps>
 
       <NAlert type="info" :bordered="false" class="calibration-step-alert">
@@ -169,13 +171,13 @@ function handleColorDBUpdated() {
       </NAlert>
     </NCard>
 
-    <NCard title="步骤 1：生成校准板" class="calibration-card">
+    <NCard :title="t('calibration.fourColor.step1Title')" class="calibration-card">
       <template #header-extra>
-        <NButton size="tiny" quaternary :disabled="generating" @click="handleResetCalibrationParams"> 重置 </NButton>
+        <NButton size="tiny" quaternary :disabled="generating" @click="handleResetCalibrationParams">{{ t('common.reset') }}</NButton>
       </template>
       <NSpace vertical :size="12">
         <div class="calibration-preset-row">
-          <span class="calibration-preset-label">喷嘴尺寸</span>
+          <span class="calibration-preset-label">{{ t('calibration.nozzleSize') }}</span>
           <NRadioGroup v-model:value="nozzleSize" size="small">
             <NRadioButton value="n04">0.4mm</NRadioButton>
             <NRadioButton value="n02">0.2mm</NRadioButton>
@@ -183,10 +185,10 @@ function handleColorDBUpdated() {
         </div>
 
         <div class="calibration-preset-row">
-          <span class="calibration-preset-label">观赏面朝向</span>
+          <span class="calibration-preset-label">{{ t('calibration.faceDirection') }}</span>
           <NRadioGroup v-model:value="faceOrientation" size="small">
-            <NRadioButton value="faceup">观赏面朝上</NRadioButton>
-            <NRadioButton value="facedown">观赏面朝下</NRadioButton>
+            <NRadioButton value="faceup">{{ t('calibration.faceUp') }}</NRadioButton>
+            <NRadioButton value="facedown">{{ t('calibration.faceDown') }}</NRadioButton>
           </NRadioGroup>
         </div>
 
@@ -196,20 +198,20 @@ function handleColorDBUpdated() {
           <NTag :bordered="false" type="info" size="small">{{ index + 1 }}</NTag>
           <NInput
             v-model:value="channel.color"
-            placeholder="颜色名称（例如 White）"
+            :placeholder="t('calibration.colorPlaceholder')"
             class="calibration-palette-input"
           />
           <NInput
             v-model:value="channel.material"
-            placeholder="材质（例如 PLA Basic）"
+            :placeholder="t('calibration.materialPlaceholder')"
             class="calibration-palette-input"
           />
-          <NButton size="small" quaternary type="error" @click="removeChannel(index)">删除</NButton>
+          <NButton size="small" quaternary type="error" @click="removeChannel(index)">{{ t('common.delete') }}</NButton>
         </div>
 
         <div class="calibration-inline-actions">
           <NButton size="small" :disabled="palette.length >= maxChannels" @click="addChannel">
-            添加通道
+            {{ t('calibration.fourColor.addChannel') }}
           </NButton>
         </div>
 
@@ -217,25 +219,25 @@ function handleColorDBUpdated() {
 
         <div class="calibration-actions">
           <NButton type="primary" :loading="generating" @click="handleGenerate">
-            生成校准板
+            {{ t('calibration.generateBoard') }}
           </NButton>
-          <NTag v-if="boardId" type="success" :bordered="false" size="small">校准板已生成</NTag>
+          <NTag v-if="boardId" type="success" :bordered="false" size="small">{{ t('calibration.boardGenerated') }}</NTag>
         </div>
 
         <div v-if="boardId" class="calibration-actions">
-          <NButton type="success" @click="download3mf">下载 3MF 模型</NButton>
-          <NButton type="info" @click="downloadMeta">下载 Meta JSON</NButton>
+          <NButton type="success" @click="download3mf">{{ t('calibration.download3mf') }}</NButton>
+          <NButton type="info" @click="downloadMeta">{{ t('calibration.downloadMeta') }}</NButton>
         </div>
       </NSpace>
     </NCard>
 
-    <NCard title="步骤 2：打印与拍摄" class="calibration-card">
+    <NCard :title="t('calibration.fourColor.step2Title')" class="calibration-card">
       <NSpace vertical :size="14">
-        <NAlert type="warning" title="注意" :bordered="false">
-          上传的 Meta 文件必须与拍摄照片来自同一块校准板，不匹配会导致构建结果错误。
+        <NAlert type="warning" :title="t('calibration.fourColor.notice')" :bordered="false">
+          {{ t('calibration.fourColor.noticeText') }}
         </NAlert>
 
-        <NDivider>示例：已打印校准板照片</NDivider>
+        <NDivider>{{ t('calibration.fourColor.exampleTitle') }}</NDivider>
         <div class="calibration-image-wrap">
           <NImage
             src="/examples/RYBW_new.jpg"
@@ -243,19 +245,19 @@ function handleColorDBUpdated() {
             :img-props="{
               style: 'max-width: 100%; max-height: 380px; object-fit: contain; cursor: zoom-in;',
             }"
-            alt="四色校准板照片示例"
+            :alt="t('calibration.fourColor.exampleAlt')"
           />
           <p class="calibration-image-caption">
-            示例为 Red/Yellow/Blue/White 四色校准板照片，请尽量保持均匀光照和清晰边界。
+            {{ t('calibration.fourColor.exampleDesc') }}
           </p>
         </div>
       </NSpace>
     </NCard>
 
     <ColorDBBuildSection
-      title="步骤 3：构建 ColorDB"
-      tips="上传照片和匹配的 Meta 文件后，系统会自动构建并添加到当前会话。"
-      build-button-text="构建并添加 ColorDB"
+      :title="t('calibration.fourColor.step3Title')"
+      :tips="t('calibration.fourColor.step3Tips')"
+      :build-button-text="t('calibration.fourColor.step3BuildButton')"
       @colordb-updated="handleColorDBUpdated"
     />
   </NSpace>

@@ -1,10 +1,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import type { SelectOption } from 'naive-ui'
 import { createInitialConvertParams } from '../domain/params/convertDefaults'
 import { formatFloat, roundTo } from '../runtime/number'
 import { useAppStore } from '../stores/app'
-import { PIXEL_SIZE_PRESETS, type ColorDBInfo, type ConvertAnyParams, type DefaultConfig, type PaletteChannel } from '../types'
+import { getPixelSizePresets, type ColorDBInfo, type ConvertAnyParams, type DefaultConfig, type PaletteChannel } from '../types'
 import { fetchAvailableColorDBs, fetchParamPanelBootstrap } from '../services/paramService'
 
 interface ChannelOption {
@@ -19,98 +20,85 @@ interface ChannelPreset {
   colors: string[] | null
 }
 
-const CHANNEL_PRESETS: ChannelPreset[] = [
-  { label: '全部', value: 'all', colors: null },
-  { label: 'RYBW', value: 'rybw', colors: ['Red', 'Yellow', 'Blue', 'White'] },
-  { label: 'CMYW', value: 'cmyw', colors: ['Cyan', 'Magenta', 'Yellow', 'White'] },
-]
-
 const colorSpaceOptions: SelectOption[] = [
   { label: 'Lab', value: 'lab' },
   { label: 'RGB', value: 'rgb' },
 ]
 
-const ditherOptions: SelectOption[] = [
-  { label: '关闭', value: 'none' },
-  { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
-]
-
-const clusterMethodOptions: SelectOption[] = [
-  { label: 'SLIC 超像素', value: 'slic' },
-  { label: 'K-Means 聚类', value: 'kmeans' },
-]
-
-const gradientDitherOptions: SelectOption[] = [
-  { label: '关闭', value: 'none' },
-  { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
-]
-
-const tooltips = {
-  print_mode:
-    '决定色层数和层高。0.08mm x 5 层: 层高 0.08mm，5 层叠色；0.04mm x 10 层: 层高 0.04mm，10 层叠色。两者总叠色厚度相同 (0.4mm)',
-  color_space: '颜色匹配时使用的色彩空间。Lab 更符合人眼感知（推荐）；RGB 为直接 RGB 距离计算',
-  max_width: '图像缩放后的最大宽度（像素），超出时等比缩小。值越小处理越快，输出模型越小',
-  max_height: '图像缩放后的最大高度（像素），超出时等比缩小。值越小处理越快，输出模型越小',
-  target_width_mm: '输出 3MF 模型的目标物理宽度（毫米），图像将被缩放以适应此尺寸',
-  target_height_mm: '输出 3MF 模型的目标物理高度（毫米），图像将被缩放以适应此尺寸',
-  pixel_mm_simple:
-    '每个像素对应的物理线宽（毫米），由打印机喷嘴尺寸决定。0.4mm 喷嘴推荐 0.42mm，0.2mm 喷嘴推荐 0.22mm',
-  cluster_method: '非抖动匹配时的聚类算法。SLIC 以空间连续性优先，边缘通常更稳定；K-Means 仅按颜色聚类',
-  cluster_count:
-    'K-Means 聚类数。值越大颜色越精细，0 或 1 表示不聚类（逐像素匹配）',
-  slic_target_superpixels:
-    'SLIC 目标超像素数量。值越大区域越细，边缘保留更好，但计算耗时更高',
-  slic_compactness:
-    'SLIC 紧凑度，控制颜色相似与空间规则性的权衡。值越小更贴合颜色边界，值越大区域更规整',
-  slic_iterations: 'SLIC 迭代次数。更高可提升稳定性，但会增加耗时',
-  slic_min_region_ratio:
-    'SLIC 小区域并入比例（相对单个超像素期望面积）。增大可减少碎片区域，过大可能吞并细节',
-  dither:
-    '半色调抖动通过在相邻像素间交替使用不同配方来模拟更丰富的颜色过渡。选择 SLIC 时该选项会自动关闭',
-  dither_strength:
-    '抖动强度，控制颜色偏移幅度。值越大抖动效果越明显，但过高可能产生颗粒感。推荐 0.6-0.9',
-  db_names: '用于颜色匹配的 ColorDB，支持多选。匹配时会在所有选中的数据库中寻找最佳配方',
-  allowed_channels: '选择参与配方生成的颜色通道。未选中的通道将被排除，默认使用全部通道',
-  scale: '在最大宽高限制之前先对图像进行等比缩放，1.0 表示不缩放',
-  k_candidates: '颜色匹配时从 KD-Tree 中取 K 个最近邻候选，再从中选择最优。值越大匹配越精确但越慢',
-  flip_y: '构建 3D 模型时翻转 Y 轴方向，开启时图像顶部对应模型顶部',
-  pixel_mm: '每个像素对应的实际尺寸（毫米），决定输出模型的物理大小。0 表示自动从 ColorDB 配置推导',
-  layer_height_mm: '3D 打印的层高（毫米），决定模型 Z 方向分辨率。0 表示自动从打印模式推导',
-  base_layers:
-    '底板层数。留空表示沿用数据库默认；设置为 0 表示不生成底板；大于 0 将显式覆盖默认底板层数',
-  double_sided: '双面生成。开启后会在底板两侧生成镜像颜色层，形成双面可视结构',
-  transparent_layer_mm:
-    '透明镀层厚度。仅在观赏面朝下时可用，在颜色层最下方打印一层透明材料以获得透亮效果',
-  model_enable:
-    '是否启用神经网络模型辅助匹配。开启后，当 ColorDB 匹配质量不佳时会尝试用模型预测更优配方',
-  model_only: '跳过 ColorDB 匹配，完全使用模型预测配方。需要加载模型包',
-  model_threshold:
-    '色差 (DeltaE) 阈值，仅当 ColorDB 匹配色差超过此值时才启用模型。负值使用模型包默认值',
-  model_margin: '模型结果需优于 ColorDB 结果至少此色差值才会被采用。负值使用模型包默认值',
-  generate_preview: '生成匹配后的颜色预览图（PNG），展示每个像素最终匹配到的颜色',
-  generate_source_mask:
-    '生成来源掩码图（PNG），白色像素表示使用了模型预测的配方，黑色表示使用了 ColorDB 匹配',
-  tessellation_tolerance_mm:
-    '矢量曲线三角化时的容差（毫米），值越小曲线越平滑但网格越多。默认 0.03，推荐 0.03-0.12',
-  gradient_dither: '对 SVG 渐变区域进行抖动处理，改善渐变在有限调色板下的过渡效果',
-  gradient_dither_strength: '渐变区域的抖动强度。值越大渐变过渡越平滑，但可能产生颗粒感',
-} as const
-
 function channelKey(ch: PaletteChannel): string {
   return `${ch.color}|${ch.material}`
 }
 
-function buildDBOptions(dbs: ColorDBInfo[]): SelectOption[] {
-  return dbs.map((db) => {
-    const suffix = db.source === 'session' ? ' (自定义)' : ''
-    return {
-      label: `${db.name} (${db.num_entries} 色, ${db.num_channels} 通道)${suffix}`,
-      value: db.name,
-    }
-  })
-}
-
 export function useParamPanelState() {
+  const { t } = useI18n()
+
+  const channelPresets: ChannelPreset[] = [
+    { label: t('common.all'), value: 'all', colors: null },
+    { label: 'RYBW', value: 'rybw', colors: ['Red', 'Yellow', 'Blue', 'White'] },
+    { label: 'CMYW', value: 'cmyw', colors: ['Cyan', 'Magenta', 'Yellow', 'White'] },
+  ]
+
+  const ditherOpts: SelectOption[] = [
+    { label: t('param.off'), value: 'none' },
+    { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
+  ]
+
+  const clusterMethodOpts: SelectOption[] = [
+    { label: t('param.options.slic'), value: 'slic' },
+    { label: t('param.options.kmeans'), value: 'kmeans' },
+  ]
+
+  const gradientDitherOpts: SelectOption[] = [
+    { label: t('param.off'), value: 'none' },
+    { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
+  ]
+
+  const translatedTooltips = {
+    print_mode: t('param.tooltips.print_mode'),
+    color_space: t('param.tooltips.color_space'),
+    max_width: t('param.tooltips.max_width'),
+    max_height: t('param.tooltips.max_height'),
+    target_width_mm: t('param.tooltips.target_width_mm'),
+    target_height_mm: t('param.tooltips.target_height_mm'),
+    pixel_mm_simple: t('param.tooltips.pixel_mm_simple'),
+    cluster_method: t('param.tooltips.cluster_method'),
+    cluster_count: t('param.tooltips.cluster_count'),
+    slic_target_superpixels: t('param.tooltips.slic_target_superpixels'),
+    slic_compactness: t('param.tooltips.slic_compactness'),
+    slic_iterations: t('param.tooltips.slic_iterations'),
+    slic_min_region_ratio: t('param.tooltips.slic_min_region_ratio'),
+    dither: t('param.tooltips.dither'),
+    dither_strength: t('param.tooltips.dither_strength'),
+    db_names: t('param.tooltips.db_names'),
+    allowed_channels: t('param.tooltips.allowed_channels'),
+    scale: t('param.tooltips.scale'),
+    k_candidates: t('param.tooltips.k_candidates'),
+    flip_y: t('param.tooltips.flip_y'),
+    pixel_mm: t('param.tooltips.pixel_mm'),
+    layer_height_mm: t('param.tooltips.layer_height_mm'),
+    base_layers: t('param.tooltips.base_layers'),
+    double_sided: t('param.tooltips.double_sided'),
+    transparent_layer_mm: t('param.tooltips.transparent_layer_mm'),
+    model_enable: t('param.tooltips.model_enable'),
+    model_only: t('param.tooltips.model_only'),
+    model_threshold: t('param.tooltips.model_threshold'),
+    model_margin: t('param.tooltips.model_margin'),
+    generate_preview: t('param.tooltips.generate_preview'),
+    generate_source_mask: t('param.tooltips.generate_source_mask'),
+    tessellation_tolerance_mm: t('param.tooltips.tessellation_tolerance_mm'),
+    gradient_dither: t('param.tooltips.gradient_dither'),
+    gradient_dither_strength: t('param.tooltips.gradient_dither_strength'),
+  }
+
+  function buildDBOptions(dbs: ColorDBInfo[]): SelectOption[] {
+    return dbs.map((db) => {
+      const suffix = db.source === 'session' ? t('param.sessionSuffix') : ''
+      return {
+        label: t('param.dbOptionLabel', { name: db.name, entries: db.num_entries, channels: db.num_channels }) + suffix,
+        value: db.name,
+      }
+    })
+  }
   const appStore = useAppStore()
   const { params: modelValue, inputType, imageDimensions, colordbVersion } = storeToRefs(appStore)
 
@@ -142,17 +130,19 @@ export function useParamPanelState() {
   const supportsModelGate = computed(() => isRaster.value || isVector.value)
 
   const effectivePixelMm = computed(() => {
-    const preset = PIXEL_SIZE_PRESETS[selectedPixelPresetIndex.value]
+    const presets = getPixelSizePresets(t)
+    const preset = presets[selectedPixelPresetIndex.value]
     return preset && preset.value > 0 ? preset.value : customPixelMm.value
   })
 
   const isCustomPixel = computed(() => {
-    const preset = PIXEL_SIZE_PRESETS[selectedPixelPresetIndex.value]
+    const presets = getPixelSizePresets(t)
+    const preset = presets[selectedPixelPresetIndex.value]
     return !preset || preset.value === 0
   })
 
   const pixelPresetOptions = computed<SelectOption[]>(() =>
-    PIXEL_SIZE_PRESETS.map((preset, index) => ({
+    getPixelSizePresets(t).map((preset, index) => ({
       label: preset.label,
       value: index,
     })),
@@ -330,7 +320,7 @@ export function useParamPanelState() {
 
   const applicablePresets = computed(() => {
     const availableColors = new Set(availableChannels.value.map((channel) => channel.color))
-    return CHANNEL_PRESETS.filter((preset) => {
+    return channelPresets.filter((preset) => {
       if (!preset.colors) return true
       return preset.colors.every((color) => availableColors.has(color))
     })
@@ -343,7 +333,7 @@ export function useParamPanelState() {
         .filter((channel) => selectedChannelKeys.value.includes(channel.key))
         .map((channel) => channel.color),
     )
-    for (const preset of CHANNEL_PRESETS) {
+    for (const preset of channelPresets) {
       if (!preset.colors) continue
       if (
         preset.colors.length === selectedColors.size &&
@@ -459,7 +449,7 @@ export function useParamPanelState() {
   }
 
   function applyChannelPreset(value: string) {
-    const preset = CHANNEL_PRESETS.find((item) => item.value === value)
+    const preset = channelPresets.find((item) => item.value === value)
     if (!preset) return
     if (!preset.colors) {
       selectedChannelKeys.value = availableChannels.value.map((channel) => channel.key)
@@ -635,7 +625,7 @@ export function useParamPanelState() {
         }),
       )
     } catch (nextError: unknown) {
-      error.value = nextError instanceof Error ? nextError.message : '加载配置失败'
+      error.value = nextError instanceof Error ? nextError.message : t('param.loadConfigFailed')
     } finally {
       loading.value = false
     }
@@ -647,16 +637,16 @@ export function useParamPanelState() {
     availableChannels,
     clusterCountUpperBound,
     clusterCountValue,
-    clusterMethodOptions,
+    clusterMethodOptions: clusterMethodOpts,
     clusterMethodValue,
     colorSpaceOptions,
     customPixelMm,
-    ditherOptions,
+    ditherOptions: ditherOpts,
     error,
     filteredDBOptions,
     formatTooltip1Decimal,
     formatTooltip2Decimals,
-    gradientDitherOptions,
+    gradientDitherOptions: gradientDitherOpts,
     handleChannelKeysChange,
     imageDimensions,
     inlineLabelWidth,
@@ -696,7 +686,7 @@ export function useParamPanelState() {
     targetDimensionUpperBound,
     targetHeightMm,
     targetWidthMm,
-    tooltips,
+    tooltips: translatedTooltips,
     roundTo,
     update,
     useSlicCluster,

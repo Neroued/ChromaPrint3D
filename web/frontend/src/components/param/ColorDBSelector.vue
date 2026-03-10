@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { NAlert, NFormItem, NSelect, NTooltip } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   material: string
@@ -23,7 +26,7 @@ const emit = defineEmits<{
 <template>
   <div class="selector-inline-row">
     <NFormItem
-      label="材质类型"
+      :label="t('colordb.materialType')"
       class="selector-inline-item"
       label-placement="left"
       :label-width="96"
@@ -36,7 +39,7 @@ const emit = defineEmits<{
       />
     </NFormItem>
 
-    <NFormItem label="厂商" class="selector-inline-item" label-placement="left" :label-width="96">
+    <NFormItem :label="t('colordb.vendor')" class="selector-inline-item" label-placement="left" :label-width="96">
       <NSelect
         size="small"
         :value="props.vendor"
@@ -50,7 +53,7 @@ const emit = defineEmits<{
     <template #label>
       <NTooltip>
         <template #trigger>
-          <span class="tip-label">颜色数据库</span>
+          <span class="tip-label">{{ t('colordb.database') }}</span>
         </template>
         {{ props.dbTooltip }}
       </NTooltip>
@@ -61,7 +64,7 @@ const emit = defineEmits<{
       :options="props.dbOptions"
       multiple
       :max-tag-count="1"
-      placeholder="选择颜色数据库"
+      :placeholder="t('colordb.selectDatabase')"
       @update:value="(v: string[]) => emit('update:dbNames', v)"
     />
   </NFormItem>
@@ -72,11 +75,9 @@ const emit = defineEmits<{
     :bordered="false"
     style="margin-bottom: 12px; font-size: 12px"
   >
-    当前预设来自
-    <a href="https://github.com/MOVIBALE/Lumina-Layers" target="_blank" rel="noopener"
-      >Lumina-Layers</a
-    >
-    开源项目
+    {{ t('colordb.presetFrom') }}
+    <a href="https://github.com/MOVIBALE/Lumina-Layers" target="_blank" rel="noopener">Lumina-Layers</a>
+    {{ t('colordb.openSource') }}
   </NAlert>
 </template>
 

@@ -28,6 +28,7 @@ export function useAppLifecycle() {
 
   onMounted(async () => {
     await appStore.initTheme()
+    await appStore.initLocale()
     applyDocumentTheme(appStore.isDark)
     await window.electron?.theme?.setWindowBackground?.(appStore.isDark)
     await appStore.checkHealth()

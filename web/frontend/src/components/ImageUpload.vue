@@ -15,6 +15,9 @@ import {
   validateImageUploadFile,
 } from '../domain/upload/imageUploadValidation'
 import { getUploadMaxMb, getUploadMaxPixels } from '../runtime/env'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   disabled?: boolean
@@ -37,7 +40,7 @@ function isSvgFile(file: File): boolean {
 }
 
 const backendMaxUploadMb = getUploadMaxMb()
-const maxPixelText = getUploadMaxPixels().toLocaleString('zh-CN')
+const maxPixelText = getUploadMaxPixels().toLocaleString()
 
 const fileInfo = computed(() => {
   const file = selectedFile.value
@@ -128,7 +131,7 @@ watch(
 </script>
 
 <template>
-  <NCard title="输入文件" size="small">
+  <NCard :title="t('imageUpload.title')" size="small">
     <NUpload
       v-if="!selectedFile"
       :accept="CONVERT_IMAGE_ACCEPT"
@@ -146,10 +149,10 @@ watch(
     >
       <NUploadDragger>
         <NSpace vertical align="center" justify="center" style="padding: 32px 16px">
-          <NText depth="3" style="font-size: 14px"> 点击或拖拽文件到此处上传 </NText>
-          <NText depth="3" style="font-size: 12px"> 支持 {{ CONVERT_IMAGE_FORMATS_TEXT }} 格式 </NText>
+          <NText depth="3" style="font-size: 14px"> {{ t('imageUpload.dropHint') }} </NText>
+          <NText depth="3" style="font-size: 12px"> {{ t('imageUpload.formatHint', { formats: CONVERT_IMAGE_FORMATS_TEXT }) }} </NText>
           <NText depth="3" style="font-size: 11px">
-            文件最大 {{ backendMaxUploadMb }}MB，位图最大 {{ maxPixelText }} 像素
+            {{ t('imageUpload.sizeHint', { maxMb: backendMaxUploadMb, maxPixels: maxPixelText }) }}
           </NText>
         </NSpace>
       </NUploadDragger>
@@ -169,18 +172,18 @@ watch(
             :type="detectedType === 'vector' ? 'success' : 'info'"
             :bordered="false"
           >
-            {{ detectedType === 'vector' ? '矢量图' : '位图' }}
+            {{ detectedType === 'vector' ? t('imageUpload.vectorType') : t('imageUpload.rasterType') }}
           </NTag>
         </NSpace>
         <NSpace :size="4" align="center">
-          <NButton size="tiny" quaternary @click="previewPanZoom.resetView"> 重置视图 </NButton>
+          <NButton size="tiny" quaternary @click="previewPanZoom.resetView"> {{ t('imageUpload.resetView') }} </NButton>
           <NButton size="tiny" quaternary type="error" :disabled="disabled" @click="clearFile">
-            移除文件
+            {{ t('imageUpload.removeFile') }}
           </NButton>
         </NSpace>
       </div>
       <NText depth="3" style="font-size: 11px; display: block; margin-bottom: 4px">
-        滚轮缩放，拖拽移动
+        {{ t('imageUpload.zoomHint') }}
       </NText>
       <ZoomableImageViewport
         :src="previewUrl ?? undefined"

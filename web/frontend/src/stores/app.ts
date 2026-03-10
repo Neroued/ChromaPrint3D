@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { fetchHealth } from '../api/health'
 import { getStorageItem, setStorageItem } from '../runtime/storage'
 import { detectSystemDarkMode } from '../runtime/theme'
+import i18n from '../locales'
+import { LOCALE_STORAGE_KEY, type SupportedLocale } from '../locales'
 import type { ConvertAnyParams, ImageDimensions, InputType, TaskStatus } from '../types'
 
 export const THEME_STORAGE_KEY = 'chromaprint3d-theme'
@@ -89,6 +91,18 @@ export const useAppStore = defineStore('app', () => {
     await setStorageItem(THEME_STORAGE_KEY, dark ? 'dark' : 'light')
   }
 
+  async function initLocale() {
+    const stored = await getStorageItem(LOCALE_STORAGE_KEY)
+    if (stored === 'zh-CN' || stored === 'en') {
+      i18n.global.locale.value = stored as SupportedLocale
+    }
+  }
+
+  async function setLocale(loc: SupportedLocale) {
+    i18n.global.locale.value = loc
+    await setStorageItem(LOCALE_STORAGE_KEY, loc)
+  }
+
   return {
     selectedFile,
     imageDimensions,
@@ -114,5 +128,7 @@ export const useAppStore = defineStore('app', () => {
     checkHealth,
     initTheme,
     persistTheme,
+    initLocale,
+    setLocale,
   }
 })

@@ -17,10 +17,13 @@ import {
   NUpload,
   useMessage,
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useColorDBUploadFlow } from '../../composables/useColorDBUploadFlow'
 import { fetchSessionColorDBs, deleteSessionColorDB } from '../../api/session'
 import { roundTo } from '../../runtime/number'
 import type { ColorDBInfo } from '../../types'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -28,8 +31,8 @@ const props = withDefaults(
     tips?: string
   }>(),
   {
-    title: '上传 ColorDB',
-    tips: '如果你已经有 ColorDB JSON 文件（之前构建并下载），可以直接上传使用，无需重新构建。支持同时选择多个文件批量上传。',
+    title: '',
+    tips: '',
   },
 )
 
@@ -87,11 +90,11 @@ async function handleDelete(name: string) {
   deletingName.value = name
   try {
     await deleteSessionColorDB(name)
-    message.success(`已删除 "${name}"`)
+    message.success(t('colordb.upload.messages.deleted', { name }))
     emit('colordb-updated')
     await loadSessionDbs()
   } catch (err: unknown) {
-    message.error(`删除失败: ${err instanceof Error ? err.message : String(err)}`)
+    message.error(t('colordb.upload.messages.deleteFailed', { error: err instanceof Error ? err.message : String(err) }))
   } finally {
     deletingName.value = null
   }
@@ -113,9 +116,9 @@ async function handleBatchDelete() {
   }
   if (ok > 0) emit('colordb-updated')
   if (fail === 0) {
-    message.success(`已删除 ${ok} 个 ColorDB`)
+    message.success(t('colordb.upload.messages.batchDeleted', { count: ok }))
   } else {
-    message.warning(`删除 ${ok} 个成功，${fail} 个失败`)
+    message.warning(t('colordb.upload.messages.batchDeletePartial', { ok, fail }))
   }
   batchDeleting.value = false
   await loadSessionDbs()
@@ -143,12 +146,12 @@ const {
       if (ok.length === 1) {
         const firstOk = ok[0]
         const displayName = firstOk?.dbName ?? firstOk?.fileName ?? 'ColorDB'
-        message.success(`ColorDB "${displayName}" 上传成功`)
+        message.success(t('colordb.upload.messages.uploadSuccess', { name: displayName }))
       } else {
-        message.success(`${ok.length} 个 ColorDB 全部上传成功`)
+        message.success(t('colordb.upload.messages.batchUploadSuccess', { count: ok.length }))
       }
     } else if (ok.length > 0 && fail.length > 0) {
-      message.warning(`${ok.length} 个成功，${fail.length} 个失败`)
+      message.warning(t('colordb.upload.messages.batchUploadPartial', { ok: ok.length, fail: fail.length }))
     }
     loadSessionDbs()
   },
@@ -157,7 +160,7 @@ const {
 async function handleUploadAndNotify() {
   const result = await handleUpload()
   if (!result && uploadError.value) {
-    message.error(`上传失败: ${uploadError.value}`)
+    message.error(t('colordb.upload.messages.uploadFailed', { error: uploadError.value }))
     return
   }
   if (result && result.length > 0) {
@@ -171,14 +174,14 @@ function handleGoToConvert() {
 </script>
 
 <template>
-  <NCard :title="props.title" class="calibration-card">
+  <NCard :title="props.title || t('colordb.upload.defaultTitle')" class="calibration-card">
     <NSpace vertical :size="16">
       <NAlert type="info" :bordered="false">
-        {{ props.tips }}
+        {{ props.tips || t('colordb.upload.defaultTips') }}
       </NAlert>
 
       <NForm label-placement="top" class="calibration-form-block">
-        <NFormItem label="选择 ColorDB JSON 文件">
+        <NFormItem :label="t('colordb.upload.selectLabel')">
           <NUpload
             v-model:file-list="fileList"
             accept=".json"
@@ -187,13 +190,13 @@ function handleGoToConvert() {
             list-type="text"
             @change="handleUploadFileChange"
           >
-            <NButton>选择文件</NButton>
+            <NButton>{{ t('colordb.upload.selectButton') }}</NButton>
           </NUpload>
         </NFormItem>
       </NForm>
 
       <NAlert v-if="isBatch" type="info" :bordered="false">
-        已选择 {{ fileList.length }} 个文件，将使用各文件内部名称批量上传。
+        {{ t('colordb.upload.selectedCount', { count: fileList.length }) }}
       </NAlert>
 
       <div class="calibration-actions">
@@ -203,14 +206,14 @@ function handleGoToConvert() {
           :disabled="!canUpload"
           @click="handleUploadAndNotify"
         >
-          {{ isBatch ? `上传全部（${fileList.length} 个）` : '上传 ColorDB' }}
+          {{ isBatch ? t('colordb.upload.uploadAll', { count: fileList.length }) : t('colordb.upload.uploadSingle') }}
         </NButton>
         <NButton v-if="uploadCompleted" type="success" secondary @click="handleGoToConvert">
-          前往叠色模型生成
+          {{ t('colordb.upload.goConvert') }}
         </NButton>
       </div>
 
-      <NAlert v-if="uploadError" type="error" title="上传失败" class="calibration-error-alert">
+      <NAlert v-if="uploadError" type="error" :title="t('colordb.upload.failedTitle')" class="calibration-error-alert">
         {{ uploadError }}
       </NAlert>
 
@@ -219,7 +222,7 @@ function handleGoToConvert() {
           <NListItem v-for="(r, i) in batchResults" :key="i">
             <NSpace align="center" :size="8">
               <NTag :type="r.success ? 'success' : 'error'" size="small" :bordered="false">
-                {{ r.success ? '成功' : '失败' }}
+                {{ r.success ? t('common.success') : t('common.failure') }}
               </NTag>
               <NText>{{ r.fileName }}</NText>
               <NText v-if="r.success && r.dbName" depth="3" style="font-size: 12px">
@@ -235,13 +238,13 @@ function handleGoToConvert() {
     </NSpace>
   </NCard>
 
-  <NCard title="已上传的 ColorDB" class="calibration-card session-db-card">
+  <NCard :title="t('colordb.upload.listTitle')" class="calibration-card session-db-card">
     <NSpace vertical :size="12">
       <NText depth="3" style="font-size: 13px">
-        以下是当前会话中已上传的自定义 ColorDB，关闭浏览器或会话过期后将自动清除。
+        {{ t('colordb.upload.listHint') }}
       </NText>
 
-      <NEmpty v-if="!loadingDbs && sessionDbs.length === 0" description="暂无已上传的 ColorDB" />
+      <NEmpty v-if="!loadingDbs && sessionDbs.length === 0" :description="t('colordb.upload.emptyHint')" />
 
       <template v-else>
         <div v-if="sessionDbs.length > 1" class="session-db-toolbar">
@@ -250,20 +253,20 @@ function handleGoToConvert() {
             :indeterminate="someSelected"
             @update:checked="toggleSelectAll"
           >
-            全选
+            {{ t('colordb.upload.selectAll') }}
           </NCheckbox>
           <NPopconfirm
             v-if="selectedNames.size > 0"
-            positive-text="确认删除"
-            negative-text="取消"
+            :positive-text="t('common.confirm')"
+            :negative-text="t('common.cancel')"
             @positive-click="handleBatchDelete"
           >
             <template #trigger>
               <NButton size="small" type="error" secondary :loading="batchDeleting">
-                删除选中（{{ selectedNames.size }}）
+                {{ t('colordb.upload.deleteSelected', { count: selectedNames.size }) }}
               </NButton>
             </template>
-            确定要删除选中的 {{ selectedNames.size }} 个 ColorDB 吗？删除后无法恢复。
+            {{ t('colordb.upload.deleteConfirm', { count: selectedNames.size }) }}
           </NPopconfirm>
         </div>
 
@@ -275,21 +278,21 @@ function handleGoToConvert() {
                   :checked="selectedNames.has(db.name)"
                   @update:checked="(v: boolean) => toggleSelect(db.name, v)"
                 />
-                <NTag size="small" type="info" :bordered="false">{{ db.num_entries }} 条</NTag>
+                <NTag size="small" type="info" :bordered="false">{{ db.num_entries }} {{ t('colordb.upload.entries') }}</NTag>
               </NSpace>
             </template>
             <NSpace vertical :size="2">
               <NText strong>{{ db.name }}</NText>
               <NText depth="3" style="font-size: 12px">
-                {{ db.num_channels }} 通道 · {{ db.max_color_layers }} 色层 ·
-                {{ roundTo(db.layer_height_mm, 3) }}mm 层高 ·
-                {{ roundTo(db.line_width_mm, 3) }}mm 线宽
+                {{ db.num_channels }} {{ t('colordb.upload.channels') }} · {{ db.max_color_layers }} {{ t('colordb.upload.colors') }} ·
+                {{ roundTo(db.layer_height_mm, 3) }}mm {{ t('colordb.upload.layerHeight') }} ·
+                {{ roundTo(db.line_width_mm, 3) }}mm {{ t('colordb.upload.lineWidth') }}
               </NText>
             </NSpace>
             <template #suffix>
               <NPopconfirm
-                positive-text="确认删除"
-                negative-text="取消"
+                :positive-text="t('common.confirm')"
+                :negative-text="t('common.cancel')"
                 @positive-click="handleDelete(db.name)"
               >
                 <template #trigger>
@@ -299,10 +302,10 @@ function handleGoToConvert() {
                     quaternary
                     :loading="deletingName === db.name"
                   >
-                    删除
+                    {{ t('common.delete') }}
                   </NButton>
                 </template>
-                确定要删除 "{{ db.name }}" 吗？删除后无法恢复。
+                {{ t('colordb.upload.deleteItemConfirm', { name: db.name }) }}
               </NPopconfirm>
             </template>
           </NListItem>
@@ -310,7 +313,7 @@ function handleGoToConvert() {
       </template>
 
       <NButton size="small" quaternary :loading="loadingDbs" @click="loadSessionDbs">
-        刷新列表
+        {{ t('colordb.upload.refreshList') }}
       </NButton>
     </NSpace>
   </NCard>

@@ -14,6 +14,7 @@ import {
   NTag,
   useMessage,
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../composables/useBlobDownload'
 import { generate8ColorBoard, getBoardMetaPath, getBoardModelPath } from '../services/calibrationService'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
@@ -45,6 +46,7 @@ const DEFAULT_8_COLORS: EditablePaletteChannel[] = [
   createChannel('Yellow', 'PLA Basic'),
 ]
 
+const { t } = useI18n()
 const message = useMessage()
 const { downloadByUrl } = useBlobDownload((error) => message.error(error))
 
@@ -69,9 +71,9 @@ const currentStep = computed(() => {
 })
 
 const nextActionHint = computed(() => {
-  if (!board1Id.value) return '建议先生成并打印校准板 1。'
-  if (!hasReadyColorDB.value) return '上传与板号匹配的照片 + Meta 文件，构建一个或两个 ColorDB。'
-  return 'ColorDB 已就绪，可到“叠色模型生成”页面组合使用。'
+  if (!board1Id.value) return t('calibration.eightColor.nextHint.step1')
+  if (!hasReadyColorDB.value) return t('calibration.eightColor.nextHint.step2')
+  return t('calibration.eightColor.nextHint.step3')
 })
 
 function toPaletteRequest(paletteRows: EditablePaletteChannel[]): PaletteChannel[] {
@@ -84,7 +86,7 @@ function toPaletteRequest(paletteRows: EditablePaletteChannel[]): PaletteChannel
 function validatePalette(): boolean {
   for (const channel of palette.value) {
     if (!channel.color.trim()) {
-      message.error('请填写所有颜色名称')
+      message.error(t('calibration.fillAllColors'))
       return false
     }
   }
@@ -107,9 +109,9 @@ async function handleGenerateBoard(boardIndex: number) {
       face_orientation: faceOrientation.value,
     })
     boardRef.value = response.board_id
-    message.success(`校准板 ${boardIndex} 生成成功`)
+    message.success(t('calibration.eightColor.boardGenerateSuccess', { index: boardIndex }))
   } catch (error: unknown) {
-    message.error(`生成失败: ${error instanceof Error ? error.message : String(error)}`)
+    message.error(t('calibration.generateFailed', { error: error instanceof Error ? error.message : String(error) }))
   } finally {
     generatingRef.value = false
   }
@@ -143,16 +145,16 @@ function handleColorDBUpdated() {
       <template #header>
         <div class="calibration-header">
           <NSpace align="center" :size="8">
-            <span>八色校准流程</span>
+            <span>{{ t('calibration.eightColor.title') }}</span>
           </NSpace>
-          <p class="calibration-subtitle">当前步骤：第 {{ currentStep }} 步 / 3</p>
+          <p class="calibration-subtitle">{{ t('calibration.currentStep', { step: currentStep }) }}</p>
         </div>
       </template>
 
       <NSteps :current="currentStep" size="small" class="calibration-steps">
-        <NStep title="生成两张校准板" description="按同一组颜色生成板 1 / 板 2" />
-        <NStep title="打印与拍摄" description="建议先板 1，追求更高精度再补板 2" />
-        <NStep title="构建 ColorDB" description="每张校准板可分别构建一个 ColorDB 并自动加入会话" />
+        <NStep :title="t('calibration.eightColor.steps.generate.title')" :description="t('calibration.eightColor.steps.generate.description')" />
+        <NStep :title="t('calibration.eightColor.steps.print.title')" :description="t('calibration.eightColor.steps.print.description')" />
+        <NStep :title="t('calibration.eightColor.steps.build.title')" :description="t('calibration.eightColor.steps.build.description')" />
       </NSteps>
 
       <NAlert type="info" :bordered="false" class="calibration-step-alert">
@@ -160,17 +162,17 @@ function handleColorDBUpdated() {
       </NAlert>
     </NCard>
 
-    <NCard title="步骤 1：生成八色校准板" class="calibration-card">
+    <NCard :title="t('calibration.eightColor.step1Title')" class="calibration-card">
       <template #header-extra>
-        <NButton size="tiny" quaternary :disabled="generating1 || generating2" @click="handleResetCalibrationParams"> 重置 </NButton>
+        <NButton size="tiny" quaternary :disabled="generating1 || generating2" @click="handleResetCalibrationParams"> {{ t('common.reset') }} </NButton>
       </template>
       <NSpace vertical :size="12">
         <NAlert type="info" :bordered="false">
-          八色校准推荐生成两张校准板（各 40 x 40）。板 1 覆盖主色域，板 2 用于补充细节颜色。
+          {{ t('calibration.eightColor.tip') }}
         </NAlert>
 
         <div class="calibration-preset-row">
-          <span class="calibration-preset-label">喷嘴尺寸</span>
+          <span class="calibration-preset-label">{{ t('calibration.nozzleSize') }}</span>
           <NRadioGroup v-model:value="nozzleSize" size="small">
             <NRadioButton value="n04">0.4mm</NRadioButton>
             <NRadioButton value="n02">0.2mm</NRadioButton>
@@ -178,10 +180,10 @@ function handleColorDBUpdated() {
         </div>
 
         <div class="calibration-preset-row">
-          <span class="calibration-preset-label">观赏面朝向</span>
+          <span class="calibration-preset-label">{{ t('calibration.faceDirection') }}</span>
           <NRadioGroup v-model:value="faceOrientation" size="small">
-            <NRadioButton value="faceup">观赏面朝上</NRadioButton>
-            <NRadioButton value="facedown">观赏面朝下</NRadioButton>
+            <NRadioButton value="faceup">{{ t('calibration.faceUp') }}</NRadioButton>
+            <NRadioButton value="facedown">{{ t('calibration.faceDown') }}</NRadioButton>
           </NRadioGroup>
         </div>
 
@@ -191,12 +193,12 @@ function handleColorDBUpdated() {
           <NTag :bordered="false" type="info" size="small">{{ index + 1 }}</NTag>
           <NInput
             v-model:value="channel.color"
-            placeholder="颜色名称（例如 White）"
+            :placeholder="t('calibration.colorPlaceholder')"
             class="calibration-palette-input"
           />
           <NInput
             v-model:value="channel.material"
-            placeholder="材质（例如 PLA Basic）"
+            :placeholder="t('calibration.materialPlaceholder')"
             class="calibration-palette-input"
           />
         </div>
@@ -205,45 +207,45 @@ function handleColorDBUpdated() {
 
         <div class="calibration-actions">
           <NButton type="primary" :loading="generating1" @click="handleGenerateBoard(1)">
-            生成校准板 1（推荐优先）
+            {{ t('calibration.eightColor.generateBoard1') }}
           </NButton>
-          <NTag v-if="board1Id" type="success" :bordered="false" size="small">板 1 已生成</NTag>
+          <NTag v-if="board1Id" type="success" :bordered="false" size="small">{{ t('calibration.eightColor.board1Generated') }}</NTag>
         </div>
 
         <div v-if="board1Id" class="calibration-actions">
-          <NButton type="success" size="small" @click="download3mf(board1Id)">下载板 1 的 3MF</NButton>
-          <NButton type="info" size="small" @click="downloadMeta(board1Id)">下载板 1 的 Meta</NButton>
+          <NButton type="success" size="small" @click="download3mf(board1Id)">{{ t('calibration.eightColor.downloadBoard1_3mf') }}</NButton>
+          <NButton type="info" size="small" @click="downloadMeta(board1Id)">{{ t('calibration.eightColor.downloadBoard1_meta') }}</NButton>
         </div>
 
         <div class="calibration-actions">
           <NButton type="primary" :loading="generating2" @click="handleGenerateBoard(2)">
-            生成校准板 2
+            {{ t('calibration.eightColor.generateBoard2') }}
           </NButton>
-          <NTag v-if="board2Id" type="success" :bordered="false" size="small">板 2 已生成</NTag>
+          <NTag v-if="board2Id" type="success" :bordered="false" size="small">{{ t('calibration.eightColor.board2Generated') }}</NTag>
         </div>
 
         <div v-if="board2Id" class="calibration-actions">
-          <NButton type="success" size="small" @click="download3mf(board2Id)">下载板 2 的 3MF</NButton>
-          <NButton type="info" size="small" @click="downloadMeta(board2Id)">下载板 2 的 Meta</NButton>
+          <NButton type="success" size="small" @click="download3mf(board2Id)">{{ t('calibration.eightColor.downloadBoard2_3mf') }}</NButton>
+          <NButton type="info" size="small" @click="downloadMeta(board2Id)">{{ t('calibration.eightColor.downloadBoard2_meta') }}</NButton>
         </div>
       </NSpace>
     </NCard>
 
-    <NCard title="步骤 2：打印与拍摄说明" class="calibration-card">
+    <NCard :title="t('calibration.eightColor.step2Title')" class="calibration-card">
       <NSpace vertical :size="12">
-        <NAlert type="warning" :bordered="false" title="关键点">
-          每张校准板都对应各自的 Meta 文件。构建 ColorDB 时，照片和 Meta 必须来自同一张板。
+        <NAlert type="warning" :bordered="false" :title="t('calibration.eightColor.keyPoints')">
+          {{ t('calibration.eightColor.keyPointText1') }}
         </NAlert>
         <NAlert type="info" :bordered="false">
-          板 1 足以得到较好效果；若追求更完整的色域覆盖，可继续打印板 2 并再构建一个 ColorDB。
+          {{ t('calibration.eightColor.keyPointText2') }}
         </NAlert>
       </NSpace>
     </NCard>
 
     <ColorDBBuildSection
-      title="步骤 3：构建 ColorDB"
-      tips="你可以为板 1 和板 2 各构建一个 ColorDB，后续在叠色模型生成里组合使用。"
-      build-button-text="构建并添加 ColorDB"
+      :title="t('calibration.eightColor.step3Title')"
+      :tips="t('calibration.eightColor.step3Tips')"
+      :build-button-text="t('calibration.eightColor.step3BuildButton')"
       @colordb-updated="handleColorDBUpdated"
     />
   </NSpace>

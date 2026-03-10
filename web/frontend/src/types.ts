@@ -332,13 +332,15 @@ export interface BedPreset {
   height: number
 }
 
-export const BED_PRESETS: BedPreset[] = [
-  { label: 'Bambu Lab A1 mini', width: 180, height: 180 },
-  { label: 'Bambu Lab A1 / P1 / X1', width: 256, height: 256 },
-  { label: 'Prusa MK4', width: 250, height: 210 },
-  { label: 'Ender 3', width: 220, height: 220 },
-  { label: '自定义', width: 0, height: 0 },
-]
+export function getBedPresets(t: (key: string) => string): BedPreset[] {
+  return [
+    { label: 'Bambu Lab A1 mini', width: 180, height: 180 },
+    { label: 'Bambu Lab A1 / P1 / X1', width: 256, height: 256 },
+    { label: 'Prusa MK4', width: 250, height: 210 },
+    { label: 'Ender 3', width: 220, height: 220 },
+    { label: t('common.custom'), width: 0, height: 0 },
+  ]
+}
 
 // ---- Pixel size presets ----
 
@@ -347,8 +349,10 @@ export interface PixelSizePreset {
   value: number
 }
 
-export const PIXEL_SIZE_PRESETS: PixelSizePreset[] = [
-  { label: '0.22 mm (0.2mm 喷嘴)', value: 0.22 },
-  { label: '0.42 mm (0.4mm 喷嘴)', value: 0.42 },
-  { label: '自定义', value: 0 },
-]
+export function getPixelSizePresets(t: (key: string) => string): PixelSizePreset[] {
+  return [
+    { label: t('param.pixelSizePresets.nozzle02'), value: 0.22 },
+    { label: t('param.pixelSizePresets.nozzle04'), value: 0.42 },
+    { label: t('common.custom'), value: 0 },
+  ]
+}

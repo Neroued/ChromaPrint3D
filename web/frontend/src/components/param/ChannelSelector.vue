@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import {
   NCollapse,
   NCollapseItem,
@@ -9,6 +10,8 @@ import {
   NSpace,
   NTooltip,
 } from 'naive-ui'
+
+const { t } = useI18n()
 
 type ChannelItem = {
   key: string
@@ -47,7 +50,7 @@ function handleChannelKeysChange(keys: Array<string | number>) {
       <template #header>
         <NTooltip>
           <template #trigger>
-            <span class="tip-label">颜色通道筛选</span>
+            <span class="tip-label">{{ t('param.channelFilter') }}</span>
           </template>
           {{ props.tooltipText }}
         </NTooltip>
@@ -56,7 +59,7 @@ function handleChannelKeysChange(keys: Array<string | number>) {
         <span style="font-size: 12px; color: var(--n-text-color-3)">
           {{
             props.isAllSelected
-              ? '全部'
+              ? t('common.all')
               : `${props.selectedKeys.length}/${props.availableChannels.length}`
           }}
         </span>
