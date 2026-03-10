@@ -46,6 +46,8 @@
 - 禁止重复工具函数，优先复用并保持 `.cpp` 结构清晰：[.cursor/rules/code-structure-and-utility-reuse.mdc](.cursor/rules/code-structure-and-utility-reuse.mdc)
 - C++ 跨平台约束（路径、随机数、宏判断、CI 脚本等）：[.cursor/rules/cross-platform-cpp.mdc](.cursor/rules/cross-platform-cpp.mdc)
 - 前后端联动大型修改必须执行端到端闭环检查：[.cursor/rules/end-to-end-change-checklist.mdc](.cursor/rules/end-to-end-change-checklist.mdc)
+- 前端验证必须与 CI 一致（`npm run format:check` / `lint` / `test` / `build`）：[.cursor/rules/frontend-layer-boundary.mdc](.cursor/rules/frontend-layer-boundary.mdc)
+- 前端 i18n 国际化规范（禁止硬编码文案、翻译 key 同步、locale 格式化）：[.cursor/rules/frontend-i18n.mdc](.cursor/rules/frontend-i18n.mdc)
 
 ## 标准工作流（建议）
 

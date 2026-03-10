@@ -25,8 +25,18 @@ alwaysApply: false
 - 相同逻辑是否已经在 `composables` 或 `services` 存在？
 - 新增 API 是否按业务域拆分，而不是继续堆在单文件中？
 
-## 前端最小验证
+## 前端最小验证（必须与 CI 一致）
 
-- 在 `web/frontend` 执行 `npm run lint`（已包含 `npm run typecheck`）。
-- 执行 `npm run test` 与 `npm run build` 做回归兜底。
-- 需要单独排查类型问题时可执行 `npm run typecheck`。
+验证命令及顺序与 `.github/workflows/ci.yml` 的 `frontend` job 完全对齐：
+
+```bash
+cd web/frontend
+npm run format:check   # prettier --check .
+npm run lint           # vue-tsc -b --pretty false && eslint
+npm run test           # vitest run --coverage
+npm run build          # vue-tsc -b && vite build
+```
+
+- **禁止**使用 `vue-tsc --noEmit` 替代 `npm run typecheck`（CI 使用 `vue-tsc -b`，更严格）。
+- 格式检查必须通过 `npm run format:check`（即 `prettier --check .`，全量检查）。
+- 若格式不通过，执行 `npm run format`（即 `prettier --write .`）修复后再提交。
