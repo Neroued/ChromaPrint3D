@@ -48,6 +48,7 @@
 - 前后端联动大型修改必须执行端到端闭环检查：[.cursor/rules/end-to-end-change-checklist.mdc](.cursor/rules/end-to-end-change-checklist.mdc)
 - 前端验证必须与 CI 一致（`npm run format:check` / `lint` / `test` / `build`）：[.cursor/rules/frontend-layer-boundary.mdc](.cursor/rules/frontend-layer-boundary.mdc)
 - 前端 i18n 国际化规范（禁止硬编码文案、翻译 key 同步、locale 格式化）：[.cursor/rules/frontend-i18n.mdc](.cursor/rules/frontend-i18n.mdc)
+- Git 提交流程强制规范（禁止直提 `master`，必须分支 + PR）：[.cursor/rules/git-branch-pr-policy.mdc](.cursor/rules/git-branch-pr-policy.mdc)
 
 ## 标准工作流（建议）
 
@@ -82,9 +83,9 @@
 | 用户可见前端行为变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/agents/web/frontend/README.md](docs/agents/web/frontend/README.md) |
 | 模块入口或职责边界变化 | [docs/agents/README.md](docs/agents/README.md) 与对应模块索引 |
 
-## PR 检查建议
+## PR 检查要求
 
-建议使用仓库 PR 模板中的协作清单，确保每次改动都覆盖：
+每次提交都应使用仓库 PR 模板中的协作清单，确保覆盖：
 
 - 代码验证
 - 文档同步
