@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <fstream>
 #include <stdexcept>
 
 namespace {
@@ -79,6 +80,26 @@ bool TryPrepareTempDir(const std::filesystem::path& dir) {
     std::filesystem::permissions(dir, std::filesystem::perms::owner_all,
                                  std::filesystem::perm_options::replace, ec);
     return !ec;
+}
+
+constexpr std::size_t kVectorSvgSpillThresholdBytes = 2 * 1024 * 1024;
+
+SpillableArtifact SpillSvgToFile(const std::filesystem::path& path, const std::string& svg) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        throw std::runtime_error("failed to open svg spill file: " + path.string());
+    }
+
+    out.write(svg.data(), static_cast<std::streamsize>(svg.size()));
+    out.close();
+
+    std::error_code ec;
+    const auto written_size = std::filesystem::file_size(path, ec);
+    if (ec || written_size != svg.size()) {
+        throw std::runtime_error("failed to persist full svg payload to spill file: " +
+                                 path.string());
+    }
+    return SpillableArtifact::FromFile(path, written_size);
 }
 
 } // namespace
@@ -298,24 +319,44 @@ SubmitResult TaskRuntime::SubmitVectorize(const std::string& owner,
             }
             auto t1                     = Clock::now();
             const std::size_t svg_bytes = result.svg_content.size();
+            const int out_width         = result.width;
+            const int out_height        = result.height;
+            const int out_shapes        = result.num_shapes;
+            std::string svg_content     = std::move(result.svg_content);
+
+            std::optional<SpillableArtifact> spilled_svg;
+            if (svg_bytes >= kVectorSvgSpillThresholdBytes) {
+                auto spill_path = temp_dir_ / (id + "_vectorized.svg");
+                spilled_svg     = SpillSvgToFile(spill_path, svg_content);
+            }
+            const bool has_svg_on_disk = spilled_svg.has_value();
 
             auto ms = [](auto d) { return std::chrono::duration<double, std::milli>(d).count(); };
 
-            UpdateTaskPayload(id, [&](TaskPayload& p) {
-                auto* vp = std::get_if<VectorizeTaskPayload>(&p);
+            UpdateTaskRecord(id, [&, svg_bytes, svg_content = std::move(svg_content),
+                                  spilled_svg = std::move(spilled_svg)](TaskRecord& rec) mutable {
+                auto* vp = std::get_if<VectorizeTaskPayload>(&rec.snapshot.payload);
                 if (!vp) return;
                 vp->decode_ms    = 0;
                 vp->vectorize_ms = ms(t1 - t0);
                 vp->pipeline_ms  = ms(t1 - t0);
-                vp->svg_content  = std::move(result.svg_content);
-                vp->width        = result.width;
-                vp->height       = result.height;
-                vp->num_shapes   = result.num_shapes;
+                vp->svg_bytes    = svg_bytes;
+                vp->width        = out_width;
+                vp->height       = out_height;
+                vp->num_shapes   = out_shapes;
+                if (spilled_svg.has_value()) {
+                    vp->svg_content.clear();
+                    vp->has_svg_on_disk = true;
+                    rec.spilled_svg     = std::move(*spilled_svg);
+                } else {
+                    vp->svg_content     = std::move(svg_content);
+                    vp->has_svg_on_disk = false;
+                }
             });
             spdlog::info(
                 "Vectorize task core completed: task_id={}, vectorize_ms={:.2f}, width={}, "
-                "height={}, num_shapes={}, svg_bytes={}",
-                id, ms(t1 - t0), result.width, result.height, result.num_shapes, svg_bytes);
+                "height={}, num_shapes={}, svg_bytes={}, spilled_svg={}",
+                id, ms(t1 - t0), out_width, out_height, out_shapes, svg_bytes, has_svg_on_disk);
         });
 }
 
@@ -583,8 +624,17 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
 
     if (auto vp = std::get_if<VectorizeTaskPayload>(&t.payload)) {
         if (artifact == "svg") {
-            std::vector<uint8_t> svg(vp->svg_content.begin(), vp->svg_content.end());
             std::string filename = vp->image_name.empty() ? "result.svg" : vp->image_name + ".svg";
+            if (rec.spilled_svg.has_file()) {
+                return TaskArtifact{
+                    {}, rec.spilled_svg.path(), "image/svg+xml", std::move(filename)};
+            }
+            if (vp->svg_content.empty()) {
+                status_code = 404;
+                message     = "SVG result not available";
+                return std::nullopt;
+            }
+            std::vector<uint8_t> svg(vp->svg_content.begin(), vp->svg_content.end());
             return TaskArtifact{std::move(svg), {}, "image/svg+xml", std::move(filename)};
         }
     }
@@ -740,13 +790,14 @@ void TaskRuntime::MarkCompleted(const std::string& id) {
         ElapsedMs(it->second.snapshot.created_at, it->second.snapshot.completed_at);
 
     if (auto* vp = std::get_if<VectorizeTaskPayload>(&it->second.snapshot.payload)) {
+        const std::size_t svg_bytes = vp->svg_bytes > 0 ? vp->svg_bytes : vp->svg_content.size();
         spdlog::info(
             "Task completed: id={}, kind={}, owner={}, elapsed_ms={:.2f}, vectorize_ms={:.2f}, "
-            "pipeline_ms={:.2f}, width={}, height={}, num_shapes={}, svg_bytes={}, "
+            "pipeline_ms={:.2f}, width={}, height={}, num_shapes={}, svg_bytes={}, spilled_svg={}, "
             "artifact_bytes={}",
             id, TaskKindToString(it->second.snapshot.kind), OwnerTag(it->second.snapshot.owner),
             elapsed, vp->vectorize_ms, vp->pipeline_ms, vp->width, vp->height, vp->num_shapes,
-            vp->svg_content.size(), it->second.artifact_bytes);
+            svg_bytes, it->second.spilled_svg.has_file(), it->second.artifact_bytes);
     } else {
         spdlog::debug(
             "Task completed: id={}, kind={}, owner={}, elapsed_ms={:.2f}, artifact_bytes={}", id,

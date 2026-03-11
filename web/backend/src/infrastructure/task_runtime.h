@@ -71,9 +71,11 @@ struct VectorizeTaskPayload {
     double pipeline_ms  = 0;
 
     std::string svg_content;
-    int width      = 0;
-    int height     = 0;
-    int num_shapes = 0;
+    std::size_t svg_bytes = 0;
+    bool has_svg_on_disk  = false;
+    int width             = 0;
+    int height            = 0;
+    int num_shapes        = 0;
 };
 
 using TaskPayload = std::variant<ConvertTaskPayload, MattingTaskPayload, VectorizeTaskPayload>;
@@ -157,6 +159,7 @@ private:
         TaskSnapshot snapshot;
         std::size_t artifact_bytes = 0;
         SpillableArtifact spilled_3mf;
+        SpillableArtifact spilled_svg;
     };
 
     struct QueueEntry {

@@ -872,11 +872,12 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
     j["num_shapes"] = 0;
     j["svg_size"]   = 0;
     if (vp && task.status == RuntimeTaskStatus::Completed) {
-        j["width"]      = vp->width;
-        j["height"]     = vp->height;
-        j["num_shapes"] = vp->num_shapes;
-        j["svg_size"]   = vp->svg_content.size();
-        j["timing"]     = {
+        const auto svg_size = vp->svg_bytes > 0 ? vp->svg_bytes : vp->svg_content.size();
+        j["width"]          = vp->width;
+        j["height"]         = vp->height;
+        j["num_shapes"]     = vp->num_shapes;
+        j["svg_size"]       = svg_size;
+        j["timing"]         = {
             {"decode_ms", vp->decode_ms},
             {"vectorize_ms", vp->vectorize_ms},
             {"pipeline_ms", vp->pipeline_ms},
