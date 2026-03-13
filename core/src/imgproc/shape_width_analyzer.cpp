@@ -68,8 +68,12 @@ cv::Mat RasterizeShape(const std::vector<Contour>& contours, const ShapeBounds& 
     out_height =
         std::max(1, static_cast<int>(std::ceil(bounds.Height() * px_per_mm)) + 2 * kRasterPadding);
 
-    if (out_width > 2000) out_width = 2000;
-    if (out_height > 2000) out_height = 2000;
+    if (out_width > 2000 || out_height > 2000) {
+        spdlog::warn("RasterizeShape: clamping {}x{} -> {}x{} (may reduce accuracy)", out_width,
+                     out_height, std::min(out_width, 2000), std::min(out_height, 2000));
+        out_width  = std::min(out_width, 2000);
+        out_height = std::min(out_height, 2000);
+    }
 
     cv::Mat mask(out_height, out_width, CV_8UC1, cv::Scalar(0));
 
@@ -187,7 +191,8 @@ WidthAnalysisResult AnalyzeShapeWidths(const VectorProcResult& vpr, float min_ar
         int rw = 0, rh = 0;
         cv::Mat mask = RasterizeShape(shape.contours, bounds, raster_px_per_mm, rw, rh);
 
-        if (cv::countNonZero(mask) == 0) {
+        constexpr int kMinRasterDim = 3;
+        if (rw < kMinRasterDim || rh < kMinRasterDim || cv::countNonZero(mask) == 0) {
             ++result.filtered_count;
             continue;
         }
