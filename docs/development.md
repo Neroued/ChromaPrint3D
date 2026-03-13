@@ -161,6 +161,7 @@ npm run dev
 | 健康与默认参数 | `GET /api/v1/health`、`GET /api/v1/convert/defaults`、`GET /api/v1/vectorize/defaults` |
 | 数据库管理 | `GET /api/v1/databases`、`GET /api/v1/session/databases`、`POST /api/v1/session/databases/upload` |
 | 异步任务提交 | `POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`、`POST /api/v1/matting/tasks`、`POST /api/v1/vectorize/tasks` |
+| 矢量分析 | `POST /api/v1/convert/vector/analyze-width` |
 | 任务查询与产物 | `GET /api/v1/tasks`、`GET /api/v1/tasks/{id}`、`GET /api/v1/tasks/{id}/artifacts/{artifact}` |
 | 校准链路 | `POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`、`POST /api/v1/calibration/colordb` |
 
@@ -241,7 +242,50 @@ npm run dev
 2. **逐像素标签细化**（`refine_passes`）：SLIC + K-Means 分割后，对标签边界像素做迭代修正（使用未平滑的原始颜色信息），将被超像素粒度错误归类的像素重新分配到颜色最接近的标签。此步骤改善了细线保留和色块边界精度。
 3. **对比度感知小区域合并**（`max_merge_color_dist`）：`MergeSmallComponents` 在合并小区域时会检查颜色距离，当小区域的颜色与合并目标差异过大时拒绝合并，避免高对比度细特征被强制吞并。
 
-### 5.8 Matting 后处理参数
+### 5.8 矢量色块宽度分析
+
+`POST /api/v1/convert/vector/analyze-width`（同步、multipart）
+
+对 SVG 中每个色块的最小宽度进行分析，帮助用户在转换前确定合适的缩放比例。
+
+**请求字段：**
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `svg` | file | SVG 文件 |
+| `params` | JSON string | 分析参数 |
+
+**params 参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---:|---|
+| `target_width_mm` | float | `0` | 目标宽度（mm），0 表示使用 SVG 原始尺寸 |
+| `target_height_mm` | float | `0` | 目标高度（mm），0 表示使用 SVG 原始尺寸 |
+| `min_area_mm2` | float | `1.0` | 面积过滤阈值（mm²），小于此值的色块跳过分析 |
+| `raster_px_per_mm` | float | `20.0` | 光栅化分辨率（px/mm），影响精度 |
+| `flip_y` | bool | `false` | 是否翻转 Y 轴 |
+
+**响应示例：**
+
+```json
+{
+  "ok": true,
+  "data": {
+    "image_width_mm": 100.0,
+    "image_height_mm": 80.0,
+    "total_shapes": 42,
+    "filtered_count": 5,
+    "min_area_threshold_mm2": 1.0,
+    "shapes": [
+      { "index": 0, "color": "#FF0000", "area_mm2": 12.3, "min_width_mm": 0.35, "median_width_mm": 1.2 }
+    ]
+  }
+}
+```
+
+算法说明：对每个通过面积筛选的色块，按 bounding box 光栅化为二值 mask，做距离变换和 Zhang-Suen 骨架化，骨架上距离变换最小值 x2 即为该色块最小宽度。
+
+### 5.9 Matting 后处理参数
 
 `POST /api/v1/matting/tasks/{id}/postprocess` 支持以下 JSON 字段：
 
@@ -263,7 +307,7 @@ npm run dev
 - 当 `reframe.enabled=true` 时，后处理输出尺寸会随前景区域变化，不再固定等于原图尺寸。
 - 描边/闭运算会在安全边界内计算，降低前景贴边时被截断的概率。
 
-### 5.9 任务系统生命周期
+### 5.10 任务系统生命周期
 
 - 任务状态：`pending -> running -> completed/failed`
 - 队列上限：`--max-queue`

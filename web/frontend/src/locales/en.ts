@@ -619,4 +619,15 @@ export default {
       independent: 'Independent',
     },
   },
+  widthAnalysis: {
+    analyzeButton: 'Analyze Shape Widths',
+    xAxis: 'Minimum Width (mm)',
+    yAxis: 'Shape Count',
+    shapesUnit: 'shapes',
+    minWidth: 'Global Min Width',
+    belowNozzle: 'Below Nozzle (Count)',
+    belowNozzleArea: 'Below Nozzle (Area)',
+    suggestedScale: 'Suggested Scale Factor',
+    recommendedMinSize: 'Recommended Min Size',
+  },
 }

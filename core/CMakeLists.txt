@@ -79,6 +79,8 @@ target_sources(chromaprint3d PRIVATE
     src/imgproc/contour_assembly.cpp
     src/imgproc/curve_fitting.cpp
     src/imgproc/subpixel_refine.cpp
+    src/imgproc/morphology_utils.cpp
+    src/imgproc/shape_width_analyzer.cpp
     src/imgproc/thin_line_vectorizer.cpp
     src/imgproc/vectorize_potrace_pipeline.cpp
     src/imgproc/vectorizer.cpp

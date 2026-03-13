@@ -4,6 +4,7 @@
 #include "chromaprint3d/image_io.h"
 #include "chromaprint3d/pipeline.h"
 #include "chromaprint3d/print_profile.h"
+#include "chromaprint3d/shape_width_analyzer.h"
 #include "chromaprint3d/slicer_preset.h"
 #include "chromaprint3d/version.h"
 
@@ -332,6 +333,60 @@ ServiceResult ServerFacade::SubmitConvertVector(const std::string& owner,
         return ServiceResult::Error(submit.status_code, "submit_failed", submit.message);
     }
     return ServiceResult::Success(202, {{"task_id", submit.task_id}, {"kind", "convert"}});
+}
+
+ServiceResult ServerFacade::AnalyzeVectorWidth(const std::vector<uint8_t>& svg,
+                                               const std::optional<std::string>& params_json) {
+    if (svg.empty()) { return ServiceResult::Error(400, "invalid_request", "SVG buffer is empty"); }
+
+    json params;
+    auto parsed = ParseJsonObject(params_json, params);
+    if (!parsed.ok) return parsed;
+
+    float min_area       = params.value("min_area_mm2", 1.0f);
+    float min_area_ratio = params.value("min_area_ratio", 0.001f);
+    float raster_res     = params.value("raster_px_per_mm", 10.0f);
+
+    VectorProcConfig vpc;
+    vpc.flip_y = params.value("flip_y", false);
+
+    try {
+        VectorProc vproc(vpc);
+        auto vpr = vproc.RunFromBuffer(svg, "analyze");
+
+        float total_area         = vpr.width_mm * vpr.height_mm;
+        float effective_min_area = std::max(min_area, min_area_ratio * total_area);
+        auto analysis            = AnalyzeShapeWidths(vpr, effective_min_area, raster_res);
+
+        json shapes_json = json::array();
+        for (const auto& s : analysis.shapes) {
+            uint8_t r8, g8, b8;
+            s.color.ToRgb255(r8, g8, b8);
+            char hex[8];
+            std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", r8, g8, b8);
+
+            shapes_json.push_back({
+                {"index", s.index},
+                {"color", std::string(hex)},
+                {"area_mm2", std::round(s.area_mm2 * 100.0f) / 100.0f},
+                {"min_width_mm", std::round(s.min_width_mm * 1000.0f) / 1000.0f},
+                {"median_width_mm", std::round(s.median_width_mm * 1000.0f) / 1000.0f},
+            });
+        }
+
+        return ServiceResult::Success(
+            200, {
+                     {"image_width_mm", analysis.image_width_mm},
+                     {"image_height_mm", analysis.image_height_mm},
+                     {"total_shapes", analysis.total_shapes},
+                     {"filtered_count", analysis.filtered_count},
+                     {"min_area_threshold_mm2", analysis.min_area_threshold_mm2},
+                     {"shapes", shapes_json},
+                 });
+    } catch (const std::exception& e) {
+        spdlog::error("AnalyzeVectorWidth failed: {}", e.what());
+        return ServiceResult::Error(500, "analysis_failed", e.what());
+    }
 }
 
 ServiceResult ServerFacade::SubmitMatting(const std::string& owner,

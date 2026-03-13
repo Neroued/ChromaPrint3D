@@ -4,6 +4,7 @@
 /// \brief Skeleton-based thin-line vectorization via Zhang-Suen thinning.
 
 #include "imgproc/bezier.h"
+#include "imgproc/morphology_utils.h"
 #include "imgproc/svg_writer.h"
 
 #include <opencv2/core.hpp>
@@ -15,9 +16,6 @@ namespace ChromaPrint3D::detail {
 /// Detect thin sub-regions within a binary mask using distance transform.
 /// Returns a mask of pixels where max inscribed radius <= threshold.
 cv::Mat DetectThinRegion(const cv::Mat& mask, float max_radius = 2.5f);
-
-/// Zhang-Suen thinning to produce a 1-pixel wide skeleton.
-cv::Mat ZhangSuenThinning(const cv::Mat& binary_mask);
 
 /// Extract stroke paths from a skeleton mask, fit Bezier curves, and estimate width.
 /// Returns VectorizedShapes with is_stroke=true and appropriate stroke_width.

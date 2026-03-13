@@ -19,11 +19,15 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useParamPanelState } from '../composables/useParamPanelState'
+import { useAppStore } from '../stores/app'
+import { analyzeVectorWidth } from '../api/convert'
+import type { WidthAnalysisResult } from '../types'
 import ChannelSelector from './param/ChannelSelector.vue'
 import ColorDBSelector from './param/ColorDBSelector.vue'
 import ParamAdvancedSection from './param/ParamAdvancedSection.vue'
 import ParamModeSwitch from './param/ParamModeSwitch.vue'
 import ParamSimpleSection from './param/ParamSimpleSection.vue'
+import WidthHistogram from './WidthHistogram.vue'
 
 defineProps<{
   disabled?: boolean
@@ -88,6 +92,32 @@ const {
   vendorOptionsForMaterial,
   applyChannelPreset,
 } = useParamPanelState()
+
+const appStore = useAppStore()
+
+const widthAnalysis = ref<WidthAnalysisResult | null>(null)
+const widthAnalyzing = ref(false)
+
+const nozzleDiameterMm = computed(() => {
+  const ns = modelValue.value.nozzle_size
+  return ns === 'n02' ? 0.2 : 0.4
+})
+
+async function handleAnalyzeWidth() {
+  const file = appStore.selectedFile
+  if (!file || !isVector.value) return
+  widthAnalyzing.value = true
+  widthAnalysis.value = null
+  try {
+    widthAnalysis.value = await analyzeVectorWidth(file, {
+      flip_y: modelValue.value.flip_y,
+    })
+  } catch (e) {
+    console.error('Width analysis failed:', e)
+  } finally {
+    widthAnalyzing.value = false
+  }
+}
 
 const isDoubleSided = computed(() => modelValue.value.double_sided ?? false)
 const resolvedFaceOrientation = computed<'faceup' | 'facedown'>(() =>
@@ -315,6 +345,31 @@ watch(canEnableTransparentLayer, (can) => {
             />
           </div>
         </NFormItem>
+
+        <!-- Width analysis (vector only) -->
+        <div v-if="isVector" class="width-analysis-section">
+          <NButton
+            :loading="widthAnalyzing"
+            :disabled="!appStore.selectedFile || disabled"
+            size="small"
+            type="primary"
+            ghost
+            block
+            @click="handleAnalyzeWidth"
+          >
+            {{ t('widthAnalysis.analyzeButton') }}
+          </NButton>
+          <WidthHistogram
+            v-if="widthAnalysis && widthAnalysis.shapes.length > 0"
+            :shapes="widthAnalysis.shapes"
+            :nozzle-diameter="nozzleDiameterMm"
+            :image-width-mm="widthAnalysis.image_width_mm"
+            :image-height-mm="widthAnalysis.image_height_mm"
+            :target-max-dim="
+              Math.max(modelValue.target_width_mm ?? 0, modelValue.target_height_mm ?? 0)
+            "
+          />
+        </div>
 
         <!-- Tessellation tolerance (vector only) -->
         <NFormItem v-if="isVector" label-placement="left" :label-width="simpleLabelWidth">
@@ -1434,6 +1489,13 @@ watch(canEnableTransparentLayer, (can) => {
 
 .number-input-right :deep(.n-input__input-el) {
   text-align: right;
+}
+
+.width-analysis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 8px;
 }
 
 @media (max-width: 920px) {

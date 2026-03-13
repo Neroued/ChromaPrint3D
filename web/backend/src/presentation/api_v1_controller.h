@@ -33,6 +33,8 @@ public:
                   drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::SubmitConvertVector, "/api/v1/convert/vector", drogon::Post,
                   drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::AnalyzeVectorWidth, "/api/v1/convert/vector/analyze-width",
+                  drogon::Post, drogon::Options);
 
     ADD_METHOD_TO(ApiV1Controller::MattingMethods, "/api/v1/matting/methods", drogon::Get,
                   drogon::Options);
@@ -78,6 +80,7 @@ public:
 
     void SubmitConvertRaster(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitConvertVector(const drogon::HttpRequestPtr& req, Callback&& cb);
+    void AnalyzeVectorWidth(const drogon::HttpRequestPtr& req, Callback&& cb);
 
     void MattingMethods(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitMatting(const drogon::HttpRequestPtr& req, Callback&& cb);

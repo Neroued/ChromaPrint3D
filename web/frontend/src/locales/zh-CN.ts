@@ -618,4 +618,15 @@ export default {
       independent: '独立',
     },
   },
+  widthAnalysis: {
+    analyzeButton: '分析色块宽度',
+    xAxis: '最小宽度 (mm)',
+    yAxis: '色块数量',
+    shapesUnit: '个色块',
+    minWidth: '全局最小宽度',
+    belowNozzle: '低于喷嘴 (数量)',
+    belowNozzleArea: '低于喷嘴 (面积)',
+    suggestedScale: '建议缩放倍数',
+    recommendedMinSize: '建议最小目标尺寸',
+  },
 }

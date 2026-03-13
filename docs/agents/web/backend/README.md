@@ -44,6 +44,10 @@
 
 校准板生成端点（`POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`）和图像转换端点（`POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`）支持 `nozzle_size` 与 `face_orientation` 参数；转换端点另外支持 `base_layers` 与 `double_sided`。后端在 `server_facade.cpp` 解析后传递给核心库：`face_orientation=facedown` 会触发导出几何绕 Y 轴旋转 180°，`base_layers` 可覆盖底板层数，`double_sided=true` 会启用双面镜像色层，并在预设选择阶段强制使用 `facedown` 预设文件。`flip_y` 仍保持图像/坐标系适配语义，不等价于 `face_orientation`。
 
+## 矢量色块宽度分析
+
+`POST /api/v1/convert/vector/analyze-width` 是同步端点，接收 SVG 文件和目标尺寸参数，返回每个色块的面积和最小宽度统计。核心实现在 `core/include/chromaprint3d/shape_width_analyzer.h`，通过距离变换 + 骨架化计算最小宽度。详细参数说明见 [docs/development.md 5.8](../../../development.md)。
+
 ## 最小验证
 
 ```bash

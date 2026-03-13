@@ -291,6 +291,34 @@ export interface VectorizeTaskStatus {
   timing: VectorizeTimingInfo | null
 }
 
+// ---- Width analysis ----
+
+export interface ShapeWidthInfo {
+  index: number
+  color: string
+  area_mm2: number
+  min_width_mm: number
+  median_width_mm: number
+}
+
+export interface WidthAnalysisResult {
+  image_width_mm: number
+  image_height_mm: number
+  total_shapes: number
+  filtered_count: number
+  min_area_threshold_mm2: number
+  shapes: ShapeWidthInfo[]
+}
+
+export interface WidthAnalysisParams {
+  target_width_mm?: number
+  target_height_mm?: number
+  min_area_mm2?: number
+  min_area_ratio?: number
+  raster_px_per_mm?: number
+  flip_y?: boolean
+}
+
 // ---- Default config response ----
 
 export interface DefaultConfig {
