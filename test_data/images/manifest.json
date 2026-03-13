@@ -1,0 +1,22 @@
+{
+  "images": [
+    {
+      "file": "simple/simple_shapes.png",
+      "name": "simple_shapes",
+      "category": "simple",
+      "description": "基础几何形状，边界清晰",
+      "vectorize_params": {},
+      "expectations": {
+        "min_coverage": 0.95
+      }
+    },
+    {
+      "file": "complex/tjls.jpg",
+      "name": "tjls",
+      "category": "complex",
+      "description": "复杂插画，颜色丰富、细节多",
+      "vectorize_params": {},
+      "expectations": {}
+    }
+  ]
+}

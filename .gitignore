@@ -49,3 +49,13 @@ modeling/dbs
 scripts/deploy_split.env
 scripts/deploy_split.local.env
 scripts/*.local.env
+
+# Benchmark test images (user-provided, too large for repo)
+test_data/images/simple/
+test_data/images/complex/
+
+# Benchmark results (regenerated per run)
+test_data/results/
+test_data/baselines/current/*.svg
+test_data/baselines/current/*_report.png
+test_data/history.csv

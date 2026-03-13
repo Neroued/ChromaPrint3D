@@ -1,0 +1,22 @@
+{
+  "svg_file": "/home/neroued/ChromaPrint3D/test_data/results/20260313_164148_9c74e8e/tjls.svg",
+  "original_file": "/home/neroued/ChromaPrint3D/test_data/images/complex/tjls.jpg",
+  "total_shapes": 950,
+  "unique_colors": 13,
+  "mergeable_ratio": 1.001,
+  "tiny_fragment_rate": 0.4474,
+  "gini_coefficient": 0.5129,
+  "coverage": 0.99508,
+  "overlap": 0.00065,
+  "same_color_gap_pixels": 87723,
+  "island_count": 3,
+  "circularity_p95": 5.15,
+  "sliver_count": 4,
+  "path_complexity_median": 41,
+  "path_complexity_p95": 240,
+  "delta_e_mean": 5.607,
+  "delta_e_p95": 14.494,
+  "delta_e_max": 73.68,
+  "border_delta_e_mean": 37.194,
+  "color_compression": 0.050781
+}

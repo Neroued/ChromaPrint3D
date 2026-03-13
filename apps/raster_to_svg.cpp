@@ -14,47 +14,56 @@ namespace {
 struct Options {
     std::string image_path;
     std::string out_path;
-    int colors                 = 16;
-    int min_region_area        = 10;
-    float curve_fit_error      = 0.8f;
-    float corner_angle         = 135.0f;
-    float smoothing_spatial    = 15.0f;
-    float smoothing_color      = 25.0f;
-    int upscale_short_edge     = 600;
-    int slic_region_size       = 20;
-    float thin_line_radius     = 2.5f;
-    float min_contour          = 10.0f;
-    float min_hole_area        = 4.0f;
-    float contour_simplify     = 0.45f;
-    float edge_sensitivity     = 0.8f;
-    int refine_passes          = 6;
-    float max_merge_color_dist = 150.0f;
-    bool enable_coverage_fix   = true;
-    float min_coverage_ratio   = 0.998f;
-    bool svg_stroke            = true;
-    float svg_stroke_w         = 0.5f;
-    std::string log_level      = "info";
+    int colors                      = 16;
+    int min_region_area             = 50;
+    float curve_fit_error           = 0.8f;
+    float corner_angle              = 135.0f;
+    float smoothing_spatial         = 15.0f;
+    float smoothing_color           = 25.0f;
+    int upscale_short_edge          = 600;
+    int max_working_pixels          = 3000000;
+    int slic_region_size            = 20;
+    float slic_compactness          = 6.0f;
+    float thin_line_radius          = 2.5f;
+    float min_contour               = 10.0f;
+    float min_hole_area             = 4.0f;
+    float contour_simplify          = 0.45f;
+    float edge_sensitivity          = 0.8f;
+    int refine_passes               = 6;
+    float max_merge_color_dist      = 200.0f;
+    bool enable_subpixel_refine     = true;
+    float subpixel_max_displacement = 0.7f;
+    bool enable_coverage_fix        = true;
+    float min_coverage_ratio        = 0.998f;
+    bool svg_stroke                 = true;
+    float svg_stroke_w              = 0.5f;
+    std::string log_level           = "info";
 };
 
 void PrintUsage(const char* exe) {
     std::printf("Usage: %s --image input.png [--out output.svg] [options]\n"
                 "Options:\n"
                 "  --colors N          Number of quantization colors (default 16)\n"
-                "  --min-region N      Min region area in pixels (default 10)\n"
+                "  --min-region N      Min region area in pixels (default 50)\n"
                 "  --curve-fit-error F Curve fitting error threshold (default 0.8)\n"
                 "  --corner-angle F    Corner angle threshold in degrees (default 135)\n"
                 "  --smoothing-spatial F Mean Shift spatial radius (default 15)\n"
                 "  --smoothing-color F Mean Shift color radius (default 25)\n"
                 "  --upscale-short-edge N Auto-upscale short-edge threshold, 0 disables "
                 "(default 600)\n"
+                "  --max-working-pixels N Auto-downscale pixel count threshold, 0 disables "
+                "(default 3000000)\n"
                 "  --slic-region-size N SLIC region size in pixels, 0 uses auto (default 20)\n"
+                "  --slic-compactness F SLIC compactness, lower follows edges more (default 6)\n"
                 "  --thin-line-radius F Thin-line max radius in pixels (default 2.5)\n"
                 "  --min-contour F     Min contour area in pixels (default 10)\n"
                 "  --min-hole-area F   Minimum kept hole area in pixels^2 (default 4.0)\n"
                 "  --contour-simplify F  Contour simplification strength (default 0.45)\n"
                 "  --edge-sensitivity F  Edge-aware SLIC sensitivity [0,1] (default 0.8)\n"
                 "  --refine-passes N     Boundary label refinement iterations (default 6)\n"
-                "  --max-merge-color-dist F Max LAB dE^2 for small-region merging (default 150)\n"
+                "  --max-merge-color-dist F Max LAB dE^2 for small-region merging (default 200)\n"
+                "  --disable-subpixel-refine Disable sub-pixel boundary refinement\n"
+                "  --subpixel-max-displacement F Sub-pixel max displacement (default 0.7)\n"
                 "  --disable-coverage-fix Disable coverage patching\n"
                 "  --min-coverage-ratio F Coverage fix trigger ratio (default 0.998)\n"
                 "  --no-svg-stroke     Disable SVG stroke output (default on)\n"
@@ -146,9 +155,23 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             }
             continue;
         }
+        if (arg == "--max-working-pixels" && i + 1 < argc) {
+            if (!ParseInt(argv[++i], opt.max_working_pixels) || opt.max_working_pixels < 0) {
+                std::fprintf(stderr, "Invalid --max-working-pixels\n");
+                return false;
+            }
+            continue;
+        }
         if (arg == "--slic-region-size" && i + 1 < argc) {
             if (!ParseInt(argv[++i], opt.slic_region_size) || opt.slic_region_size < 0) {
                 std::fprintf(stderr, "Invalid --slic-region-size\n");
+                return false;
+            }
+            continue;
+        }
+        if (arg == "--slic-compactness" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.slic_compactness) || opt.slic_compactness < 0.0f) {
+                std::fprintf(stderr, "Invalid --slic-compactness\n");
                 return false;
             }
             continue;
@@ -200,6 +223,18 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             if (!ParseFloat(argv[++i], opt.max_merge_color_dist) ||
                 opt.max_merge_color_dist < 0.0f) {
                 std::fprintf(stderr, "Invalid --max-merge-color-dist\n");
+                return false;
+            }
+            continue;
+        }
+        if (arg == "--disable-subpixel-refine") {
+            opt.enable_subpixel_refine = false;
+            continue;
+        }
+        if (arg == "--subpixel-max-displacement" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.subpixel_max_displacement) ||
+                opt.subpixel_max_displacement < 0.0f) {
+                std::fprintf(stderr, "Invalid --subpixel-max-displacement\n");
                 return false;
             }
             continue;
@@ -260,25 +295,29 @@ int main(int argc, char** argv) {
 
     try {
         VectorizerConfig cfg;
-        cfg.num_colors             = opt.colors;
-        cfg.min_region_area        = opt.min_region_area;
-        cfg.curve_fit_error        = opt.curve_fit_error;
-        cfg.corner_angle_threshold = opt.corner_angle;
-        cfg.smoothing_spatial      = opt.smoothing_spatial;
-        cfg.smoothing_color        = opt.smoothing_color;
-        cfg.upscale_short_edge     = opt.upscale_short_edge;
-        cfg.slic_region_size       = opt.slic_region_size;
-        cfg.thin_line_max_radius   = opt.thin_line_radius;
-        cfg.min_contour_area       = opt.min_contour;
-        cfg.min_hole_area          = opt.min_hole_area;
-        cfg.contour_simplify       = opt.contour_simplify;
-        cfg.edge_sensitivity       = opt.edge_sensitivity;
-        cfg.refine_passes          = opt.refine_passes;
-        cfg.max_merge_color_dist   = opt.max_merge_color_dist;
-        cfg.enable_coverage_fix    = opt.enable_coverage_fix;
-        cfg.min_coverage_ratio     = opt.min_coverage_ratio;
-        cfg.svg_enable_stroke      = opt.svg_stroke;
-        cfg.svg_stroke_width       = opt.svg_stroke_w;
+        cfg.num_colors                = opt.colors;
+        cfg.min_region_area           = opt.min_region_area;
+        cfg.curve_fit_error           = opt.curve_fit_error;
+        cfg.corner_angle_threshold    = opt.corner_angle;
+        cfg.smoothing_spatial         = opt.smoothing_spatial;
+        cfg.smoothing_color           = opt.smoothing_color;
+        cfg.upscale_short_edge        = opt.upscale_short_edge;
+        cfg.max_working_pixels        = opt.max_working_pixels;
+        cfg.slic_region_size          = opt.slic_region_size;
+        cfg.slic_compactness          = opt.slic_compactness;
+        cfg.thin_line_max_radius      = opt.thin_line_radius;
+        cfg.min_contour_area          = opt.min_contour;
+        cfg.min_hole_area             = opt.min_hole_area;
+        cfg.contour_simplify          = opt.contour_simplify;
+        cfg.edge_sensitivity          = opt.edge_sensitivity;
+        cfg.refine_passes             = opt.refine_passes;
+        cfg.max_merge_color_dist      = opt.max_merge_color_dist;
+        cfg.enable_subpixel_refine    = opt.enable_subpixel_refine;
+        cfg.subpixel_max_displacement = opt.subpixel_max_displacement;
+        cfg.enable_coverage_fix       = opt.enable_coverage_fix;
+        cfg.min_coverage_ratio        = opt.min_coverage_ratio;
+        cfg.svg_enable_stroke         = opt.svg_stroke;
+        cfg.svg_stroke_width          = opt.svg_stroke_w;
 
         spdlog::info("Vectorizing {} -> {}", opt.image_path, opt.out_path);
         spdlog::info("Colors={}, contour_simplify={:.2f}, edge_sensitivity={:.2f}, "

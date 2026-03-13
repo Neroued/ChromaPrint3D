@@ -1,0 +1,22 @@
+{
+  "svg_file": "/home/neroued/ChromaPrint3D/test_data/results/20260313_164148_9c74e8e/simple_shapes.svg",
+  "original_file": "/home/neroued/ChromaPrint3D/test_data/images/simple/simple_shapes.png",
+  "total_shapes": 10,
+  "unique_colors": 9,
+  "mergeable_ratio": 1.0,
+  "tiny_fragment_rate": 0.1,
+  "gini_coefficient": 0.5,
+  "coverage": 0.1885,
+  "overlap": 2e-05,
+  "same_color_gap_pixels": 100,
+  "island_count": 4,
+  "circularity_p95": 74.81,
+  "sliver_count": 1,
+  "path_complexity_median": 217,
+  "path_complexity_p95": 349,
+  "delta_e_mean": 0.285,
+  "delta_e_p95": 0.382,
+  "delta_e_max": 48.437,
+  "border_delta_e_mean": 4.204,
+  "color_compression": 0.00684
+}
