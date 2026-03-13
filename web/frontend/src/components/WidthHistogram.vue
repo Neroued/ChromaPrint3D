@@ -31,9 +31,10 @@ let chartInstance: Chart | null = null
 const BIN_WIDTH = 0.05
 
 const svgMaxDim = computed(() => Math.max(props.imageWidthMm, props.imageHeightMm))
-const displayScale = computed(() =>
-  svgMaxDim.value > 0 ? props.targetMaxDim / svgMaxDim.value : 1,
-)
+const displayScale = computed(() => {
+  if (props.targetMaxDim <= 0 || svgMaxDim.value <= 0) return 1
+  return props.targetMaxDim / svgMaxDim.value
+})
 
 const histogramData = computed(() => {
   if (props.shapes.length === 0)
@@ -201,7 +202,7 @@ function buildChart() {
   chartInstance = new Chart(canvasRef.value, config)
 }
 
-watch(() => [props.shapes, props.nozzleDiameter], buildChart, { deep: true })
+watch(histogramData, buildChart)
 
 onMounted(buildChart)
 onUnmounted(() => {
