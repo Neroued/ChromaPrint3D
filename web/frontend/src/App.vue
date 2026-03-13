@@ -83,13 +83,6 @@ if (activeTab.value === 'calibration' || activeTab.value === 'calibration-8color
 
 useAppLifecycle()
 
-const ANNOUNCE_DISMISS_KEY = 'chromaprint3d-announce-dismissed'
-const announcementDismissed = ref(localStorage.getItem(ANNOUNCE_DISMISS_KEY) === '1')
-function dismissAnnouncement() {
-  announcementDismissed.value = true
-  localStorage.setItem(ANNOUNCE_DISMISS_KEY, '1')
-}
-
 function handleColorDBUpdated() {
   appStore.refreshColorDBs()
 }
@@ -151,7 +144,7 @@ function toggleLocale() {
 
         <NLayoutContent class="app-shell__content">
           <div class="app-shell__content-inner">
-            <div v-if="!announcementDismissed" class="app-shell__announce">
+            <div class="app-shell__announce">
               <div class="app-shell__announce-inner">
                 <span class="app-shell__announce-text">
                   {{ t('app.announcement.starHint') }}
@@ -171,16 +164,11 @@ function toggleLocale() {
                   >
                   <span class="app-shell__announce-sep">&middot;</span>
                   {{ t('app.announcement.makerWorldHint') }}
-                  <a
-                    :href="makerWorldUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    >{{ t('app.announcement.makerWorldLink') }}</a
+                  <a :href="makerWorldUrl" target="_blank" rel="noopener noreferrer">{{
+                    t('app.announcement.makerWorldLink')
+                  }}</a
                   >{{ t('app.announcement.makerWorldSuffix') }}
                 </span>
-                <button class="app-shell__announce-close" @click="dismissAnnouncement">
-                  &times;
-                </button>
               </div>
             </div>
             <NTabs
