@@ -36,6 +36,16 @@ docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
 > 提供两种镜像标签：`latest`（前端 + 后端一体，开箱即用）和 `api`（仅后端 API，用于跨域分体部署）。  
 > 分体部署详见 [docs/deployment.md](docs/deployment.md)。
 
+## CLI 工具
+
+| 命令 | 说明 |
+|---|---|
+| `raster_to_3mf` | 图像转多色 3MF 模型 |
+| `raster_to_svg` | 图像转 SVG 矢量图 |
+| `evaluate_svg` | 矢量化质量评估（单图指标 / 批量 benchmark / 基线对比） |
+| `gen_calibration_board` | 生成校准板 3MF |
+| `build_colordb` | 从校准板照片构建 ColorDB |
+
 ## 开发者跳转
 
 - 构建与打包：[docs/build.md](docs/build.md)
@@ -81,6 +91,16 @@ Then open `http://localhost:8080`.
 
 > Two image tags are available: `latest` (frontend + backend all-in-one) and `api` (backend API only, for cross-origin split deployment).  
 > See [docs/deployment.md](docs/deployment.md) for split deployment details.
+
+### CLI Tools
+
+| Command | Description |
+|---|---|
+| `raster_to_3mf` | Convert image to multi-color 3MF model |
+| `raster_to_svg` | Convert image to SVG vector |
+| `evaluate_svg` | Vectorization quality evaluation (single metrics / batch benchmark / baseline comparison) |
+| `gen_calibration_board` | Generate calibration board 3MF |
+| `build_colordb` | Build ColorDB from calibration photo |
 
 ### Developer Entry
 

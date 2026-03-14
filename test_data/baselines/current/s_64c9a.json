@@ -1,0 +1,31 @@
+{
+  "score": 20.4,
+  "metrics": {
+  "psnr": 5.77,
+  "ssim": 0.1160,
+  "coverage": 1.0000,
+  "overlap": 0.9260,
+  "delta_e_mean": 36.52,
+  "delta_e_p95": 96.27,
+  "delta_e_max": 99.45,
+  "border_delta_e_mean": 37.99,
+  "edge_f1": 0.8227,
+  "chamfer_distance": 1.73,
+  "total_shapes": 436,
+  "unique_colors": 16,
+  "mergeable_ratio": 0.16,
+  "tiny_fragment_rate": 0.9266,
+  "gini_coefficient": 0.9329,
+  "path_complexity_median": 7,
+  "path_complexity_p95": 104,
+  "circularity_p95": 0.3770,
+  "sliver_count": 1,
+  "island_count": 29,
+  "same_color_gap_pixels": 5543,
+  "color_compression": 0.0367,
+  "vectorize_time_ms": 220.7,
+  "eval_time_ms": 34.2,
+  "width": 96,
+  "height": 96
+}
+}

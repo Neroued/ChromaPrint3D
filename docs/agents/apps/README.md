@@ -2,7 +2,7 @@
 
 ## 模块职责
 
-`apps/` 提供面向用户和开发调试的 CLI 程序入口，统一链接 `ChromaPrint3D::core`。
+`apps/` 提供面向用户和开发调试的 CLI 程序入口，链接 `ChromaPrint3D::core` 或 `ChromaPrint3D::eval`。
 
 ## 可执行程序与源码映射
 
@@ -15,6 +15,7 @@
 | `raster_to_3mf` | `apps/raster_to_3mf.cpp` |
 | `svg_to_3mf` | `apps/svg_to_3mf.cpp` |
 | `raster_to_svg` | `apps/raster_to_svg.cpp` |
+| `evaluate_svg` | `apps/evaluate_svg.cpp` |
 | `gen_representative_board` | `apps/gen_representative_board.cpp` |
 | `gen_stage` | `apps/gen_stage.cpp` |
 | `gen_test_preset_3mf` | `apps/gen_test_preset_3mf.cpp` |
@@ -42,6 +43,7 @@
 cmake --build build -j$(nproc)
 build/bin/raster_to_3mf --help
 build/bin/raster_to_svg --help
+build/bin/evaluate_svg --help
 ```
 
 ## 相关任务手册

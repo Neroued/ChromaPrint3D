@@ -22,6 +22,7 @@
 ```text
 ChromaPrint3D/
 ├── core/                  # C++ 核心库（颜色匹配、图像处理、3MF 导出）
+├── eval/                  # 矢量化质量评估管线（链接 core，独立模块）
 ├── infer/                 # 深度学习推理封装（ONNX Runtime 后端）
 ├── apps/                  # CLI 工具
 ├── web/
@@ -111,6 +112,15 @@ curl -s http://127.0.0.1:8080/api/v1/vectorize/defaults
 
 # 栅格图转 SVG
 ./build/bin/raster_to_svg --image input.png --out output.svg --colors 16 --contour-simplify 0.45
+
+# 矢量化质量评估（单图）
+./build/bin/evaluate_svg --image input.png --svg-dir ./eval_out/ --json metrics.json
+
+# 矢量化质量评估（批量 benchmark）
+./build/bin/evaluate_svg --manifest test_data/images/manifest.json \
+  --svg-dir ./eval_out/ --json report.json \
+  --baseline-dir test_data/baselines/current/ --set-baseline \
+  --history test_data/history.csv --note "initial baseline"
 ```
 
 ### 3.4 测试运行
