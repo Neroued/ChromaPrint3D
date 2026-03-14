@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -57,6 +58,45 @@ std::vector<std::string> Expectations::Check(const VectorizeMetrics& m) const {
 // ── Baseline ─────────────────────────────────────────────────────────────────
 
 namespace {
+
+std::string JsonEscape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        switch (c) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\b':
+            out += "\\b";
+            break;
+        case '\f':
+            out += "\\f";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20) {
+                char buf[8];
+                std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(c));
+                out += buf;
+            } else {
+                out += c;
+            }
+        }
+    }
+    return out;
+}
 
 std::string ReadFile(const std::string& path) {
     std::ifstream f(path);
@@ -226,10 +266,10 @@ std::string BenchmarkReport::ToJson(int indent) const {
     std::string ind3(indent * 3, ' ');
 
     ss << "{\n";
-    ss << ind << "\"run_id\": \"" << run_id << "\",\n";
-    ss << ind << "\"timestamp\": \"" << timestamp << "\",\n";
-    ss << ind << "\"git_commit\": \"" << git_commit << "\",\n";
-    ss << ind << "\"note\": \"" << note << "\",\n";
+    ss << ind << "\"run_id\": \"" << JsonEscape(run_id) << "\",\n";
+    ss << ind << "\"timestamp\": \"" << JsonEscape(timestamp) << "\",\n";
+    ss << ind << "\"git_commit\": \"" << JsonEscape(git_commit) << "\",\n";
+    ss << ind << "\"note\": \"" << JsonEscape(note) << "\",\n";
     ss << ind << "\"summary\": {\n";
     ss << ind2 << "\"total_images\": " << summary.total_images << ",\n";
     ss << ind2 << std::fixed << std::setprecision(1) << "\"score_avg\": " << summary.score_avg
@@ -246,14 +286,14 @@ std::string BenchmarkReport::ToJson(int indent) const {
     for (size_t i = 0; i < results.size(); ++i) {
         auto& r = results[i];
         ss << ind2 << "{\n";
-        ss << ind3 << "\"name\": \"" << r.name << "\",\n";
-        ss << ind3 << "\"category\": \"" << r.category << "\",\n";
-        ss << ind3 << "\"svg_path\": \"" << r.svg_path << "\",\n";
+        ss << ind3 << "\"name\": \"" << JsonEscape(r.name) << "\",\n";
+        ss << ind3 << "\"category\": \"" << JsonEscape(r.category) << "\",\n";
+        ss << ind3 << "\"svg_path\": \"" << JsonEscape(r.svg_path) << "\",\n";
         ss << ind3 << std::setprecision(1) << "\"score\": " << r.score << ",\n";
         ss << ind3 << "\"metrics\": " << r.metrics.ToJson(indent) << ",\n";
         ss << ind3 << "\"expectation_failures\": [";
         for (size_t j = 0; j < r.expectation_failures.size(); ++j) {
-            ss << "\"" << r.expectation_failures[j] << "\"";
+            ss << "\"" << JsonEscape(r.expectation_failures[j]) << "\"";
             if (j + 1 < r.expectation_failures.size()) ss << ", ";
         }
         ss << "]\n";
@@ -265,9 +305,9 @@ std::string BenchmarkReport::ToJson(int indent) const {
     for (size_t i = 0; i < verdicts.size(); ++i) {
         auto& v              = verdicts[i];
         const char* labels[] = {"OK", "IMPROVED", "REGRESSED", "NEW"};
-        ss << ind2 << "{\"name\": \"" << v.name << "\", \"status\": \"" << labels[v.status]
-           << "\", \"baseline_score\": " << std::setprecision(1) << v.baseline_score
-           << ", \"current_score\": " << v.current_score << "}";
+        ss << ind2 << "{\"name\": \"" << JsonEscape(v.name) << "\", \"status\": \""
+           << labels[v.status] << "\", \"baseline_score\": " << std::setprecision(1)
+           << v.baseline_score << ", \"current_score\": " << v.current_score << "}";
         if (i + 1 < verdicts.size()) ss << ",";
         ss << "\n";
     }
