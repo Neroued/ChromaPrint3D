@@ -1,5 +1,7 @@
 #include "svg_rasterizer.h"
 
+#include "svg_geometry.h"
+
 #include <nanosvg/nanosvg.h>
 
 #include <opencv2/imgproc.hpp>
@@ -99,7 +101,7 @@ RasterizedSvg RasterizeSvg(const std::string& svg_content, int width, int height
 
         cv::Mat mask = cv::Mat::zeros(height, width, CV_8UC1);
 
-        // Fill rendering
+        // Fill rendering — hole-aware via geometric containment
         if (has_fill) {
             std::vector<std::vector<cv::Point>> fill_contours;
             for (auto& fp : paths) {
@@ -107,8 +109,9 @@ RasterizedSvg RasterizeSvg(const std::string& svg_content, int width, int height
             }
             if (!fill_contours.empty()) {
                 cv::Scalar fill_color = NsvgColorToBgr(shape->fill.color);
-                cv::fillPoly(result.bgr, fill_contours, fill_color);
-                cv::fillPoly(mask, fill_contours, cv::Scalar(255));
+                cv::Mat fill_mask     = FillShapeWithHoles(fill_contours, width, height);
+                result.bgr.setTo(fill_color, fill_mask);
+                mask.setTo(255, fill_mask);
             }
         }
 

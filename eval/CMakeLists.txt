@@ -1,4 +1,5 @@
 add_library(chromaprint3d_eval STATIC
+    src/svg_geometry.cpp
     src/svg_rasterizer.cpp
     src/pixel_metrics.cpp
     src/edge_metrics.cpp

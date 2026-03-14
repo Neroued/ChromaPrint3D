@@ -1,5 +1,7 @@
 #include "path_metrics.h"
 
+#include "svg_geometry.h"
+
 #include <nanosvg/nanosvg.h>
 
 #include <opencv2/imgproc.hpp>
@@ -80,45 +82,6 @@ void FlattenPath(const float* pts, int npts, std::vector<cv::Point>& out, float 
             addPt(x, y);
         }
     }
-}
-
-double PolylineSignedArea(const std::vector<cv::Point>& pts) {
-    if (pts.size() < 3) return 0;
-    double area = 0;
-    size_t n    = pts.size();
-    for (size_t i = 0; i < n; ++i) {
-        size_t j = (i + 1) % n;
-        area += static_cast<double>(pts[i].x) * pts[j].y;
-        area -= static_cast<double>(pts[j].x) * pts[i].y;
-    }
-    return area * 0.5;
-}
-
-double PolylinePerimeter(const std::vector<cv::Point>& pts) {
-    if (pts.size() < 2) return 0;
-    double len = 0;
-    for (size_t i = 0; i < pts.size(); ++i) {
-        size_t j  = (i + 1) % pts.size();
-        double dx = pts[j].x - pts[i].x;
-        double dy = pts[j].y - pts[i].y;
-        len += std::sqrt(dx * dx + dy * dy);
-    }
-    return len;
-}
-
-// Ray casting point-in-polygon test on polyline
-bool PointInPolyline(const std::vector<cv::Point>& poly, cv::Point pt) {
-    bool inside = false;
-    size_t n    = poly.size();
-    for (size_t i = 0, j = n - 1; i < n; j = i++) {
-        if (((poly[i].y > pt.y) != (poly[j].y > pt.y)) &&
-            (pt.x < (poly[j].x - poly[i].x) * (pt.y - poly[i].y) /
-                            static_cast<double>(poly[j].y - poly[i].y) +
-                        poly[i].x)) {
-            inside = !inside;
-        }
-    }
-    return inside;
 }
 
 bool BBoxContains(const float outer[4], const float inner[4]) {
@@ -354,7 +317,8 @@ PathMetricsResult ComputePathMetrics(const std::string& svg_content, int width, 
                     if (pts.size() >= 3) contours.push_back(std::move(pts));
                 }
                 if (!contours.empty()) {
-                    cv::fillPoly(color_masks[col], contours, cv::Scalar(255));
+                    cv::Mat shape_mask = FillShapeWithHoles(contours, width, height);
+                    color_masks[col].setTo(255, shape_mask);
                 }
                 shape_idx++;
             }

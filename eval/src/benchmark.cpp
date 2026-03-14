@@ -59,6 +59,26 @@ std::vector<std::string> Expectations::Check(const VectorizeMetrics& m) const {
 
 namespace {
 
+std::string CsvEscape(const std::string& s) {
+    bool needs_quoting = false;
+    for (char c : s) {
+        if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+            needs_quoting = true;
+            break;
+        }
+    }
+    if (!needs_quoting) return s;
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"')
+            out += "\"\"";
+        else
+            out += c;
+    }
+    out += '"';
+    return out;
+}
+
 std::string JsonEscape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 8);
@@ -201,7 +221,7 @@ void AppendHistory(const std::string& history_path, const std::string& run_id,
     f << run_id << "," << eval::CurrentTimestamp() << "," << eval::GitShortHash() << "," << n << ","
       << std::fixed << std::setprecision(1) << score_sum * inv << "," << std::setprecision(4)
       << cov_sum * inv << "," << std::setprecision(1) << de_sum * inv << "," << std::setprecision(4)
-      << ssim_sum * inv << "," << note << "\n";
+      << ssim_sum * inv << "," << CsvEscape(note) << "\n";
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
