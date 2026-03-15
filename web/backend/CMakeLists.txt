@@ -80,4 +80,5 @@ target_link_libraries(chromaprint3d_backend PUBLIC
 
 add_executable(chromaprint3d_server server_main.cpp)
 
-target_link_libraries(chromaprint3d_server PRIVATE chromaprint3d_backend)
+target_link_libraries(chromaprint3d_server PRIVATE
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,chromaprint3d_backend>)
