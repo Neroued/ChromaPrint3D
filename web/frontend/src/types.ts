@@ -251,6 +251,8 @@ export interface MattingPostprocessParams {
 
 export interface VectorizeParams {
   num_colors?: number
+  smoothness?: number
+  detail_level?: number
   min_region_area?: number
   curve_fit_error?: number
   corner_angle_threshold?: number
@@ -263,6 +265,9 @@ export interface VectorizeParams {
   refine_passes?: number
   max_merge_color_dist?: number
   thin_line_max_radius?: number
+  enable_antialias_detect?: boolean
+  aa_tolerance?: number
+  merge_segment_tolerance?: number
   min_contour_area?: number
   min_hole_area?: number
   contour_simplify?: number
@@ -288,6 +293,7 @@ export interface VectorizeTaskStatus {
   height: number
   num_shapes: number
   svg_size: number
+  resolved_num_colors: number
   timing: VectorizeTimingInfo | null
 }
 

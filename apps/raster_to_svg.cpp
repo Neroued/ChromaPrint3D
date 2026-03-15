@@ -14,7 +14,7 @@ namespace {
 struct Options {
     std::string image_path;
     std::string out_path;
-    int colors                      = 16;
+    int colors                      = 0;
     int min_region_area             = 50;
     float curve_fit_error           = 0.8f;
     float corner_angle              = 135.0f;
@@ -35,6 +35,11 @@ struct Options {
     float subpixel_max_displacement = 0.7f;
     bool enable_coverage_fix        = true;
     float min_coverage_ratio        = 0.998f;
+    float smoothness                = 0.5f;
+    float detail_level              = -1.0f;
+    float merge_segment_tolerance   = 0.05f;
+    bool enable_antialias_detect    = false;
+    float aa_tolerance              = 10.0f;
     bool svg_stroke                 = true;
     float svg_stroke_w              = 0.5f;
     std::string log_level           = "info";
@@ -66,6 +71,11 @@ void PrintUsage(const char* exe) {
                 "  --subpixel-max-displacement F Sub-pixel max displacement (default 0.7)\n"
                 "  --disable-coverage-fix Disable coverage patching\n"
                 "  --min-coverage-ratio F Coverage fix trigger ratio (default 0.998)\n"
+                "  --smoothness F      Contour smoothness [0,1] (default 0.5)\n"
+                "  --detail-level F    Unified detail control [0,1], -1 disables (default -1)\n"
+                "  --merge-tolerance F Near-linear segment merge tolerance (default 0.15)\n"
+                "  --enable-antialias  Enable AA mixed-edge detection\n"
+                "  --aa-tolerance F    AA blend detection LAB tolerance (default 10)\n"
                 "  --no-svg-stroke     Disable SVG stroke output (default on)\n"
                 "  --svg-stroke-w F    SVG stroke width when enabled (default 0.5)\n"
                 "  --log-level LEVEL   Log level: trace/debug/info/warn/error/off (default info)\n",
@@ -106,8 +116,8 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             continue;
         }
         if (arg == "--colors" && i + 1 < argc) {
-            if (!ParseInt(argv[++i], opt.colors) || opt.colors < 2) {
-                std::fprintf(stderr, "Invalid --colors\n");
+            if (!ParseInt(argv[++i], opt.colors) || (opt.colors != 0 && opt.colors < 2)) {
+                std::fprintf(stderr, "Invalid --colors (0=auto, or >=2)\n");
                 return false;
             }
             continue;
@@ -251,6 +261,38 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             }
             continue;
         }
+        if (arg == "--smoothness" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.smoothness)) {
+                std::fprintf(stderr, "Invalid --smoothness\n");
+                return false;
+            }
+            continue;
+        }
+        if (arg == "--detail-level" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.detail_level)) {
+                std::fprintf(stderr, "Invalid --detail-level\n");
+                return false;
+            }
+            continue;
+        }
+        if (arg == "--merge-tolerance" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.merge_segment_tolerance)) {
+                std::fprintf(stderr, "Invalid --merge-tolerance\n");
+                return false;
+            }
+            continue;
+        }
+        if (arg == "--enable-antialias") {
+            opt.enable_antialias_detect = true;
+            continue;
+        }
+        if (arg == "--aa-tolerance" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.aa_tolerance)) {
+                std::fprintf(stderr, "Invalid --aa-tolerance\n");
+                return false;
+            }
+            continue;
+        }
         if (arg == "--no-svg-stroke") {
             opt.svg_stroke = false;
             continue;
@@ -316,6 +358,11 @@ int main(int argc, char** argv) {
         cfg.subpixel_max_displacement = opt.subpixel_max_displacement;
         cfg.enable_coverage_fix       = opt.enable_coverage_fix;
         cfg.min_coverage_ratio        = opt.min_coverage_ratio;
+        cfg.smoothness                = opt.smoothness;
+        cfg.detail_level              = opt.detail_level;
+        cfg.merge_segment_tolerance   = opt.merge_segment_tolerance;
+        cfg.enable_antialias_detect   = opt.enable_antialias_detect;
+        cfg.aa_tolerance              = opt.aa_tolerance;
         cfg.svg_enable_stroke         = opt.svg_stroke;
         cfg.svg_stroke_width          = opt.svg_stroke_w;
 

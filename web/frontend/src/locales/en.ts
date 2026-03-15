@@ -16,6 +16,10 @@ export default {
     failure: 'Failure',
     custom: 'Custom',
     all: 'All',
+    auto: 'Auto',
+    manual: 'Manual',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
     pollFailed: 'Task polling failed, please retry ({message})',
     downloadFailed: 'Download failed, please retry',
   },
@@ -300,11 +304,14 @@ export default {
     settings: {
       title: 'Vectorize Settings',
       quickTip:
-        'Start by tuning Colors → Curve Fit → Contour Simplify (in that order). Keep other params at defaults unless needed.',
+        'Adjust Color Count and Smoothness for quick tuning. Fine-tune curve fitting in Advanced Settings if needed.',
       outputEnhancement: 'Output Enhancement',
       numColors: 'Number of Colors',
       numColorsHint:
-        'Total color count in SVG output. Fewer = more stylized; more = closer to original. Try 12-24 first.',
+        'Auto mode detects the optimal color count for the image. Switch to Manual to specify a fixed value (2-256).',
+      smoothness: 'Smoothness',
+      smoothnessHint:
+        'Overall contour smoothness. 0 = preserve all detail; 1 = maximum smoothing. Controls decimation and smoothing passes.',
       curveFitError: 'Curve Fit Accuracy',
       curveFitErrorHint:
         'How closely curves follow edges. Smaller = tighter fit; larger = smoother. Recommended 0.6-1.0.',
@@ -322,6 +329,7 @@ export default {
       title: 'Advanced Parameters (usually keep defaults)',
       preprocessing: 'Preprocessing',
       segmentation: 'Superpixel Segmentation',
+      curveFitting: 'Curve Fitting',
       filtering: 'Region Filtering',
       smoothingSpatial: 'Spatial Smoothing',
       smoothingSpatialHint:
@@ -361,6 +369,18 @@ export default {
       svgStrokeWidth: 'Stroke Width (px)',
       svgStrokeWidthHint:
         'Width of stroke outlines when enhancement is enabled. 0.3-0.8 is usually natural.',
+      enableAntialiasDetect: 'Antialias Detection',
+      enableAntialiasDetectHint:
+        'Detect anti-aliased mixed-edge pixels for cleaner boundaries. Enable for images with smooth edges.',
+      aaTolerance: 'AA Tolerance',
+      aaToleranceHint:
+        'Max LAB Delta-E for a pixel to qualify as an AA blend. Lower = stricter detection.',
+      mergeSegTolerance: 'Segment Merge',
+      mergeSegToleranceHint:
+        'Max control-point deviation (fraction of chord) to merge near-linear Bezier segments. 0 disables.',
+      detailLevel: 'Detail Level',
+      detailLevelHint:
+        'Unified detail control [0,1]. When enabled, auto-derives curve_fit_error and contour_simplify. Overrides manual values.',
     },
     actions: {
       processing: 'Processing...',
@@ -375,6 +395,7 @@ export default {
     result: {
       title: 'Vectorize Result',
       shapes: '{count} shapes',
+      resolvedColors: '{count} colors (auto-detected)',
       resetView: 'Reset View',
       zoomHint: 'Scroll to zoom, drag to pan — compare vectorization results',
       original: 'Original',

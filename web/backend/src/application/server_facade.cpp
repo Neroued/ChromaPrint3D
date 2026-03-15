@@ -197,6 +197,11 @@ ServiceResult ServerFacade::VectorizeDefaults() const {
                                            {"contour_simplify", cfg.contour_simplify},
                                            {"enable_coverage_fix", cfg.enable_coverage_fix},
                                            {"min_coverage_ratio", cfg.min_coverage_ratio},
+                                           {"smoothness", cfg.smoothness},
+                                           {"detail_level", cfg.detail_level},
+                                           {"merge_segment_tolerance", cfg.merge_segment_tolerance},
+                                           {"enable_antialias_detect", cfg.enable_antialias_detect},
+                                           {"aa_tolerance", cfg.aa_tolerance},
                                            {"svg_enable_stroke", cfg.svg_enable_stroke},
                                            {"svg_stroke_width", cfg.svg_stroke_width},
                                        });
@@ -927,12 +932,13 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
     j["num_shapes"] = 0;
     j["svg_size"]   = 0;
     if (vp && task.status == RuntimeTaskStatus::Completed) {
-        const auto svg_size = vp->svg_bytes > 0 ? vp->svg_bytes : vp->svg_content.size();
-        j["width"]          = vp->width;
-        j["height"]         = vp->height;
-        j["num_shapes"]     = vp->num_shapes;
-        j["svg_size"]       = svg_size;
-        j["timing"]         = {
+        const auto svg_size      = vp->svg_bytes > 0 ? vp->svg_bytes : vp->svg_content.size();
+        j["width"]               = vp->width;
+        j["height"]              = vp->height;
+        j["num_shapes"]          = vp->num_shapes;
+        j["svg_size"]            = svg_size;
+        j["resolved_num_colors"] = vp->resolved_num_colors;
+        j["timing"]              = {
             {"decode_ms", vp->decode_ms},
             {"vectorize_ms", vp->vectorize_ms},
             {"pipeline_ms", vp->pipeline_ms},
@@ -1359,12 +1365,26 @@ ServiceResult ServerFacade::BuildVectorizeConfig(const json& params, VectorizerC
         if (params.contains("svg_stroke_width")) {
             out.svg_stroke_width = params["svg_stroke_width"].get<float>();
         }
+        if (params.contains("smoothness")) { out.smoothness = params["smoothness"].get<float>(); }
+        if (params.contains("detail_level")) {
+            out.detail_level = params["detail_level"].get<float>();
+        }
+        if (params.contains("merge_segment_tolerance")) {
+            out.merge_segment_tolerance = params["merge_segment_tolerance"].get<float>();
+        }
+        if (params.contains("enable_antialias_detect")) {
+            out.enable_antialias_detect = params["enable_antialias_detect"].get<bool>();
+        }
+        if (params.contains("aa_tolerance")) {
+            out.aa_tolerance = params["aa_tolerance"].get<float>();
+        }
     } catch (const std::exception& e) {
         return ServiceResult::Error(400, "invalid_params", e.what());
     }
 
-    if (out.num_colors < 2 || out.num_colors > 256) {
-        return ServiceResult::Error(400, "invalid_params", "num_colors must be in [2,256]");
+    if (out.num_colors != 0 && (out.num_colors < 2 || out.num_colors > 256)) {
+        return ServiceResult::Error(400, "invalid_params",
+                                    "num_colors must be 0 (auto) or [2,256]");
     }
     if (out.curve_fit_error < 0.1f || out.curve_fit_error > 5.0f) {
         return ServiceResult::Error(400, "invalid_params", "curve_fit_error must be in [0.1,5]");
@@ -1415,6 +1435,19 @@ ServiceResult ServerFacade::BuildVectorizeConfig(const json& params, VectorizerC
     }
     if (out.svg_stroke_width < 0.0f || out.svg_stroke_width > 20.0f) {
         return ServiceResult::Error(400, "invalid_params", "svg_stroke_width must be in [0,20]");
+    }
+    if (out.smoothness < 0.0f || out.smoothness > 1.0f) {
+        return ServiceResult::Error(400, "invalid_params", "smoothness must be in [0,1]");
+    }
+    if (out.detail_level > 1.0f) {
+        return ServiceResult::Error(400, "invalid_params", "detail_level must be <= 1");
+    }
+    if (out.merge_segment_tolerance < 0.0f || out.merge_segment_tolerance > 0.5f) {
+        return ServiceResult::Error(400, "invalid_params",
+                                    "merge_segment_tolerance must be in [0,0.5]");
+    }
+    if (out.aa_tolerance < 1.0f || out.aa_tolerance > 50.0f) {
+        return ServiceResult::Error(400, "invalid_params", "aa_tolerance must be in [1,50]");
     }
     spdlog::debug(
         "BuildVectorizeConfig resolved: num_colors={}, min_region_area={}, curve_fit_error={:.3f}, "

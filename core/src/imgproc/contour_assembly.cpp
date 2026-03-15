@@ -250,9 +250,23 @@ void DecimateNearCollinear(std::vector<Vec2f>& pts, float epsilon) {
     }
 }
 
+float LocalCurvature(const std::vector<Vec2f>& pts, int i, int n) {
+    int im1    = ((i - 1) % n + n) % n;
+    int ip1    = (i + 1) % n;
+    Vec2f v1   = pts[i] - pts[im1];
+    Vec2f v2   = pts[ip1] - pts[i];
+    float len1 = v1.Length();
+    float len2 = v2.Length();
+    if (len1 < 1e-6f || len2 < 1e-6f) return 0.0f;
+    float cross = std::abs(v1.x * v2.y - v1.y * v2.x);
+    return cross / (len1 * len2);
+}
+
 void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int iterations) {
     if (pts.size() < 5) return;
     const int n = static_cast<int>(pts.size());
+
+    constexpr float kHighCurvature = 0.5f;
 
     for (int iter = 0; iter < iterations; ++iter) {
         std::vector<Vec2f> prev_pts = pts;
@@ -267,11 +281,13 @@ void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int itera
                 (1.0f / 16.0f);
         }
         for (int i = 0; i < n; ++i) {
+            float curv        = LocalCurvature(prev_pts, i, n);
+            float attenuation = (curv > kHighCurvature) ? std::max(0.1f, 1.0f - curv) : 1.0f;
+            float local_max   = max_displacement * attenuation;
+
             Vec2f delta = smoothed[i] - prev_pts[i];
             float dist  = delta.Length();
-            if (dist > max_displacement) {
-                smoothed[i] = prev_pts[i] + delta * (max_displacement / dist);
-            }
+            if (dist > local_max) { smoothed[i] = prev_pts[i] + delta * (local_max / dist); }
         }
         pts = std::move(smoothed);
     }
@@ -279,10 +295,20 @@ void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int itera
 
 } // namespace
 
+ContourSmoothConfig ContourSmoothFromLevel(float smoothness) {
+    float s = std::clamp(smoothness, 0.0f, 1.0f);
+    ContourSmoothConfig c;
+    c.decimate_epsilon        = 0.05f + 0.35f * s;
+    c.smooth_max_displacement = 0.2f + 0.6f * s;
+    c.smooth_iterations       = std::max(1, static_cast<int>(std::lround(1.0f + 3.0f * s)));
+    return c;
+}
+
 std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& graph, int num_labels,
                                                        const std::vector<Rgb>& palette,
                                                        float min_contour_area, float min_hole_area,
-                                                       const CurveFitConfig* fit_cfg) {
+                                                       const CurveFitConfig* fit_cfg,
+                                                       const ContourSmoothConfig& smooth_cfg) {
     std::vector<VectorizedShape> shapes;
     if (graph.edges.empty() || num_labels <= 0) {
         spdlog::debug("AssembleContoursFromGraph skipped: edges={}, num_labels={}",
@@ -304,12 +330,9 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             continue;
         }
 
-        constexpr float kDecimateEpsilon       = 0.15f;
-        constexpr float kSmoothMaxDisplacement = 0.5f;
-        constexpr int kSmoothIterations        = 2;
         for (auto& lp : loops) {
-            DecimateNearCollinear(lp, kDecimateEpsilon);
-            SmoothClosedLoop(lp, kSmoothMaxDisplacement, kSmoothIterations);
+            DecimateNearCollinear(lp, smooth_cfg.decimate_epsilon);
+            SmoothClosedLoop(lp, smooth_cfg.smooth_max_displacement, smooth_cfg.smooth_iterations);
         }
 
         // Classify loops as outer (CCW, positive area) or hole (CW, negative area)

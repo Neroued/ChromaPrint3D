@@ -30,4 +30,10 @@ struct SubpixelRefineConfig {
 void RefineEdgesSubpixel(BoundaryGraph& graph, const cv::Mat& lab,
                          const SubpixelRefineConfig& cfg = {});
 
+/// AA-enhanced variant: where the AAMap indicates a blended pixel at the
+/// boundary point, use the blend ratio alpha to position the edge at
+/// `offset = alpha - 0.5` along the normal instead of gradient-peak finding.
+void RefineEdgesSubpixelAA(BoundaryGraph& graph, const cv::Mat& lab, const cv::Mat& aa_is_aa,
+                           const cv::Mat& aa_alpha, const SubpixelRefineConfig& cfg = {});
+
 } // namespace ChromaPrint3D::detail

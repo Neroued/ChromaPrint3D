@@ -317,12 +317,13 @@ SubmitResult TaskRuntime::SubmitVectorize(const std::string& owner,
                     input_bytes);
                 throw;
             }
-            auto t1                     = Clock::now();
-            const std::size_t svg_bytes = result.svg_content.size();
-            const int out_width         = result.width;
-            const int out_height        = result.height;
-            const int out_shapes        = result.num_shapes;
-            std::string svg_content     = std::move(result.svg_content);
+            auto t1                       = Clock::now();
+            const std::size_t svg_bytes   = result.svg_content.size();
+            const int out_width           = result.width;
+            const int out_height          = result.height;
+            const int out_shapes          = result.num_shapes;
+            const int resolved_num_colors = result.resolved_num_colors;
+            std::string svg_content       = std::move(result.svg_content);
 
             std::optional<SpillableArtifact> spilled_svg;
             if (svg_bytes >= kVectorSvgSpillThresholdBytes) {
@@ -337,13 +338,14 @@ SubmitResult TaskRuntime::SubmitVectorize(const std::string& owner,
                                   spilled_svg = std::move(spilled_svg)](TaskRecord& rec) mutable {
                 auto* vp = std::get_if<VectorizeTaskPayload>(&rec.snapshot.payload);
                 if (!vp) return;
-                vp->decode_ms    = 0;
-                vp->vectorize_ms = ms(t1 - t0);
-                vp->pipeline_ms  = ms(t1 - t0);
-                vp->svg_bytes    = svg_bytes;
-                vp->width        = out_width;
-                vp->height       = out_height;
-                vp->num_shapes   = out_shapes;
+                vp->decode_ms           = 0;
+                vp->vectorize_ms        = ms(t1 - t0);
+                vp->pipeline_ms         = ms(t1 - t0);
+                vp->svg_bytes           = svg_bytes;
+                vp->width               = out_width;
+                vp->height              = out_height;
+                vp->num_shapes          = out_shapes;
+                vp->resolved_num_colors = resolved_num_colors;
                 if (spilled_svg.has_value()) {
                     vp->svg_content.clear();
                     vp->has_svg_on_disk = true;

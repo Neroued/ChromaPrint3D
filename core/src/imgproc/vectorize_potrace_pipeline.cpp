@@ -7,6 +7,7 @@
 #include "imgproc/coverage_guard.h"
 #include "imgproc/curve_fitting.h"
 #include "imgproc/subpixel_refine.h"
+#include "imgproc/aa_detector.h"
 #include "imgproc/potrace_adapter.h"
 #include "imgproc/thin_line_vectorizer.h"
 #include "imgproc/svg_writer.h"
@@ -450,18 +451,207 @@ std::vector<Rgb> ComputePalette(const cv::Mat& bgr, const cv::Mat& labels, int n
     return palette;
 }
 
+// ── Auto color count estimation ──────────────────────────────────────────────
+//
+// Selects K that minimizes: reconstruction_error + fragmentation_penalty + complexity_cost.
+// Uses dual sampling (pixel sample for clustering, proxy image for spatial analysis).
+
+int EstimateOptimalColors(const cv::Mat& bgr) {
+    constexpr int kTargetSamples            = 30000;
+    constexpr int kProxyShortEdge           = 300;
+    constexpr float kAchromaticP90Threshold = 8.0f;
+    constexpr int kCandidates[]             = {2, 3, 4, 6, 8, 12, 16, 24};
+    constexpr int kNumCandidates            = 8;
+    constexpr float kTinyAreaFrac           = 0.002f;
+
+    constexpr float kW_meanDE   = 1.5f;
+    constexpr float kW_p95DE    = 0.5f;
+    constexpr float kW_tinyRate = 20.0f;
+    constexpr float kW_compDens = 20.0f;
+    constexpr float kW_logK     = 3.0f;
+
+    // ── 1. Dual sampling ─────────────────────────────────────────────────────
+
+    const int total_px    = bgr.rows * bgr.cols;
+    const float grid_step = std::sqrt(static_cast<float>(std::max(1, total_px)) / kTargetSamples);
+    const int row_step    = std::max(1, static_cast<int>(grid_step));
+    const int col_step    = std::max(1, static_cast<int>(grid_step));
+
+    int n_samples = 0;
+    for (int r = 0; r < bgr.rows; r += row_step)
+        for (int c = 0; c < bgr.cols; c += col_step) ++n_samples;
+
+    cv::Mat sample_bgr(n_samples, 1, CV_8UC3);
+    {
+        int idx = 0;
+        for (int r = 0; r < bgr.rows; r += row_step) {
+            const cv::Vec3b* row = bgr.ptr<cv::Vec3b>(r);
+            for (int c = 0; c < bgr.cols; c += col_step)
+                sample_bgr.at<cv::Vec3b>(idx++, 0) = row[c];
+        }
+    }
+    cv::Mat sample_lab8;
+    cv::cvtColor(sample_bgr, sample_lab8, cv::COLOR_BGR2Lab);
+
+    const int short_edge = std::min(bgr.rows, bgr.cols);
+    cv::Mat proxy;
+    if (short_edge > kProxyShortEdge) {
+        const float s = static_cast<float>(kProxyShortEdge) / short_edge;
+        cv::resize(bgr, proxy, cv::Size(), s, s, cv::INTER_AREA);
+    } else {
+        proxy = bgr;
+    }
+    cv::Mat proxy_lab8;
+    cv::cvtColor(proxy, proxy_lab8, cv::COLOR_BGR2Lab);
+    const int proxy_area = proxy.rows * proxy.cols;
+
+    // ── 2. Achromatic detection (p90 chroma in LAB) ──────────────────────────
+
+    std::vector<float> chromas(n_samples);
+    for (int i = 0; i < n_samples; ++i) {
+        const cv::Vec3b p = sample_lab8.at<cv::Vec3b>(i, 0);
+        const float a     = static_cast<float>(p[1]) - 128.0f;
+        const float b     = static_cast<float>(p[2]) - 128.0f;
+        chromas[i]        = std::sqrt(a * a + b * b);
+    }
+    const int p90_idx = std::max(0, static_cast<int>(0.90f * (n_samples - 1)));
+    std::nth_element(chromas.begin(), chromas.begin() + p90_idx, chromas.end());
+    const bool achromatic = (chromas[p90_idx] < kAchromaticP90Threshold);
+
+    // ── 3. Convert to CIELAB float (L: 0-100, a/b: -128..127) ───────────────
+
+    const int ch = achromatic ? 1 : 3;
+
+    cv::Mat km_samples(n_samples, ch, CV_32F);
+    for (int i = 0; i < n_samples; ++i) {
+        const cv::Vec3b p          = sample_lab8.at<cv::Vec3b>(i, 0);
+        km_samples.at<float>(i, 0) = p[0] * (100.0f / 255.0f);
+        if (!achromatic) {
+            km_samples.at<float>(i, 1) = static_cast<float>(p[1]) - 128.0f;
+            km_samples.at<float>(i, 2) = static_cast<float>(p[2]) - 128.0f;
+        }
+    }
+
+    cv::Mat proxy_cielab(proxy_area, ch, CV_32F);
+    for (int r = 0; r < proxy.rows; ++r) {
+        const cv::Vec3b* row = proxy_lab8.ptr<cv::Vec3b>(r);
+        for (int c = 0; c < proxy.cols; ++c) {
+            const int idx                  = r * proxy.cols + c;
+            const cv::Vec3b p              = row[c];
+            proxy_cielab.at<float>(idx, 0) = p[0] * (100.0f / 255.0f);
+            if (!achromatic) {
+                proxy_cielab.at<float>(idx, 1) = static_cast<float>(p[1]) - 128.0f;
+                proxy_cielab.at<float>(idx, 2) = static_cast<float>(p[2]) - 128.0f;
+            }
+        }
+    }
+
+    const float tiny_px_threshold = proxy_area * kTinyAreaFrac;
+
+    // ── 4. Evaluate each candidate K ─────────────────────────────────────────
+
+    int best_k       = 16;
+    float best_score = std::numeric_limits<float>::max();
+
+    for (int ci = 0; ci < kNumCandidates; ++ci) {
+        const int K = kCandidates[ci];
+        if (K > n_samples) break;
+
+        cv::Mat km_labels, km_centers;
+        cv::kmeans(km_samples, K, km_labels,
+                   cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 20, 0.5), 3,
+                   cv::KMEANS_PP_CENTERS, km_centers);
+
+        // Assign proxy pixels to nearest center and compute per-pixel Delta E
+        cv::Mat proxy_labels(proxy.rows, proxy.cols, CV_32SC1);
+        std::vector<float> dE_vec(proxy_area);
+
+        for (int i = 0; i < proxy_area; ++i) {
+            float min_sq = std::numeric_limits<float>::max();
+            int lbl      = 0;
+            for (int k = 0; k < km_centers.rows; ++k) {
+                float sq = 0.0f;
+                for (int d = 0; d < ch; ++d) {
+                    const float diff = proxy_cielab.at<float>(i, d) - km_centers.at<float>(k, d);
+                    sq += diff * diff;
+                }
+                if (sq < min_sq) {
+                    min_sq = sq;
+                    lbl    = k;
+                }
+            }
+            proxy_labels.at<int>(i / proxy.cols, i % proxy.cols) = lbl;
+            dE_vec[i]                                            = std::sqrt(min_sq);
+        }
+
+        // Reconstruction error: mean and p95 Delta E
+        float sum_dE = 0.0f;
+        for (float d : dE_vec) sum_dE += d;
+        const float mean_dE = sum_dE / std::max(1, proxy_area);
+
+        const int p95 = std::max(0, static_cast<int>(0.95f * (proxy_area - 1)));
+        std::nth_element(dE_vec.begin(), dE_vec.begin() + p95, dE_vec.end());
+        const float p95_dE = dE_vec[p95];
+
+        // Fragmentation: per-label connected components
+        int total_comp = 0;
+        int tiny_comp  = 0;
+        for (int label = 0; label < km_centers.rows; ++label) {
+            cv::Mat mask;
+            cv::compare(proxy_labels, label, mask, cv::CMP_EQ);
+            if (cv::countNonZero(mask) == 0) continue;
+
+            cv::Mat cc_labels;
+            int n_cc = cv::connectedComponents(mask, cc_labels, 8, CV_32S) - 1;
+            total_comp += n_cc;
+
+            std::vector<int> areas(n_cc + 1, 0);
+            for (int r = 0; r < cc_labels.rows; ++r) {
+                const int* row = cc_labels.ptr<int>(r);
+                for (int c2 = 0; c2 < cc_labels.cols; ++c2)
+                    if (row[c2] > 0) areas[row[c2]]++;
+            }
+            for (int cc_id = 1; cc_id <= n_cc; ++cc_id)
+                if (static_cast<float>(areas[cc_id]) < tiny_px_threshold) ++tiny_comp;
+        }
+
+        const float tiny_rate =
+            (total_comp > 0) ? static_cast<float>(tiny_comp) / total_comp : 0.0f;
+        const float comp_density = static_cast<float>(total_comp) / std::max(1, proxy_area);
+        const float log2K        = std::log2(static_cast<float>(K));
+
+        const float score = kW_meanDE * mean_dE + kW_p95DE * p95_dE + kW_tinyRate * tiny_rate +
+                            kW_compDens * comp_density + kW_logK * log2K;
+
+        spdlog::debug("AutoColor K={:2d}: dE_mean={:.2f} dE_p95={:.2f} tiny={:.3f} "
+                      "comp_dens={:.5f} log2K={:.2f} => score={:.2f}",
+                      K, mean_dE, p95_dE, tiny_rate, comp_density, log2K, score);
+
+        if (score < best_score) {
+            best_score = score;
+            best_k     = K;
+        }
+    }
+
+    spdlog::info("AutoColor: achromatic={}, selected K={} (score={:.2f})", achromatic, best_k,
+                 best_score);
+    return best_k;
+}
+
 } // namespace
 
 VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerConfig& cfg,
                                           const cv::Mat& opaque_mask) {
     const auto pipeline_start = std::chrono::steady_clock::now();
-    spdlog::info("VectorizePotracePipeline start: input={}x{}, num_colors={}, min_region_area={}, "
-                 "curve_fit_error={:.2f}, contour_simplify={:.2f}, svg_stroke={}, coverage_fix={}, "
-                 "max_working_pixels={}",
-                 bgr.cols, bgr.rows, cfg.num_colors, cfg.min_region_area, cfg.curve_fit_error,
-                 cfg.contour_simplify, cfg.svg_enable_stroke, cfg.enable_coverage_fix,
-                 cfg.max_working_pixels);
-    const bool multicolor = cfg.num_colors > 2;
+    const int resolved_colors = (cfg.num_colors == 0) ? EstimateOptimalColors(bgr) : cfg.num_colors;
+
+    spdlog::info("VectorizePotracePipeline start: input={}x{}, num_colors={}{}, "
+                 "min_region_area={}, curve_fit_error={:.2f}, contour_simplify={:.2f}, "
+                 "svg_stroke={}, coverage_fix={}, max_working_pixels={}",
+                 bgr.cols, bgr.rows, resolved_colors, cfg.num_colors == 0 ? " (auto)" : "",
+                 cfg.min_region_area, cfg.curve_fit_error, cfg.contour_simplify,
+                 cfg.svg_enable_stroke, cfg.enable_coverage_fix, cfg.max_working_pixels);
+    const bool multicolor = resolved_colors > 2;
     auto preproc =
         PreprocessForVectorize(bgr, multicolor, cfg.smoothing_spatial, cfg.smoothing_color,
                                cfg.upscale_short_edge, cfg.max_working_pixels);
@@ -485,7 +675,7 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
 
     cv::Mat lab = BgrToLab(working);
     SegmentationResult seg =
-        multicolor ? SegmentMultiColor(lab, cfg.num_colors, cfg.slic_region_size,
+        multicolor ? SegmentMultiColor(lab, resolved_colors, cfg.slic_region_size,
                                        cfg.slic_compactness, edge_map, cfg.edge_sensitivity)
                    : SegmentBinary(working, lab);
     if (seg.labels.empty()) {
@@ -530,8 +720,19 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
     spdlog::info("Vectorize labels compacted: num_labels={}, palette_size={}", num_labels,
                  palette.size());
 
+    float effective_curve_fit_error  = cfg.curve_fit_error;
+    float effective_contour_simplify = cfg.contour_simplify;
+    if (cfg.detail_level >= 0.0f) {
+        float dl                   = std::clamp(cfg.detail_level, 0.0f, 1.0f);
+        effective_curve_fit_error  = 2.0f - 1.7f * dl;
+        effective_contour_simplify = 0.8f - 0.6f * dl;
+        spdlog::info("detail_level={:.2f}: derived curve_fit_error={:.2f}, "
+                     "contour_simplify={:.2f}",
+                     dl, effective_curve_fit_error, effective_contour_simplify);
+    }
+
     const float trace_eps =
-        std::max(0.2f, std::clamp(cfg.contour_simplify * 0.45f + 0.2f, 0.2f, 2.0f));
+        std::max(0.2f, std::clamp(effective_contour_simplify * 0.45f + 0.2f, 0.2f, 2.0f));
     const int turdsize        = std::max(0, static_cast<int>(std::lround(trace_eps * 0.5f)));
     const double opttolerance = std::clamp(static_cast<double>(trace_eps), 0.2, 2.0);
     spdlog::debug("Vectorize trace params: trace_eps={:.3f}, turdsize={}, opttolerance={:.3f}",
@@ -550,15 +751,40 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
                 unsmoothed_lab.empty() ? (unsmoothed_lab = BgrToLab(working)) : unsmoothed_lab;
             SubpixelRefineConfig sp_cfg;
             sp_cfg.max_displacement = cfg.subpixel_max_displacement;
-            RefineEdgesSubpixel(boundary_graph, refine_lab, sp_cfg);
+
+            if (cfg.enable_antialias_detect) {
+                AADetectConfig aa_cfg;
+                aa_cfg.tolerance = cfg.aa_tolerance;
+                auto aa_map      = DetectAAPixels(refine_lab, seg.labels, seg.centers_lab, aa_cfg);
+                RefineEdgesSubpixelAA(boundary_graph, refine_lab, aa_map.is_aa, aa_map.alpha,
+                                      sp_cfg);
+            } else {
+                RefineEdgesSubpixel(boundary_graph, refine_lab, sp_cfg);
+            }
         }
 
         CurveFitConfig fit_cfg;
-        fit_cfg.error_threshold            = std::clamp(cfg.curve_fit_error, 0.05f, 10.0f);
+        fit_cfg.error_threshold            = std::clamp(effective_curve_fit_error, 0.05f, 10.0f);
         fit_cfg.corner_angle_threshold_deg = std::clamp(cfg.corner_angle_threshold, 60.0f, 179.0f);
-        shapes = AssembleContoursFromGraph(boundary_graph, num_labels, palette,
-                                           cfg.min_contour_area, cfg.min_hole_area, &fit_cfg);
+        auto smooth_cfg                    = ContourSmoothFromLevel(cfg.smoothness);
+        shapes =
+            AssembleContoursFromGraph(boundary_graph, num_labels, palette, cfg.min_contour_area,
+                                      cfg.min_hole_area, &fit_cfg, smooth_cfg);
         spdlog::info("BoundaryGraph contour assembly done: shapes={}", shapes.size());
+
+        if (cfg.merge_segment_tolerance > 0.0f) {
+            int merged_total = 0;
+            for (auto& shape : shapes) {
+                for (auto& contour : shape.contours) {
+                    int before = static_cast<int>(contour.segments.size());
+                    MergeNearLinearSegments(contour.segments, cfg.merge_segment_tolerance);
+                    merged_total += before - static_cast<int>(contour.segments.size());
+                }
+            }
+            if (merged_total > 0) {
+                spdlog::info("MergeNearLinearSegments: removed {} segments", merged_total);
+            }
+        }
 
         // Potrace fallback for labels that BoundaryGraph failed to produce shapes for.
         // Determine covered labels by checking pixel coverage against shapes.
@@ -740,10 +966,11 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
     }
 
     VectorizerResult result;
-    result.width      = bgr.cols;
-    result.height     = bgr.rows;
-    result.num_shapes = static_cast<int>(shapes.size());
-    result.palette    = std::move(palette);
+    result.width               = bgr.cols;
+    result.height              = bgr.rows;
+    result.num_shapes          = static_cast<int>(shapes.size());
+    result.resolved_num_colors = resolved_colors;
+    result.palette             = std::move(palette);
     result.svg_content =
         WriteSvg(shapes, bgr.cols, bgr.rows, cfg.svg_enable_stroke, cfg.svg_stroke_width);
     const auto elapsed_ms =

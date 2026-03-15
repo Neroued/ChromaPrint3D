@@ -208,26 +208,109 @@ void SchneiderFitRecursive(const std::vector<Vec2f>& pts, Vec2f tan_left, Vec2f 
                           depth + 1);
 }
 
+bool IsAngleCornerOpen(const std::vector<Vec2f>& pts, int i, int k, int n, float cos_thresh) {
+    int prev_idx = std::max(0, i - k);
+    int next_idx = std::min(n - 1, i + k);
+    Vec2f v1     = pts[prev_idx] - pts[i];
+    Vec2f v2     = pts[next_idx] - pts[i];
+    float len1   = v1.Length();
+    float len2   = v2.Length();
+    if (len1 < 1e-6f || len2 < 1e-6f) return false;
+    return v1.Dot(v2) / (len1 * len2) < cos_thresh;
+}
+
+bool IsAngleCornerClosed(const std::vector<Vec2f>& pts, int i, int k, int n, float cos_thresh) {
+    int prev_idx = ((i - k) % n + n) % n;
+    int next_idx = (i + k) % n;
+    Vec2f v1     = pts[prev_idx] - pts[i];
+    Vec2f v2     = pts[next_idx] - pts[i];
+    float len1   = v1.Length();
+    float len2   = v2.Length();
+    if (len1 < 1e-6f || len2 < 1e-6f) return false;
+    return v1.Dot(v2) / (len1 * len2) < cos_thresh;
+}
+
+float DiscreteCurvatureOpen(const std::vector<Vec2f>& pts, int i, int n) {
+    int im1    = std::max(0, i - 1);
+    int ip1    = std::min(n - 1, i + 1);
+    Vec2f v1   = pts[i] - pts[im1];
+    Vec2f v2   = pts[ip1] - pts[i];
+    float len1 = v1.Length();
+    float len2 = v2.Length();
+    if (len1 < 1e-6f || len2 < 1e-6f) return 0.0f;
+    float cross = std::abs(v1.Cross(v2));
+    return cross / (len1 * len2);
+}
+
+float DiscreteCurvatureClosed(const std::vector<Vec2f>& pts, int i, int n) {
+    int im1    = ((i - 1) % n + n) % n;
+    int ip1    = (i + 1) % n;
+    Vec2f v1   = pts[i] - pts[im1];
+    Vec2f v2   = pts[ip1] - pts[i];
+    float len1 = v1.Length();
+    float len2 = v2.Length();
+    if (len1 < 1e-6f || len2 < 1e-6f) return 0.0f;
+    float cross = std::abs(v1.Cross(v2));
+    return cross / (len1 * len2);
+}
+
+Vec2f CornerTangent(const std::vector<Vec2f>& pts, int corner_idx, int n, bool forward,
+                    bool closed) {
+    constexpr int kSmallWindow = 2;
+    if (forward) {
+        int next =
+            closed ? ((corner_idx + kSmallWindow) % n) : std::min(n - 1, corner_idx + kSmallWindow);
+        Vec2f d = pts[next] - pts[corner_idx];
+        return d.LengthSquared() > 1e-10f ? d.Normalized() : Vec2f{1.0f, 0.0f};
+    } else {
+        int prev = closed ? (((corner_idx - kSmallWindow) % n + n) % n)
+                          : std::max(0, corner_idx - kSmallWindow);
+        Vec2f d  = pts[prev] - pts[corner_idx];
+        return d.LengthSquared() > 1e-10f ? d.Normalized() : Vec2f{-1.0f, 0.0f};
+    }
+}
+
 } // namespace
 
 std::vector<int> DetectCorners(const std::vector<Vec2f>& pts, const CurveFitConfig& cfg) {
-    std::vector<int> corners;
     int n = static_cast<int>(pts.size());
-    if (n < 3) return corners;
+    if (n < 3) return {};
 
     float cos_thresh = std::cos(cfg.corner_angle_threshold_deg * kDegToRad);
-    int k            = std::max(1, cfg.corner_neighbor_k);
+    int k_base       = std::max(1, cfg.corner_neighbor_k);
 
+    std::vector<bool> is_corner(n, false);
+
+    // Multi-scale angle detection
+    std::vector<int> scales;
+    if (cfg.enable_multiscale_corners) {
+        scales = {std::max(1, k_base / 2), k_base, std::min(n / 2, k_base * 2)};
+    } else {
+        scales = {k_base};
+    }
+
+    for (int k : scales) {
+        for (int i = 1; i < n - 1; ++i) {
+            if (is_corner[i]) continue;
+            if (IsAngleCornerOpen(pts, i, k, n, cos_thresh)) { is_corner[i] = true; }
+        }
+    }
+
+    // Curvature-jump detection
+    if (cfg.enable_curvature_corners && n >= 5) {
+        std::vector<float> curv(n, 0.0f);
+        for (int i = 1; i < n - 1; ++i) { curv[i] = DiscreteCurvatureOpen(pts, i, n); }
+
+        for (int i = 2; i < n - 2; ++i) {
+            if (is_corner[i]) continue;
+            float jump = std::abs(curv[i] - curv[i - 1]) + std::abs(curv[i] - curv[i + 1]);
+            if (jump > cfg.curvature_jump_threshold && curv[i] > 0.3f) { is_corner[i] = true; }
+        }
+    }
+
+    std::vector<int> corners;
     for (int i = 1; i < n - 1; ++i) {
-        int prev_idx = std::max(0, i - k);
-        int next_idx = std::min(n - 1, i + k);
-        Vec2f v1     = (pts[prev_idx] - pts[i]);
-        Vec2f v2     = (pts[next_idx] - pts[i]);
-        float len1   = v1.Length();
-        float len2   = v2.Length();
-        if (len1 < 1e-6f || len2 < 1e-6f) continue;
-        float cos_angle = v1.Dot(v2) / (len1 * len2);
-        if (cos_angle < cos_thresh) { corners.push_back(i); }
+        if (is_corner[i]) corners.push_back(i);
     }
     return corners;
 }
@@ -235,23 +318,24 @@ std::vector<int> DetectCorners(const std::vector<Vec2f>& pts, const CurveFitConf
 std::vector<CubicBezier> FitBezierToPolyline(const std::vector<Vec2f>& pts,
                                              const CurveFitConfig& cfg) {
     std::vector<CubicBezier> result;
-    if (pts.size() < 2) return result;
-    if (pts.size() == 2) {
+    int n = static_cast<int>(pts.size());
+    if (n < 2) return result;
+    if (n == 2) {
         result.push_back(MakeLinearBezier(pts[0], pts[1]));
         return result;
     }
 
     auto corners = DetectCorners(pts, cfg);
 
-    // Build segment boundaries: [0, corner1, corner2, ..., n-1]
     std::vector<int> splits;
     splits.push_back(0);
     for (int c : corners) {
         if (c > splits.back()) splits.push_back(c);
     }
-    if (splits.back() != static_cast<int>(pts.size()) - 1) {
-        splits.push_back(static_cast<int>(pts.size()) - 1);
-    }
+    if (splits.back() != n - 1) { splits.push_back(n - 1); }
+
+    std::vector<bool> split_is_corner(splits.size(), false);
+    for (size_t si = 1; si + 1 < splits.size(); ++si) { split_is_corner[si] = true; }
 
     for (int s = 0; s + 1 < static_cast<int>(splits.size()); ++s) {
         int i0 = splits[s];
@@ -259,8 +343,13 @@ std::vector<CubicBezier> FitBezierToPolyline(const std::vector<Vec2f>& pts,
         if (i1 - i0 < 1) continue;
 
         std::vector<Vec2f> segment(pts.begin() + i0, pts.begin() + i1 + 1);
-        Vec2f tan_left  = EstimateTangent(segment, 0, true);
-        Vec2f tan_right = EstimateTangent(segment, static_cast<int>(segment.size()) - 1, false);
+
+        Vec2f tan_left = split_is_corner[s] ? CornerTangent(pts, i0, n, true, false)
+                                            : EstimateTangent(segment, 0, true);
+        Vec2f tan_right =
+            split_is_corner[s + 1]
+                ? CornerTangent(pts, i1, n, false, false)
+                : EstimateTangent(segment, static_cast<int>(segment.size()) - 1, false);
 
         SchneiderFitRecursive(segment, tan_left, tan_right, cfg.error_threshold,
                               cfg.max_recursion_depth, cfg.reparameterize_iterations, result, 0);
@@ -275,25 +364,43 @@ std::vector<CubicBezier> FitBezierToClosedPolyline(const std::vector<Vec2f>& pts
     int n = static_cast<int>(pts.size());
     if (n < 3) return result;
 
-    // Corner detection with wrap-around for closed polylines
     float cos_thresh = std::cos(cfg.corner_angle_threshold_deg * kDegToRad);
-    int k            = std::max(1, cfg.corner_neighbor_k);
-    std::vector<int> corners;
+    int k_base       = std::max(1, cfg.corner_neighbor_k);
 
+    std::vector<bool> is_corner(n, false);
+
+    std::vector<int> scales;
+    if (cfg.enable_multiscale_corners) {
+        scales = {std::max(1, k_base / 2), k_base, std::min(n / 2, k_base * 2)};
+    } else {
+        scales = {k_base};
+    }
+
+    for (int k : scales) {
+        for (int i = 0; i < n; ++i) {
+            if (is_corner[i]) continue;
+            if (IsAngleCornerClosed(pts, i, k, n, cos_thresh)) { is_corner[i] = true; }
+        }
+    }
+
+    if (cfg.enable_curvature_corners && n >= 5) {
+        std::vector<float> curv(n, 0.0f);
+        for (int i = 0; i < n; ++i) { curv[i] = DiscreteCurvatureClosed(pts, i, n); }
+        for (int i = 0; i < n; ++i) {
+            if (is_corner[i]) continue;
+            int im1    = ((i - 1) % n + n) % n;
+            int ip1    = (i + 1) % n;
+            float jump = std::abs(curv[i] - curv[im1]) + std::abs(curv[i] - curv[ip1]);
+            if (jump > cfg.curvature_jump_threshold && curv[i] > 0.3f) { is_corner[i] = true; }
+        }
+    }
+
+    std::vector<int> corners;
     for (int i = 0; i < n; ++i) {
-        int prev_idx = ((i - k) % n + n) % n;
-        int next_idx = (i + k) % n;
-        Vec2f v1     = pts[prev_idx] - pts[i];
-        Vec2f v2     = pts[next_idx] - pts[i];
-        float len1   = v1.Length();
-        float len2   = v2.Length();
-        if (len1 < 1e-6f || len2 < 1e-6f) continue;
-        float cos_angle = v1.Dot(v2) / (len1 * len2);
-        if (cos_angle < cos_thresh) { corners.push_back(i); }
+        if (is_corner[i]) corners.push_back(i);
     }
 
     if (corners.empty()) {
-        // No corners: fit the entire loop. Extend pts with closure segment.
         std::vector<Vec2f> extended(pts.begin(), pts.end());
         extended.push_back(pts[0]);
 
@@ -320,8 +427,8 @@ std::vector<CubicBezier> FitBezierToClosedPolyline(const std::vector<Vec2f>& pts
 
             if (segment.size() < 2) continue;
 
-            Vec2f tan_left  = EstimateTangent(segment, 0, true);
-            Vec2f tan_right = EstimateTangent(segment, static_cast<int>(segment.size()) - 1, false);
+            Vec2f tan_left  = CornerTangent(pts, seg_start, n, true, true);
+            Vec2f tan_right = CornerTangent(pts, seg_end, n, false, true);
 
             SchneiderFitRecursive(segment, tan_left, tan_right, cfg.error_threshold,
                                   cfg.max_recursion_depth, cfg.reparameterize_iterations, result,
@@ -331,6 +438,68 @@ std::vector<CubicBezier> FitBezierToClosedPolyline(const std::vector<Vec2f>& pts
 
     if (!result.empty()) { result.back().p3 = result.front().p0; }
     return result;
+}
+
+void MergeNearLinearSegments(std::vector<CubicBezier>& segments, float tolerance) {
+    if (segments.size() < 2 || tolerance <= 0.0f) return;
+
+    constexpr size_t kMaxRunLength = 6;
+
+    auto is_near_linear = [](const CubicBezier& b) -> bool {
+        Vec2f chord     = b.p3 - b.p0;
+        float chord_len = chord.Length();
+        if (chord_len < 1e-6f) return true;
+        float inv2 = 1.0f / (chord_len * chord_len);
+        float d1   = std::abs((b.p1 - b.p0).Cross(chord)) * inv2;
+        float d2   = std::abs((b.p2 - b.p3).Cross(chord)) * inv2;
+        return d1 < 0.03f && d2 < 0.03f;
+    };
+
+    auto points_fit_chord = [&](const std::vector<CubicBezier>& segs, size_t from,
+                                size_t to) -> bool {
+        Vec2f chord     = segs[to - 1].p3 - segs[from].p0;
+        float chord_len = chord.Length();
+        if (chord_len < 1e-6f) return true;
+        for (size_t k = from; k < to; ++k) {
+            Vec2f rel  = segs[k].p3 - segs[from].p0;
+            float dist = std::abs(rel.Cross(chord)) / chord_len;
+            if (dist > tolerance * chord_len) return false;
+        }
+        return true;
+    };
+
+    std::vector<CubicBezier> merged;
+    merged.reserve(segments.size());
+
+    size_t i = 0;
+    while (i < segments.size()) {
+        if (!is_near_linear(segments[i])) {
+            merged.push_back(segments[i]);
+            ++i;
+            continue;
+        }
+
+        size_t j = i + 1;
+        while (j < segments.size() && (j - i) < kMaxRunLength && is_near_linear(segments[j]) &&
+               points_fit_chord(segments, i, j + 1)) {
+            ++j;
+        }
+
+        if (j - i < 2) {
+            merged.push_back(segments[i]);
+            ++i;
+            continue;
+        }
+
+        Vec2f run_start = segments[i].p0;
+        Vec2f run_end   = segments[j - 1].p3;
+        Vec2f d         = run_end - run_start;
+        merged.push_back(
+            {run_start, run_start + d * (1.0f / 3.0f), run_start + d * (2.0f / 3.0f), run_end});
+        i = j;
+    }
+
+    segments = std::move(merged);
 }
 
 int FitBezierOnGraph(BoundaryGraph& graph, const CurveFitConfig& cfg) {

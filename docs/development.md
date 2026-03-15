@@ -217,7 +217,7 @@ npm run dev
 
 | 参数 | 类型 | 默认值 | 有效范围 | 说明 | 建议暴露层级 |
 |---|---|---:|---|---|---|
-| `num_colors` | int | 16 | `[2,256]` | 颜色量化数量，越大越接近原图但更复杂 | 前端主参数 |
+| `num_colors` | int | 0 | `0` 或 `[2,256]` | 颜色量化数量。`0`=自动检测最优数量；`2-256`=显式指定 | 前端主参数 |
 | `curve_fit_error` | float | 0.8 | `[0.1,5]` | Bezier 拟合误差阈值（像素），越小越贴边界 | 前端主参数 |
 | `contour_simplify` | float | 0.45 | `[0,10]` | 轮廓简化强度，越大节点越少 | 前端主参数 |
 | `svg_enable_stroke` | bool | true | `true/false` | 启用细线增强描边输出 | 前端主参数 |
@@ -234,6 +234,11 @@ npm run dev
 | `min_hole_area` | float | 4.0 | `>=0` | 最小保留孔洞面积（像素²） | 前端高级参数 |
 | `min_coverage_ratio` | float | 0.998 | `[0,1]` | 覆盖率低于该值时触发 coverage fix | 前端高级参数 |
 | `svg_stroke_width` | float | 0.5 | `[0,20]` | SVG 描边宽度（像素） | 前端高级参数 |
+| `smoothness` | float | 0.5 | `[0,1]` | 轮廓平滑度：0 = 保留所有细节，1 = 最大平滑 | 前端主参数 |
+| `detail_level` | float | -1 | `[-1,1]` | 统一细节控制：`>=0` 时自动推导 `curve_fit_error` 与 `contour_simplify`；`-1` 禁用 | 前端主参数 |
+| `merge_segment_tolerance` | float | 0.05 | `[0,0.5]` | 近线性 Bezier 段合并容差（弦长比），`0` 禁用合并 | 前端高级参数 |
+| `enable_antialias_detect` | bool | false | `true/false` | 启用抗锯齿混合边缘检测，改善 AA 源图的边界精度 | 前端高级参数 |
+| `aa_tolerance` | float | 10 | `[1,50]` | AA 混合像素检测 LAB Delta-E 容差 | 仅 CLI / 调试 |
 | `corner_angle_threshold` | float | 135 | `[90,175]` | 角点判定阈值（度） | 仅 CLI / 调试 |
 | `upscale_short_edge` | int | 600 | `[0,2000]` | 自动放大触发短边阈值，`0` 禁用放大 | 仅 CLI / 调试 |
 | `max_working_pixels` | int | 3000000 | `[0,100000000]` | 大图预处理像素上限；超出时先按面积缩小以控制 SVG 复杂度，`0` 禁用 | 仅 API / 调试 |
@@ -241,8 +246,11 @@ npm run dev
 说明：
 
 - 前端默认选择性暴露：主参数 + 高级参数；技术性参数优先在 CLI 调试。
-- 参数越多不一定越好，建议先调整 `num_colors`、`curve_fit_error`、`contour_simplify`。
+- `num_colors=0`（默认）时，管线通过复合评分候选搜索自动选择最优颜色数。评估重建误差、碎片化代价和复杂度惩罚，对候选 K∈{2,3,4,6,8,12,16,24} 取 argmin。结果通过 `VectorizeResult.resolved_num_colors` 返回。
+- 建议先调整 `num_colors`、`smoothness`、`detail_level`，它们能覆盖大部分质量/复杂度权衡。
+- `detail_level` 启用时（`>=0`）会自动设置 `curve_fit_error` 与 `contour_simplify`，无需手动调。
 - 当源图分辨率很高（如 4K+）且导出 SVG 过大时，优先保留 `max_working_pixels` 默认值或适当下调。
+- 对含抗锯齿边缘的源图（如 Photoshop 导出），可启用 `enable_antialias_detect` 以获取更准确的边界。
 
 #### 边缘感知分割与逐像素标签细化
 

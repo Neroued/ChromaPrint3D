@@ -29,6 +29,7 @@ export async function fetchVectorizeTaskStatus(taskId: string): Promise<Vectoriz
     height: Number(raw.height ?? 0),
     num_shapes: Number(raw.num_shapes ?? 0),
     svg_size: Number(raw.svg_size ?? 0),
+    resolved_num_colors: Number(raw.resolved_num_colors ?? 0),
     timing: (raw.timing as VectorizeTaskStatus['timing']) ?? null,
   }
 }

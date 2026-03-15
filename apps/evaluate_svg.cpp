@@ -55,6 +55,11 @@ void PrintUsage(const char* exe) {
                 "  --disable-subpixel-refine Disable sub-pixel boundary refinement\n"
                 "  --disable-coverage-fix    Disable coverage patching\n"
                 "  --min-coverage-ratio F    Coverage fix trigger ratio\n"
+                "  --smoothness F            Contour smoothness [0,1]\n"
+                "  --detail-level F          Unified detail control [0,1]\n"
+                "  --merge-tolerance F       Near-linear segment merge tolerance\n"
+                "  --enable-antialias        Enable AA mixed-edge detection\n"
+                "  --aa-tolerance F          AA blend detection LAB tolerance\n"
                 "  --log-level LEVEL         trace/debug/info/warn/error/off (default info)\n",
                 exe, exe);
 }
@@ -162,6 +167,10 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
         TRY_INT_OPT("--refine-passes", refine_passes)
         TRY_FLOAT_OPT("--max-merge-color-dist", max_merge_color_dist)
         TRY_FLOAT_OPT("--min-coverage-ratio", min_coverage_ratio)
+        TRY_FLOAT_OPT("--smoothness", smoothness)
+        TRY_FLOAT_OPT("--detail-level", detail_level)
+        TRY_FLOAT_OPT("--merge-tolerance", merge_segment_tolerance)
+        TRY_FLOAT_OPT("--aa-tolerance", aa_tolerance)
 
         if (arg == "--disable-subpixel-refine") {
             opt.vec_overrides.enable_subpixel_refine = false;
@@ -169,6 +178,10 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
         }
         if (arg == "--disable-coverage-fix") {
             opt.vec_overrides.enable_coverage_fix = false;
+            continue;
+        }
+        if (arg == "--enable-antialias") {
+            opt.vec_overrides.enable_antialias_detect = true;
             continue;
         }
 

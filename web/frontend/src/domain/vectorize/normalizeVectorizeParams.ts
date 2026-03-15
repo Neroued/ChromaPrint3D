@@ -2,7 +2,9 @@ import { roundTo } from '../../runtime/number'
 import type { VectorizeParams } from '../../types'
 
 export const defaultVectorizeParams = {
-  num_colors: 16,
+  num_colors: 0,
+  smoothness: 0.5,
+  detail_level: -1,
   min_region_area: 10,
   curve_fit_error: 0.8,
   corner_angle_threshold: 135,
@@ -15,6 +17,9 @@ export const defaultVectorizeParams = {
   refine_passes: 6,
   max_merge_color_dist: 150,
   thin_line_max_radius: 2.5,
+  enable_antialias_detect: false,
+  aa_tolerance: 10,
+  merge_segment_tolerance: 0.05,
   min_contour_area: 10,
   min_hole_area: 4.0,
   contour_simplify: 0.45,
@@ -26,6 +31,8 @@ export const defaultVectorizeParams = {
   Pick<
     VectorizeParams,
     | 'num_colors'
+    | 'smoothness'
+    | 'detail_level'
     | 'min_region_area'
     | 'curve_fit_error'
     | 'corner_angle_threshold'
@@ -38,6 +45,9 @@ export const defaultVectorizeParams = {
     | 'refine_passes'
     | 'max_merge_color_dist'
     | 'thin_line_max_radius'
+    | 'enable_antialias_detect'
+    | 'aa_tolerance'
+    | 'merge_segment_tolerance'
     | 'min_contour_area'
     | 'min_hole_area'
     | 'contour_simplify'
@@ -70,8 +80,21 @@ export function normalizeVectorizeParams(
   params: VectorizeParams,
   defaults: VectorizeParams = defaultVectorizeParams,
 ): VectorizeParams {
+  const rawNumColors =
+    typeof params.num_colors === 'number' ? params.num_colors : (defaults.num_colors ?? 0)
+  const numColors = rawNumColors === 0 ? 0 : normalizeNumber(rawNumColors, 16, 2, 256, true)
+
   return {
-    num_colors: normalizeNumber(params.num_colors, defaults.num_colors ?? 16, 2, 256, true),
+    num_colors: numColors,
+    smoothness: normalizeNumber(params.smoothness, defaults.smoothness ?? 0.5, 0, 1, false, 2),
+    detail_level: (() => {
+      const v =
+        typeof params.detail_level === 'number'
+          ? params.detail_level
+          : (defaults.detail_level ?? -1)
+      if (v < 0) return -1
+      return normalizeNumber(v, 0.5, 0, 1, false, 2)
+    })(),
     curve_fit_error: normalizeNumber(
       params.curve_fit_error,
       defaults.curve_fit_error ?? 0.8,
@@ -149,6 +172,26 @@ export function normalizeVectorizeParams(
       10,
       false,
       1,
+    ),
+    enable_antialias_detect: normalizeBoolean(
+      params.enable_antialias_detect,
+      defaults.enable_antialias_detect ?? false,
+    ),
+    aa_tolerance: normalizeNumber(
+      params.aa_tolerance,
+      defaults.aa_tolerance ?? 10,
+      1,
+      50,
+      false,
+      1,
+    ),
+    merge_segment_tolerance: normalizeNumber(
+      params.merge_segment_tolerance,
+      defaults.merge_segment_tolerance ?? 0.05,
+      0,
+      0.5,
+      false,
+      3,
     ),
     min_region_area: normalizeNumber(
       params.min_region_area,

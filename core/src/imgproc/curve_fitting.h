@@ -16,6 +16,10 @@ struct CurveFitConfig {
     int reparameterize_iterations    = 3;
     float corner_angle_threshold_deg = 135.0f;
     int corner_neighbor_k            = 6;
+
+    bool enable_multiscale_corners = true;  ///< Check corners at multiple k-scales.
+    bool enable_curvature_corners  = true;  ///< Detect corners via curvature jump.
+    float curvature_jump_threshold = 0.35f; ///< Min curvature-jump ratio to flag a corner.
 };
 
 /// Detect corner indices in a polyline based on angle threshold.
@@ -39,5 +43,10 @@ std::vector<CubicBezier> FitBezierToClosedPolyline(const std::vector<Vec2f>& pts
 /// Fit Bezier curves to all edges of a BoundaryGraph in-place.
 /// Returns the total number of edges that fell back to polyline.
 int FitBezierOnGraph(BoundaryGraph& graph, const CurveFitConfig& cfg = {});
+
+/// Merge consecutive near-linear Bezier segments into single curves.
+/// \param segments  Bezier segment list (modified in-place).
+/// \param tolerance Max control-point deviation as fraction of chord length to consider linear.
+void MergeNearLinearSegments(std::vector<CubicBezier>& segments, float tolerance);
 
 } // namespace ChromaPrint3D::detail

@@ -49,9 +49,11 @@ PreprocessResult PreprocessForVectorize(const cv::Mat& bgr, bool enable_color_sm
 
     if (!downscale_applied && enable_upscale && short_edge < upscale_short_edge &&
         total_px < 1000000) {
-        float factor = 2.0f;
-        int new_h    = static_cast<int>(h * factor);
-        int new_w    = static_cast<int>(w * factor);
+        float target_factor =
+            static_cast<float>(upscale_short_edge) / static_cast<float>(std::max(1, short_edge));
+        float factor = std::min(2.0f, target_factor);
+        int new_h    = std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * factor)));
+        int new_w    = std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * factor)));
         if (static_cast<std::int64_t>(new_h) * static_cast<std::int64_t>(new_w) > 4000000LL) {
             factor =
                 std::sqrt(4000000.0f / static_cast<float>(std::max<std::int64_t>(1, total_px)));

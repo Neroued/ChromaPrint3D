@@ -12,6 +12,7 @@ import {
   NGrid,
   NGridItem,
   NInputNumber,
+  NSlider,
   NSpace,
   NSpin,
   NSwitch,
@@ -311,47 +312,39 @@ onMounted(async () => {
                       {{ t('vectorize.settings.numColorsHint') }}
                     </NTooltip>
                   </template>
-                  <NInputNumber
-                    v-model:value="params.num_colors"
-                    :min="2"
-                    :max="256"
-                    style="width: 100%"
-                  />
+                  <NSpace align="center" :size="8">
+                    <NSwitch
+                      :value="params.num_colors === 0"
+                      @update:value="(v: boolean) => (params.num_colors = v ? 0 : 16)"
+                    >
+                      <template #checked>{{ t('common.auto') }}</template>
+                      <template #unchecked>{{ t('common.manual') }}</template>
+                    </NSwitch>
+                    <NInputNumber
+                      v-if="params.num_colors !== 0"
+                      v-model:value="params.num_colors"
+                      :min="2"
+                      :max="256"
+                      style="width: 120px"
+                    />
+                  </NSpace>
                 </NFormItem>
                 <NFormItem>
                   <template #label>
                     <NTooltip>
                       <template #trigger>
-                        <span class="tip-label">{{ t('vectorize.settings.curveFitError') }}</span>
+                        <span class="tip-label">{{ t('vectorize.settings.smoothness') }}</span>
                       </template>
-                      {{ t('vectorize.settings.curveFitErrorHint') }}
+                      {{ t('vectorize.settings.smoothnessHint') }}
                     </NTooltip>
                   </template>
-                  <NInputNumber
-                    v-model:value="params.curve_fit_error"
-                    :min="0.1"
-                    :max="5"
-                    :step="0.1"
-                    :precision="2"
-                    style="width: 100%"
-                  />
-                </NFormItem>
-                <NFormItem>
-                  <template #label>
-                    <NTooltip>
-                      <template #trigger>
-                        <span class="tip-label">{{ t('vectorize.settings.contourSimplify') }}</span>
-                      </template>
-                      {{ t('vectorize.settings.contourSimplifyHint') }}
-                    </NTooltip>
-                  </template>
-                  <NInputNumber
-                    v-model:value="params.contour_simplify"
+                  <NSlider
+                    v-model:value="params.smoothness"
                     :min="0"
-                    :max="10"
-                    :step="0.05"
-                    :precision="2"
-                    style="width: 100%"
+                    :max="1"
+                    :step="0.01"
+                    :tooltip="true"
+                    :format-tooltip="(v: number) => v.toFixed(2)"
                   />
                 </NFormItem>
               </NForm>
@@ -592,6 +585,143 @@ onMounted(async () => {
                             style="width: 100%"
                           />
                         </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.enableAntialiasDetect')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.enableAntialiasDetectHint') }}
+                            </NTooltip>
+                          </template>
+                          <NSwitch v-model:value="params.enable_antialias_detect" />
+                        </NFormItem>
+                        <NFormItem v-if="params.enable_antialias_detect">
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.aaTolerance')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.aaToleranceHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.aa_tolerance"
+                            :min="1"
+                            :max="50"
+                            :step="1"
+                            :precision="1"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                      </NForm>
+                    </NCollapseItem>
+
+                    <NCollapseItem
+                      :title="t('vectorize.advanced.curveFitting')"
+                      name="curveFitting"
+                    >
+                      <NForm
+                        label-placement="left"
+                        :label-width="140"
+                        :disabled="loading"
+                        size="small"
+                      >
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.settings.curveFitError')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.settings.curveFitErrorHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.curve_fit_error"
+                            :min="0.1"
+                            :max="5"
+                            :step="0.1"
+                            :precision="2"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.settings.contourSimplify')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.settings.contourSimplifyHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.contour_simplify"
+                            :min="0"
+                            :max="10"
+                            :step="0.05"
+                            :precision="2"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.mergeSegTolerance')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.mergeSegToleranceHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.merge_segment_tolerance"
+                            :min="0"
+                            :max="0.5"
+                            :step="0.01"
+                            :precision="3"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.detailLevel')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.detailLevelHint') }}
+                            </NTooltip>
+                          </template>
+                          <NSpace align="center" :size="8">
+                            <NSwitch
+                              :value="(params.detail_level ?? -1) >= 0"
+                              @update:value="(v: boolean) => (params.detail_level = v ? 0.5 : -1)"
+                            >
+                              <template #checked>{{ t('common.enabled') }}</template>
+                              <template #unchecked>{{ t('common.disabled') }}</template>
+                            </NSwitch>
+                            <NSlider
+                              v-if="(params.detail_level ?? -1) >= 0"
+                              v-model:value="params.detail_level"
+                              :min="0"
+                              :max="1"
+                              :step="0.01"
+                              :tooltip="true"
+                              :format-tooltip="(v: number) => v.toFixed(2)"
+                              style="width: 140px"
+                            />
+                          </NSpace>
+                        </NFormItem>
                       </NForm>
                     </NCollapseItem>
 
@@ -733,6 +863,14 @@ onMounted(async () => {
             {{ taskStatus!.width }} x {{ taskStatus!.height }} |
             {{ t('vectorize.result.shapes', { count: taskStatus!.num_shapes }) }} | SVG
             {{ svgSizeText }}
+            <template v-if="taskStatus!.resolved_num_colors > 0 && params.num_colors === 0">
+              |
+              {{
+                t('vectorize.result.resolvedColors', {
+                  count: taskStatus!.resolved_num_colors,
+                })
+              }}
+            </template>
           </NText>
           <NButton size="tiny" quaternary @click="panZoomGroups.resetAll">
             {{ t('vectorize.result.resetView') }}
