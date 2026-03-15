@@ -13,12 +13,8 @@ describe('convertParamBuilders', () => {
     target_height_mm: 100,
     scale: 1.2,
     k_candidates: 8,
-    cluster_method: 'slic',
+    cluster_method: 'kmeans',
     cluster_count: 16,
-    slic_target_superpixels: 256,
-    slic_compactness: 12,
-    slic_iterations: 8,
-    slic_min_region_ratio: 0.3,
     dither: 'blue_noise',
     dither_strength: 0.8,
     model_enable: true,
@@ -42,8 +38,7 @@ describe('convertParamBuilders', () => {
   it('buildRasterParams should exclude vector-only fields', () => {
     const raster = buildRasterParams(input)
     expect(raster.max_width).toBe(512)
-    expect(raster.cluster_method).toBe('slic')
-    expect(raster.slic_target_superpixels).toBe(256)
+    expect(raster.cluster_method).toBe('kmeans')
     expect(raster.generate_source_mask).toBe(true)
     expect(raster.nozzle_size).toBe('n02')
     expect(raster.face_orientation).toBe('facedown')
@@ -68,7 +63,6 @@ describe('convertParamBuilders', () => {
     expect((vector as Record<string, unknown>).max_width).toBeUndefined()
     expect((vector as Record<string, unknown>).cluster_method).toBeUndefined()
     expect((vector as Record<string, unknown>).cluster_count).toBeUndefined()
-    expect((vector as Record<string, unknown>).slic_target_superpixels).toBeUndefined()
     expect((vector as Record<string, unknown>).generate_source_mask).toBeUndefined()
   })
 })

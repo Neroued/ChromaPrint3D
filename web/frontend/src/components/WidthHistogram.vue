@@ -20,7 +20,8 @@ const props = defineProps<{
   nozzleDiameter: number
   imageWidthMm: number
   imageHeightMm: number
-  targetMaxDim: number
+  targetWidthMm: number
+  targetHeightMm: number
 }>()
 
 const { t } = useI18n()
@@ -30,10 +31,14 @@ let chartInstance: Chart | null = null
 
 const BIN_WIDTH = 0.05
 
-const svgMaxDim = computed(() => Math.max(props.imageWidthMm, props.imageHeightMm))
 const displayScale = computed(() => {
-  if (props.targetMaxDim <= 0 || svgMaxDim.value <= 0) return 1
-  return props.targetMaxDim / svgMaxDim.value
+  const tw = props.targetWidthMm
+  const th = props.targetHeightMm
+  if (tw <= 0 && th <= 0) return 1
+  if (props.imageWidthMm <= 0 || props.imageHeightMm <= 0) return 1
+  const sw = tw > 0 ? tw / props.imageWidthMm : Infinity
+  const sh = th > 0 ? th / props.imageHeightMm : Infinity
+  return Math.min(sw, sh)
 })
 
 const histogramData = computed(() => {
@@ -88,21 +93,10 @@ const globalMinWidth = computed(() => {
   return Math.min(...props.shapes.map((s) => s.min_width_mm)) * displayScale.value
 })
 
-const nativeGlobalMinWidth = computed(() => {
-  if (props.shapes.length === 0) return 0
-  return Math.min(...props.shapes.map((s) => s.min_width_mm))
-})
-
-const recommendedMinSize = computed(() => {
-  if (nativeGlobalMinWidth.value <= 0) return 0
-  const minSize = Math.ceil((props.nozzleDiameter * svgMaxDim.value) / nativeGlobalMinWidth.value)
-  return minSize > props.targetMaxDim ? minSize : 0
-})
-
 const suggestedScale = computed(() => {
-  if (recommendedMinSize.value <= 0 || props.targetMaxDim <= 0) return 1
-  const factor = recommendedMinSize.value / props.targetMaxDim
-  return factor <= 1 ? 1 : Math.ceil(factor * 10) / 10
+  if (globalMinWidth.value <= 0 || globalMinWidth.value >= props.nozzleDiameter) return 1
+  const factor = props.nozzleDiameter / globalMinWidth.value
+  return Math.ceil(factor * 10) / 10
 })
 
 const nozzleLinePlugin = {
@@ -240,10 +234,6 @@ onUnmounted(() => {
 
       <NStatistic v-if="suggestedScale > 1" :label="t('widthAnalysis.suggestedScale')">
         <NText type="warning">{{ suggestedScale.toFixed(1) }}x</NText>
-      </NStatistic>
-
-      <NStatistic v-if="recommendedMinSize > 0" :label="t('widthAnalysis.recommendedMinSize')">
-        <NText type="warning">{{ recommendedMinSize }} mm</NText>
       </NStatistic>
     </div>
   </div>

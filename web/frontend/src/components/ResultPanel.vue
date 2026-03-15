@@ -27,10 +27,11 @@ import { useAppStore } from '../stores/app'
 
 const { t } = useI18n()
 const appStore = useAppStore()
-const { completedTask } = storeToRefs(appStore)
+const { completedTask, params } = storeToRefs(appStore)
 const isCompleted = computed(() => completedTask.value?.status === 'completed')
 const result = computed(() => completedTask.value?.result ?? null)
 const taskId = computed(() => completedTask.value?.id ?? '')
+const wasAutoCluster = computed(() => (params.value.cluster_count ?? 0) === 0)
 
 type ResultImageView = 'preview' | 'source-mask'
 
@@ -417,6 +418,10 @@ function handleSetImageView(view: ResultImageView) {
         </template>
         <template v-if="result.resolved_pixel_mm > 0">
           | {{ t('result.pixelSize', { value: result.resolved_pixel_mm.toFixed(2) }) }}
+        </template>
+        <template v-if="wasAutoCluster && result.stats.clusters_total > 0">
+          |
+          {{ t('result.resolvedClusters', { count: result.stats.clusters_total }) }}
         </template>
       </NText>
 

@@ -38,16 +38,15 @@ const { t } = useI18n()
 const {
   activeChannelPreset,
   applicablePresets,
+  clusterMode,
+  clusterModeOptions,
   availableChannels,
   clusterCountUpperBound,
   clusterCountValue,
-  clusterMethodOptions,
-  clusterMethodValue,
   colorSpaceOptions,
   ditherOptions,
   error,
   filteredDBOptions,
-  formatTooltip1Decimal,
   formatTooltip2Decimals,
   gradientDitherOptions,
   handleChannelKeysChange,
@@ -67,20 +66,8 @@ const {
   selectedMaterial,
   selectedVendor,
   setClusterCount,
-  setClusterMethod,
-  setSlicCompactness,
-  setSlicIterations,
-  setSlicMinRegionRatio,
-  setSlicTargetSuperpixels,
   simpleLabelWidth,
   simpleOutputInfo,
-  slicCompactnessUpperBound,
-  slicCompactnessValue,
-  slicIterationsUpperBound,
-  slicIterationsValue,
-  slicMinRegionRatioValue,
-  slicTargetSuperpixelsUpperBound,
-  slicTargetSuperpixelsValue,
   supportsModelGate,
   targetDimensionUpperBound,
   targetHeightMm,
@@ -88,7 +75,6 @@ const {
   tooltips,
   roundTo,
   update,
-  useSlicCluster,
   vendorOptionsForMaterial,
   applyChannelPreset,
 } = useParamPanelState()
@@ -359,16 +345,21 @@ watch(canEnableTransparentLayer, (can) => {
           >
             {{ t('widthAnalysis.analyzeButton') }}
           </NButton>
-          <WidthHistogram
+          <NCollapse
             v-if="widthAnalysis && widthAnalysis.shapes.length > 0"
-            :shapes="widthAnalysis.shapes"
-            :nozzle-diameter="nozzleDiameterMm"
-            :image-width-mm="widthAnalysis.image_width_mm"
-            :image-height-mm="widthAnalysis.image_height_mm"
-            :target-max-dim="
-              Math.max(modelValue.target_width_mm ?? 0, modelValue.target_height_mm ?? 0)
-            "
-          />
+            :default-expanded-names="['width-result']"
+          >
+            <NCollapseItem :title="t('widthAnalysis.resultTitle')" name="width-result">
+              <WidthHistogram
+                :shapes="widthAnalysis.shapes"
+                :nozzle-diameter="nozzleDiameterMm"
+                :image-width-mm="widthAnalysis.image_width_mm"
+                :image-height-mm="widthAnalysis.image_height_mm"
+                :target-width-mm="modelValue.target_width_mm ?? 0"
+                :target-height-mm="modelValue.target_height_mm ?? 0"
+              />
+            </NCollapseItem>
+          </NCollapse>
         </div>
 
         <!-- Tessellation tolerance (vector only) -->
@@ -434,29 +425,8 @@ watch(canEnableTransparentLayer, (can) => {
           @update:db-names="(v: string[]) => update({ db_names: v })"
         />
 
-        <!-- Cluster method (raster only) -->
-        <NFormItem v-if="isRaster" label-placement="left" :label-width="simpleLabelWidth">
-          <template #label>
-            <NTooltip>
-              <template #trigger>
-                <span class="tip-label">{{ t('param.clusterMethod') }}</span>
-              </template>
-              {{ tooltips.cluster_method }}
-            </NTooltip>
-          </template>
-          <NSelect
-            :value="clusterMethodValue"
-            :options="clusterMethodOptions"
-            @update:value="setClusterMethod"
-          />
-        </NFormItem>
-
         <!-- KMeans cluster count (raster only) -->
-        <NFormItem
-          v-if="isRaster && !useSlicCluster"
-          label-placement="left"
-          :label-width="simpleLabelWidth"
-        >
+        <NFormItem v-if="isRaster" label-placement="left" :label-width="simpleLabelWidth">
           <template #label>
             <NTooltip>
               <template #trigger>
@@ -466,92 +436,30 @@ watch(canEnableTransparentLayer, (can) => {
             </NTooltip>
           </template>
           <div class="slider-input-row">
-            <NSlider
-              v-model:value="clusterCountValue"
-              :min="0"
-              :max="clusterCountUpperBound"
-              :step="1"
-              class="slider-input-row__slider"
+            <NSelect
+              v-model:value="clusterMode"
+              :options="clusterModeOptions"
+              size="small"
+              style="width: 90px; flex-shrink: 0"
             />
-            <NInputNumber
-              :value="clusterCountValue"
-              :min="0"
-              :max="clusterCountUpperBound"
-              :step="1"
-              :show-button="false"
-              class="slider-input-row__input number-input-right"
-              @update:value="setClusterCount"
-            />
-          </div>
-        </NFormItem>
-
-        <!-- SLIC target superpixels (raster only) -->
-        <NFormItem
-          v-if="isRaster && useSlicCluster"
-          label-placement="left"
-          :label-width="simpleLabelWidth"
-        >
-          <template #label>
-            <NTooltip>
-              <template #trigger>
-                <span class="tip-label">{{ t('param.superpixelCount') }}</span>
-              </template>
-              {{ tooltips.slic_target_superpixels }}
-            </NTooltip>
-          </template>
-          <div class="slider-input-row">
-            <NSlider
-              v-model:value="slicTargetSuperpixelsValue"
-              :min="0"
-              :max="slicTargetSuperpixelsUpperBound"
-              :step="1"
-              class="slider-input-row__slider"
-            />
-            <NInputNumber
-              :value="slicTargetSuperpixelsValue"
-              :min="0"
-              :max="slicTargetSuperpixelsUpperBound"
-              :step="1"
-              :show-button="false"
-              class="slider-input-row__input number-input-right"
-              @update:value="setSlicTargetSuperpixels"
-            />
-          </div>
-        </NFormItem>
-
-        <!-- SLIC compactness (raster only) -->
-        <NFormItem
-          v-if="isRaster && useSlicCluster"
-          label-placement="left"
-          :label-width="simpleLabelWidth"
-        >
-          <template #label>
-            <NTooltip>
-              <template #trigger>
-                <span class="tip-label">{{ t('param.compactness') }}</span>
-              </template>
-              {{ tooltips.slic_compactness }}
-            </NTooltip>
-          </template>
-          <div class="slider-input-row">
-            <NSlider
-              v-model:value="slicCompactnessValue"
-              :min="0.1"
-              :max="slicCompactnessUpperBound"
-              :step="0.1"
-              :format-tooltip="formatTooltip1Decimal"
-              class="slider-input-row__slider"
-            />
-            <NInputNumber
-              :value="slicCompactnessValue"
-              :min="0.1"
-              :max="slicCompactnessUpperBound"
-              :step="0.1"
-              :precision="1"
-              :show-button="false"
-              class="slider-input-row__input number-input-right"
-              @update:value="setSlicCompactness"
-            />
+            <template v-if="clusterMode === 'manual'">
+              <NSlider
+                v-model:value="clusterCountValue"
+                :min="2"
+                :max="clusterCountUpperBound"
+                :step="1"
+                class="slider-input-row__slider"
+              />
+              <NInputNumber
+                :value="clusterCountValue"
+                :min="2"
+                :max="clusterCountUpperBound"
+                :step="1"
+                :show-button="false"
+                class="slider-input-row__input number-input-right"
+                @update:value="setClusterCount"
+              />
+            </template>
           </div>
         </NFormItem>
 
@@ -573,7 +481,6 @@ watch(canEnableTransparentLayer, (can) => {
             <NSelect
               :value="modelValue.dither ?? 'none'"
               :options="ditherOptions"
-              :disabled="useSlicCluster"
               @update:value="(v: string) => update({ dither: v })"
             />
           </NFormItem>
@@ -1143,108 +1050,26 @@ watch(canEnableTransparentLayer, (can) => {
               <template #label>
                 <NTooltip>
                   <template #trigger>
-                    <span class="tip-label">{{ t('param.clusterMethod') }}</span>
-                  </template>
-                  {{ tooltips.cluster_method }}
-                </NTooltip>
-              </template>
-              <NSelect
-                :value="clusterMethodValue"
-                :options="clusterMethodOptions"
-                @update:value="setClusterMethod"
-              />
-            </NFormItem>
-
-            <NFormItem v-if="isRaster && !useSlicCluster">
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
                     <span class="tip-label">{{ t('param.clusterCount') }}</span>
                   </template>
                   {{ tooltips.cluster_count }}
                 </NTooltip>
               </template>
-              <NInputNumber
-                :value="clusterCountValue"
-                :min="0"
-                :max="clusterCountUpperBound"
-                @update:value="setClusterCount"
-              />
-            </NFormItem>
-
-            <NFormItem v-if="isRaster && useSlicCluster">
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
-                    <span class="tip-label">{{ t('param.superpixelCount') }}</span>
-                  </template>
-                  {{ tooltips.slic_target_superpixels }}
-                </NTooltip>
-              </template>
-              <NInputNumber
-                :value="slicTargetSuperpixelsValue"
-                :min="0"
-                :max="slicTargetSuperpixelsUpperBound"
-                :step="1"
-                @update:value="setSlicTargetSuperpixels"
-              />
-            </NFormItem>
-
-            <NFormItem v-if="isRaster && useSlicCluster">
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
-                    <span class="tip-label">{{ t('param.compactness') }}</span>
-                  </template>
-                  {{ tooltips.slic_compactness }}
-                </NTooltip>
-              </template>
-              <NInputNumber
-                :value="slicCompactnessValue"
-                :min="0.1"
-                :max="slicCompactnessUpperBound"
-                :step="0.1"
-                :precision="1"
-                @update:value="setSlicCompactness"
-              />
-            </NFormItem>
-
-            <NFormItem v-if="isRaster && useSlicCluster">
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
-                    <span class="tip-label">{{ t('param.iterations') }}</span>
-                  </template>
-                  {{ tooltips.slic_iterations }}
-                </NTooltip>
-              </template>
-              <NInputNumber
-                :value="slicIterationsValue"
-                :min="1"
-                :max="slicIterationsUpperBound"
-                :step="1"
-                @update:value="setSlicIterations"
-              />
-            </NFormItem>
-
-            <NFormItem v-if="isRaster && useSlicCluster">
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
-                    <span class="tip-label">{{ t('param.minRegionRatio') }}</span>
-                  </template>
-                  {{ tooltips.slic_min_region_ratio }}
-                </NTooltip>
-              </template>
-              <NSlider
-                :value="slicMinRegionRatioValue"
-                :min="0"
-                :max="1"
-                :step="0.01"
-                :tooltip="true"
-                :format-tooltip="formatTooltip2Decimals"
-                @update:value="setSlicMinRegionRatio"
-              />
+              <NSpace align="center">
+                <NSelect
+                  v-model:value="clusterMode"
+                  :options="clusterModeOptions"
+                  size="small"
+                  style="width: 90px"
+                />
+                <NInputNumber
+                  v-if="clusterMode === 'manual'"
+                  :value="clusterCountValue"
+                  :min="2"
+                  :max="clusterCountUpperBound"
+                  @update:value="setClusterCount"
+                />
+              </NSpace>
             </NFormItem>
 
             <NFormItem v-if="isRaster">
@@ -1259,7 +1084,6 @@ watch(canEnableTransparentLayer, (can) => {
               <NSelect
                 :value="modelValue.dither ?? 'none'"
                 :options="ditherOptions"
-                :disabled="useSlicCluster"
                 @update:value="(v: string) => update({ dither: v })"
               />
             </NFormItem>

@@ -96,7 +96,11 @@ export default {
     targetHeightMm: 'Target Height (mm)',
     tessellationTolerance: 'Tessellation Tolerance (mm)',
     clusterMethod: 'Cluster Method',
-    clusterCount: 'Cluster Count',
+    clusterCount: 'Color Clustering',
+    autoClusterCount: 'Auto',
+    clusterModeOff: 'Off',
+    clusterModeAuto: 'Auto',
+    clusterModeManual: 'Manual',
     superpixelCount: 'Superpixel Count',
     compactness: 'Compactness',
     halftone: 'Halftone Dither',
@@ -155,7 +159,7 @@ export default {
       cluster_method:
         'Clustering algorithm. SLIC prioritizes spatial continuity; K-Means clusters by color only',
       cluster_count:
-        'K-Means cluster count. Higher values give finer colors, 0 or 1 means per-pixel matching',
+        'Color clustering mode. Off: per-pixel matching (most accurate but slowest); Auto: automatically selects optimal cluster count based on image complexity; Manual: specify K-Means cluster count, higher values give finer colors',
       slic_target_superpixels:
         'SLIC target superpixel count. Higher values preserve edges better but are slower',
       slic_compactness: 'SLIC compactness, balancing color similarity and spatial regularity',
@@ -620,6 +624,7 @@ export default {
       topToBottom: 'Order: Top to Bottom',
     },
     pixelSize: 'Pixel {value} mm',
+    resolvedClusters: '{count} colors (auto-detected)',
     stats: {
       title: 'Match Statistics',
       totalClusters: 'Total Clusters',
@@ -650,5 +655,6 @@ export default {
     belowNozzleArea: 'Below Nozzle (Area)',
     suggestedScale: 'Suggested Scale Factor',
     recommendedMinSize: 'Recommended Min Size',
+    resultTitle: 'Analysis Results',
   },
 }

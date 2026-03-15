@@ -49,14 +49,15 @@ export function useParamPanelState() {
     { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
   ]
 
-  const clusterMethodOpts: SelectOption[] = [
-    { label: t('param.options.slic'), value: 'slic' },
-    { label: t('param.options.kmeans'), value: 'kmeans' },
-  ]
-
   const gradientDitherOpts: SelectOption[] = [
     { label: t('param.off'), value: 'none' },
     { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
+  ]
+
+  const clusterModeOpts: SelectOption[] = [
+    { label: t('param.clusterModeOff'), value: 'off' },
+    { label: t('param.clusterModeAuto'), value: 'auto' },
+    { label: t('param.clusterModeManual'), value: 'manual' },
   ]
 
   const translatedTooltips = {
@@ -67,12 +68,7 @@ export function useParamPanelState() {
     target_width_mm: t('param.tooltips.target_width_mm'),
     target_height_mm: t('param.tooltips.target_height_mm'),
     pixel_mm_simple: t('param.tooltips.pixel_mm_simple'),
-    cluster_method: t('param.tooltips.cluster_method'),
     cluster_count: t('param.tooltips.cluster_count'),
-    slic_target_superpixels: t('param.tooltips.slic_target_superpixels'),
-    slic_compactness: t('param.tooltips.slic_compactness'),
-    slic_iterations: t('param.tooltips.slic_iterations'),
-    slic_min_region_ratio: t('param.tooltips.slic_min_region_ratio'),
     dither: t('param.tooltips.dither'),
     dither_strength: t('param.tooltips.dither_strength'),
     db_names: t('param.tooltips.db_names'),
@@ -125,12 +121,11 @@ export function useParamPanelState() {
   const selectedPixelPresetIndex = ref(1)
   const customPixelMm = ref(0.42)
   const selectedChannelKeys = ref<string[]>([])
+  type ClusterMode = 'off' | 'auto' | 'manual'
+  const clusterMode = ref<ClusterMode>('auto')
 
   const targetDimensionUpperBound = 2000
   const clusterCountUpperBound = 256
-  const slicTargetSuperpixelsUpperBound = 4096
-  const slicCompactnessUpperBound = 100
-  const slicIterationsUpperBound = 50
   const simpleLabelWidth = 112
   const inlineLabelWidth = 96
   const formatTooltip1Decimal = (value: number) => formatFloat(value, 1)
@@ -257,18 +252,10 @@ export function useParamPanelState() {
   )
 
   watch(
-    () => ({
-      type: inputType.value,
-      method: String(modelValue.value.cluster_method ?? 'kmeans').toLowerCase(),
-      dither: modelValue.value.dither ?? 'none',
-    }),
-    ({ type, method, dither }) => {
+    () => ({ type: inputType.value, dither: modelValue.value.dither ?? 'none' }),
+    ({ type, dither }) => {
       if (type !== 'raster') return
       if (dither === 'blue_noise') {
-        update({ dither: 'none' })
-        return
-      }
-      if (method === 'slic' && dither !== 'none') {
         update({ dither: 'none' })
       }
     },
@@ -356,35 +343,15 @@ export function useParamPanelState() {
     return null
   })
 
-  const clusterMethodValue = computed<'slic' | 'kmeans'>({
-    get: () => {
-      const raw = String(modelValue.value.cluster_method ?? 'kmeans').toLowerCase()
-      return raw === 'slic' ? 'slic' : 'kmeans'
-    },
-    set: (next) => {
-      const method = next === 'slic' ? 'slic' : 'kmeans'
-      const patch: Partial<ConvertAnyParams> = { cluster_method: method }
-      if (method === 'slic' && (modelValue.value.dither ?? 'none') !== 'none') {
-        patch.dither = 'none'
-      }
-      update(patch)
-    },
-  })
-
-  function setClusterMethod(value: string | null) {
-    clusterMethodValue.value = value === 'slic' ? 'slic' : 'kmeans'
-  }
-
-  const useSlicCluster = computed(() => isRaster.value && clusterMethodValue.value === 'slic')
-
   const clusterCountValue = computed<number>({
     get: () => {
+      if (clusterMode.value !== 'manual') return 0
       const raw = modelValue.value.cluster_count ?? 64
       if (!Number.isFinite(raw)) return 64
-      return Math.min(clusterCountUpperBound, Math.max(0, Math.round(raw)))
+      return Math.min(clusterCountUpperBound, Math.max(2, Math.round(raw)))
     },
     set: (next) => {
-      update({ cluster_count: Math.min(clusterCountUpperBound, Math.max(0, Math.round(next))) })
+      update({ cluster_count: Math.min(clusterCountUpperBound, Math.max(2, Math.round(next))) })
     },
   })
 
@@ -392,75 +359,21 @@ export function useParamPanelState() {
     clusterCountValue.value = value ?? 64
   }
 
-  const slicTargetSuperpixelsValue = computed<number>({
-    get: () => {
-      const raw = modelValue.value.slic_target_superpixels ?? 256
-      if (!Number.isFinite(raw)) return 256
-      return Math.min(slicTargetSuperpixelsUpperBound, Math.max(0, Math.round(raw)))
-    },
-    set: (next) => {
-      update({
-        slic_target_superpixels: Math.min(
-          slicTargetSuperpixelsUpperBound,
-          Math.max(0, Math.round(next)),
-        ),
-      })
-    },
+  const lastManualClusterCount = ref(64)
+
+  watch(clusterMode, (mode) => {
+    if (mode === 'off') {
+      const cur = modelValue.value.cluster_count ?? 64
+      if (cur >= 2) lastManualClusterCount.value = cur
+      update({ cluster_count: 1 })
+    } else if (mode === 'auto') {
+      const cur = modelValue.value.cluster_count ?? 64
+      if (cur >= 2) lastManualClusterCount.value = cur
+      update({ cluster_count: 0 })
+    } else {
+      update({ cluster_count: lastManualClusterCount.value })
+    }
   })
-
-  function setSlicTargetSuperpixels(value: number | null) {
-    slicTargetSuperpixelsValue.value = value ?? 256
-  }
-
-  const slicCompactnessValue = computed<number>({
-    get: () => {
-      const raw = modelValue.value.slic_compactness ?? 10
-      if (!Number.isFinite(raw)) return 10
-      return Math.min(slicCompactnessUpperBound, Math.max(0.1, roundTo(Number(raw), 1)))
-    },
-    set: (next) => {
-      update({
-        slic_compactness: Math.min(
-          slicCompactnessUpperBound,
-          Math.max(0.1, roundTo(Number(next), 1)),
-        ),
-      })
-    },
-  })
-
-  function setSlicCompactness(value: number | null) {
-    slicCompactnessValue.value = value === null ? 10 : roundTo(value, 1)
-  }
-
-  const slicIterationsValue = computed<number>({
-    get: () => {
-      const raw = modelValue.value.slic_iterations ?? 10
-      if (!Number.isFinite(raw)) return 10
-      return Math.min(slicIterationsUpperBound, Math.max(1, Math.round(raw)))
-    },
-    set: (next) => {
-      update({ slic_iterations: Math.min(slicIterationsUpperBound, Math.max(1, Math.round(next))) })
-    },
-  })
-
-  function setSlicIterations(value: number | null) {
-    slicIterationsValue.value = value ?? 10
-  }
-
-  const slicMinRegionRatioValue = computed<number>({
-    get: () => {
-      const raw = modelValue.value.slic_min_region_ratio ?? 0.25
-      if (!Number.isFinite(raw)) return 0.25
-      return Math.min(1, Math.max(0, roundTo(Number(raw), 2)))
-    },
-    set: (next) => {
-      update({ slic_min_region_ratio: Math.min(1, Math.max(0, roundTo(Number(next), 2))) })
-    },
-  })
-
-  function setSlicMinRegionRatio(value: number) {
-    slicMinRegionRatioValue.value = roundTo(value, 2)
-  }
 
   function applyChannelPreset(value: string) {
     const preset = channelPresets.find((item) => item.value === value)
@@ -568,6 +481,7 @@ export function useParamPanelState() {
     targetWidthMm.value = 200
     targetHeightMm.value = 200
     mode.value = 'simple'
+    clusterMode.value = 'auto'
     selectedPixelPresetIndex.value = 1
     customPixelMm.value = 0.42
     const currentDbNames = modelValue.value.db_names ?? filteredDBs.value.map((db) => db.name)
@@ -646,11 +560,11 @@ export function useParamPanelState() {
   return {
     activeChannelPreset,
     applicablePresets,
+    clusterMode,
+    clusterModeOptions: clusterModeOpts,
     availableChannels,
     clusterCountUpperBound,
     clusterCountValue,
-    clusterMethodOptions: clusterMethodOpts,
-    clusterMethodValue,
     colorSpaceOptions,
     customPixelMm,
     ditherOptions: ditherOpts,
@@ -680,20 +594,8 @@ export function useParamPanelState() {
     selectedPixelPresetIndex,
     selectedVendor,
     setClusterCount,
-    setClusterMethod,
-    setSlicCompactness,
-    setSlicIterations,
-    setSlicMinRegionRatio,
-    setSlicTargetSuperpixels,
     simpleLabelWidth,
     simpleOutputInfo,
-    slicCompactnessUpperBound,
-    slicCompactnessValue,
-    slicIterationsUpperBound,
-    slicIterationsValue,
-    slicMinRegionRatioValue,
-    slicTargetSuperpixelsUpperBound,
-    slicTargetSuperpixelsValue,
     supportsModelGate,
     targetDimensionUpperBound,
     targetHeightMm,
@@ -701,7 +603,6 @@ export function useParamPanelState() {
     tooltips: translatedTooltips,
     roundTo,
     update,
-    useSlicCluster,
     vendorOptionsForMaterial,
     applyChannelPreset,
   }

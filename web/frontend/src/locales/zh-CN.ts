@@ -126,7 +126,11 @@ export default {
     targetHeightMm: '目标高度 (mm)',
     tessellationTolerance: '三角化容差 (mm)',
     clusterMethod: '聚类方法',
-    clusterCount: '聚类数',
+    clusterCount: '颜色聚类',
+    autoClusterCount: '自动',
+    clusterModeOff: '关闭',
+    clusterModeAuto: '自动',
+    clusterModeManual: '手动',
     superpixelCount: '超像素数量',
     compactness: '紧凑度',
     halftone: '半色调抖动',
@@ -183,7 +187,8 @@ export default {
         '每个像素对应的物理线宽（毫米），由打印机喷嘴尺寸决定。0.4mm 喷嘴推荐 0.42mm，0.2mm 喷嘴推荐 0.22mm',
       cluster_method:
         '非抖动匹配时的聚类算法。SLIC 以空间连续性优先，边缘通常更稳定；K-Means 仅按颜色聚类',
-      cluster_count: 'K-Means 聚类数。值越大颜色越精细，0 或 1 表示不聚类（逐像素匹配）',
+      cluster_count:
+        '颜色聚类模式。关闭：逐像素匹配（最精确但最慢）；自动：根据图像色彩复杂度自动选择最优聚类数；手动：指定 K-Means 聚类数，值越大颜色越精细',
       slic_target_superpixels: 'SLIC 目标超像素数量。值越大区域越细，边缘保留更好，但计算耗时更高',
       slic_compactness:
         'SLIC 紧凑度，控制颜色相似与空间规则性的权衡。值越小更贴合颜色边界，值越大区域更规整',
@@ -614,6 +619,7 @@ export default {
       topToBottom: '层序：顶部到底部',
     },
     pixelSize: '像素 {value} mm',
+    resolvedClusters: '{count} 色 (自动检测)',
     stats: {
       title: '匹配统计',
       totalClusters: '聚类总数',
@@ -644,5 +650,6 @@ export default {
     belowNozzleArea: '低于喷嘴 (面积)',
     suggestedScale: '建议缩放倍数',
     recommendedMinSize: '建议最小目标尺寸',
+    resultTitle: '分析结果',
   },
 }

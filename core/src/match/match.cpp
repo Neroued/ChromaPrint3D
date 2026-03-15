@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -26,6 +27,100 @@ namespace {
 
 constexpr int kKMeansMaxIter = 30;
 constexpr double kKMeansEps  = 1e-4;
+
+/// Automatically select optimal K for kmeans color clustering.
+/// Uses WCSS elbow detection with a perceptual quality floor (Delta E).
+int EstimateClusterCount(const cv::Mat& samples) {
+    constexpr int kCandidates[]    = {4, 8, 16, 32, 64, 96, 128};
+    constexpr int kNumCandidates   = 7;
+    constexpr int kMaxSubsamples   = 8192;
+    constexpr int kQuickIter       = 15;
+    constexpr double kQuickEps     = 1e-3;
+    constexpr float kMaxMeanDeltaE = 3.0f;
+
+    cv::Mat sub = samples;
+    if (samples.rows > kMaxSubsamples) {
+        cv::Mat indices(samples.rows, 1, CV_32SC1);
+        for (int i = 0; i < samples.rows; ++i) indices.at<int>(i) = i;
+        cv::randShuffle(indices);
+        sub = cv::Mat(kMaxSubsamples, samples.cols, samples.type());
+        for (int i = 0; i < kMaxSubsamples; ++i) {
+            samples.row(indices.at<int>(i)).copyTo(sub.row(i));
+        }
+    }
+    const int n = sub.rows;
+
+    std::vector<int> valid_candidates;
+    std::vector<double> wcss;
+    valid_candidates.reserve(kNumCandidates);
+    wcss.reserve(kNumCandidates);
+
+    const cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, kQuickIter,
+                                    kQuickEps);
+
+    for (int ci = 0; ci < kNumCandidates; ++ci) {
+        const int k = kCandidates[ci];
+        if (k >= n) break;
+
+        cv::Mat labels, centers;
+        double compactness =
+            cv::kmeans(sub, k, labels, criteria, 2, cv::KMEANS_PP_CENTERS, centers);
+        valid_candidates.push_back(k);
+        wcss.push_back(compactness);
+
+        spdlog::debug("AutoK: k={:3d}  WCSS={:.1f}  mean_dE={:.2f}", k, compactness,
+                      std::sqrt(compactness / std::max(1, n)));
+    }
+
+    if (valid_candidates.size() <= 1) {
+        return valid_candidates.empty() ? 16 : valid_candidates[0];
+    }
+
+    // Elbow detection: find maximum perpendicular distance from first-to-last chord
+    const int m       = static_cast<int>(valid_candidates.size());
+    const double x0   = valid_candidates[0];
+    const double y0   = wcss[0];
+    const double x1   = valid_candidates[m - 1];
+    const double y1   = wcss[m - 1];
+    const double dx   = x1 - x0;
+    const double dy   = y1 - y0;
+    const double norm = std::sqrt(dx * dx + dy * dy);
+
+    int elbow_idx   = 0;
+    double max_dist = 0.0;
+    for (int i = 0; i < m; ++i) {
+        const double d =
+            std::abs(dy * valid_candidates[i] - dx * wcss[i] + x1 * y0 - y1 * x0) / norm;
+        if (d > max_dist) {
+            max_dist  = d;
+            elbow_idx = i;
+        }
+    }
+
+    int chosen_k  = valid_candidates[elbow_idx];
+    float mean_dE = static_cast<float>(std::sqrt(wcss[elbow_idx] / std::max(1, n)));
+
+    if (mean_dE > kMaxMeanDeltaE) {
+        for (int i = elbow_idx + 1; i < m; ++i) {
+            float dE_i = static_cast<float>(std::sqrt(wcss[i] / std::max(1, n)));
+            if (dE_i <= kMaxMeanDeltaE) {
+                chosen_k = valid_candidates[i];
+                mean_dE  = dE_i;
+                break;
+            }
+        }
+        if (mean_dE > kMaxMeanDeltaE && !valid_candidates.empty()) {
+            chosen_k = valid_candidates[m - 1];
+            mean_dE  = static_cast<float>(std::sqrt(wcss[m - 1] / std::max(1, n)));
+        }
+    }
+
+    chosen_k = std::clamp(chosen_k, 4, std::min(128, n / 4));
+
+    spdlog::info("AutoK: selected k={} (elbow_k={}, mean_dE={:.2f})", chosen_k,
+                 valid_candidates[elbow_idx], mean_dE);
+    return chosen_k;
+}
 
 void ValidateImageForMatch(const RasterProcResult& img, bool use_lab) {
     if (img.width <= 0 || img.height <= 0) {
@@ -369,12 +464,30 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
         return result;
     }
 
-    const int requested_clusters = std::max(0, cfg.cluster_count);
-    const int k_clusters   = std::min(requested_clusters, static_cast<int>(valid_indices.size()));
-    const bool use_cluster = (requested_clusters > 1 && k_clusters > 1 &&
-                              static_cast<std::size_t>(k_clusters) < valid_indices.size());
-    spdlog::info("MatchFromRaster: valid_pixels={}, cluster_method=kmeans, clustering={} (k={})",
-                 valid_indices.size(), use_cluster ? "yes" : "no", k_clusters);
+    // cluster_count == 0 → auto-detect; == 1 → per-pixel; >= 2 → manual
+    const bool auto_k            = (cfg.cluster_count == 0);
+    const int requested_clusters = auto_k ? 0 : std::max(0, cfg.cluster_count);
+    const int num_valid          = static_cast<int>(valid_indices.size());
+
+    // Build sample matrix (needed for both auto-K detection and actual clustering)
+    const cv::Mat target_flat = target.reshape(1, static_cast<int>(pixel_count));
+    cv::Mat samples(num_valid, 3, CV_32FC1);
+#ifdef _OPENMP
+#    pragma omp parallel for schedule(static)
+#endif
+    for (int i = 0; i < num_valid; ++i) {
+        target_flat.row(static_cast<int>(valid_indices[static_cast<std::size_t>(i)]))
+            .copyTo(samples.row(i));
+    }
+
+    const int resolved_k =
+        auto_k ? EstimateClusterCount(samples) : std::min(requested_clusters, num_valid);
+    const bool use_cluster =
+        (resolved_k > 1 && static_cast<std::size_t>(resolved_k) < valid_indices.size());
+
+    spdlog::info("MatchFromRaster: valid_pixels={}, cluster_method=kmeans, clustering={} (k={}{})",
+                 valid_indices.size(), use_cluster ? "yes" : "no", resolved_k,
+                 auto_k ? ", auto" : "");
 
     if (!use_cluster) {
         run_per_pixel_matching();
@@ -382,24 +495,14 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
         return result;
     }
 
-    const cv::Mat target_flat = target.reshape(1, static_cast<int>(pixel_count));
-    cv::Mat samples(static_cast<int>(valid_indices.size()), 3, CV_32FC1);
-#ifdef _OPENMP
-#    pragma omp parallel for schedule(static)
-#endif
-    for (int i = 0; i < static_cast<int>(valid_indices.size()); ++i) {
-        target_flat.row(static_cast<int>(valid_indices[static_cast<std::size_t>(i)]))
-            .copyTo(samples.row(i));
-    }
-
     cv::Mat labels;
     cv::Mat centers;
     const cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER,
                                     kKMeansMaxIter, kKMeansEps);
-    cv::kmeans(samples, k_clusters, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+    cv::kmeans(samples, resolved_k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
 
-    std::vector<detail::CandidateResult> cluster_candidates(static_cast<std::size_t>(k_clusters));
-    for (int i = 0; i < k_clusters; ++i) {
+    std::vector<detail::CandidateResult> cluster_candidates(static_cast<std::size_t>(resolved_k));
+    for (int i = 0; i < resolved_k; ++i) {
         const cv::Vec3f center_color(centers.at<float>(i, 0), centers.at<float>(i, 1),
                                      centers.at<float>(i, 2));
         const detail::CandidateDecision decision =
@@ -422,7 +525,7 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
 
         try {
             const int label = labels.at<int>(i, 0);
-            if (label < 0 || label >= k_clusters) { throw InputError("Invalid kmeans label"); }
+            if (label < 0 || label >= resolved_k) { throw InputError("Invalid kmeans label"); }
             const detail::CandidateResult& best =
                 cluster_candidates[static_cast<std::size_t>(label)];
             const std::size_t idx    = valid_indices[static_cast<std::size_t>(i)];
