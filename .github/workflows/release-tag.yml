@@ -33,6 +33,11 @@ jobs:
             exit 1
           fi
 
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Create and push annotated tag
         run: |
           TAG="${{ steps.version.outputs.tag }}"
