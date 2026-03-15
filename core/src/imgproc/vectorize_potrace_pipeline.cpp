@@ -723,9 +723,12 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
     float effective_curve_fit_error  = cfg.curve_fit_error;
     float effective_contour_simplify = cfg.contour_simplify;
     if (cfg.detail_level >= 0.0f) {
-        float dl                   = std::clamp(cfg.detail_level, 0.0f, 1.0f);
-        effective_curve_fit_error  = 2.0f - 1.7f * dl;
-        effective_contour_simplify = 0.8f - 0.6f * dl;
+        static const VectorizerConfig kDefaults;
+        float dl = std::clamp(cfg.detail_level, 0.0f, 1.0f);
+        if (cfg.curve_fit_error == kDefaults.curve_fit_error)
+            effective_curve_fit_error = 2.0f - 1.7f * dl;
+        if (cfg.contour_simplify == kDefaults.contour_simplify)
+            effective_contour_simplify = 0.8f - 0.6f * dl;
         spdlog::info("detail_level={:.2f}: derived curve_fit_error={:.2f}, "
                      "contour_simplify={:.2f}",
                      dl, effective_curve_fit_error, effective_contour_simplify);

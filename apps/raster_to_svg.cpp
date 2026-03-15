@@ -48,7 +48,7 @@ struct Options {
 void PrintUsage(const char* exe) {
     std::printf("Usage: %s --image input.png [--out output.svg] [options]\n"
                 "Options:\n"
-                "  --colors N          Number of quantization colors (default 16)\n"
+                "  --colors N          Number of quantization colors, 0 = auto (default 0)\n"
                 "  --min-region N      Min region area in pixels (default 50)\n"
                 "  --curve-fit-error F Curve fitting error threshold (default 0.8)\n"
                 "  --corner-angle F    Corner angle threshold in degrees (default 135)\n"
@@ -73,7 +73,7 @@ void PrintUsage(const char* exe) {
                 "  --min-coverage-ratio F Coverage fix trigger ratio (default 0.998)\n"
                 "  --smoothness F      Contour smoothness [0,1] (default 0.5)\n"
                 "  --detail-level F    Unified detail control [0,1], -1 disables (default -1)\n"
-                "  --merge-tolerance F Near-linear segment merge tolerance (default 0.15)\n"
+                "  --merge-tolerance F Near-linear segment merge tolerance (default 0.05)\n"
                 "  --enable-antialias  Enable AA mixed-edge detection\n"
                 "  --aa-tolerance F    AA blend detection LAB tolerance (default 10)\n"
                 "  --no-svg-stroke     Disable SVG stroke output (default on)\n"
