@@ -500,7 +500,7 @@ VectorizeMetrics EvaluateImage(const std::string& image_path, const EvalConfig& 
 std::vector<ImageResult> EvaluateBatch(const Manifest& manifest, const EvalConfig& config) {
     std::vector<ImageResult> results(manifest.images.size());
 
-#ifdef _OPENMP
+#if defined(_OPENMP) && _OPENMP >= 200805
     int prev_levels = omp_get_max_active_levels();
     omp_set_max_active_levels(1);
 #endif
@@ -510,7 +510,7 @@ std::vector<ImageResult> EvaluateBatch(const Manifest& manifest, const EvalConfi
         results[i] = EvaluateSingleEntry(manifest.images[i], config);
     }
 
-#ifdef _OPENMP
+#if defined(_OPENMP) && _OPENMP >= 200805
     omp_set_max_active_levels(prev_levels);
 #endif
 

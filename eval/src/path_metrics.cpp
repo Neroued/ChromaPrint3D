@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <numbers>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -233,7 +234,7 @@ PathMetricsResult ComputePathMetrics(const std::string& svg_content, int width, 
         net_areas.push_back(net);
 
         if (total_perim > 0) {
-            double circ = 4.0 * M_PI * net / (total_perim * total_perim);
+            double circ = 4.0 * std::numbers::pi * net / (total_perim * total_perim);
             circularities.push_back(circ);
             if (circ < sliver_threshold && net > 1.0) r.sliver_count++;
         }

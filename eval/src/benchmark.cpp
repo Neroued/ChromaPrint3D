@@ -344,14 +344,22 @@ namespace eval {
 std::string GitShortHash() {
     std::array<char, 128> buf;
     std::string result = "unknown";
-    FILE* pipe         = popen("git rev-parse --short HEAD 2>/dev/null", "r");
+#if defined(_WIN32)
+    FILE* pipe = _popen("git rev-parse --short HEAD 2>NUL", "r");
+#else
+    FILE* pipe = popen("git rev-parse --short HEAD 2>/dev/null", "r");
+#endif
     if (pipe) {
         if (std::fgets(buf.data(), static_cast<int>(buf.size()), pipe)) {
             result = buf.data();
             while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
                 result.pop_back();
         }
+#if defined(_WIN32)
+        _pclose(pipe);
+#else
         pclose(pipe);
+#endif
     }
     return result;
 }
@@ -360,7 +368,11 @@ std::string CurrentTimestamp() {
     auto now  = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &time);
+#else
     localtime_r(&time, &tm);
+#endif
     char buf[64];
     std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tm);
     return buf;
@@ -370,7 +382,11 @@ std::string MakeRunId() {
     auto now  = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(now);
     std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &time);
+#else
     localtime_r(&time, &tm);
+#endif
     char buf[64];
     std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm);
     return std::string(buf) + "_" + GitShortHash();
