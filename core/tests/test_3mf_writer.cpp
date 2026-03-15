@@ -6,13 +6,13 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
+#include <filesystem>
 #include <fstream>
-#include <unistd.h>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #if defined(CHROMAPRINT3D_HAS_ZLIB)
@@ -24,6 +24,29 @@ using namespace ChromaPrint3D;
 namespace {
 
 constexpr uint32_t kZipLocalFileHeaderSignature = 0x04034B50u;
+
+std::string RandomHex(std::size_t byte_count) {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::random_device rd;
+    std::string out;
+    out.reserve(byte_count * 2);
+    for (std::size_t i = 0; i < byte_count; ++i) {
+        const auto value = static_cast<unsigned char>(rd());
+        out.push_back(kHex[(value >> 4U) & 0x0F]);
+        out.push_back(kHex[value & 0x0F]);
+    }
+    return out;
+}
+
+std::filesystem::path CreateUniqueTempDir() {
+    auto dir = std::filesystem::temp_directory_path() / ("chromaprint3d_test_" + RandomHex(8));
+    std::filesystem::create_directories(dir);
+    return dir;
+}
+
+bool IsDirectoryEmpty(const std::filesystem::path& dir) {
+    return std::filesystem::directory_iterator(dir) == std::filesystem::directory_iterator{};
+}
 
 uint16_t ReadU16(const std::vector<uint8_t>& bytes, std::size_t offset) {
     if (offset + 1 >= bytes.size()) { throw std::runtime_error("ReadU16 out of range"); }
@@ -334,12 +357,9 @@ TEST(ThreeMfWriter, WriteToFileMatchesWriteToBuffer) {
     std::vector<uint8_t> buffer = writer.WriteToBuffer({object});
     ASSERT_FALSE(buffer.empty());
 
-    char tmp_template[] = "/tmp/chromaprint3d_test_XXXXXX.3mf";
-    int fd              = mkstemps(tmp_template, 4);
-    ASSERT_NE(fd, -1);
-    close(fd);
-    std::string tmp_path(tmp_template);
-    writer.WriteToFile(tmp_path, {object});
+    const auto temp_dir = CreateUniqueTempDir();
+    const auto tmp_path = temp_dir / "writer-output.3mf";
+    writer.WriteToFile(tmp_path.string(), {object});
 
     std::ifstream ifs(tmp_path, std::ios::binary | std::ios::ate);
     ASSERT_TRUE(ifs.is_open());
@@ -348,10 +368,35 @@ TEST(ThreeMfWriter, WriteToFileMatchesWriteToBuffer) {
     std::vector<uint8_t> file_bytes(file_size);
     ifs.read(reinterpret_cast<char*>(file_bytes.data()), static_cast<std::streamsize>(file_size));
     ifs.close();
-    std::remove(tmp_path.c_str());
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
 
     ASSERT_EQ(buffer.size(), file_bytes.size());
     EXPECT_EQ(buffer, file_bytes);
+}
+
+TEST(ThreeMfWriter, AtomicWriteRemovesTempFileOnFailure) {
+    const auto temp_dir   = CreateUniqueTempDir();
+    const auto final_path = temp_dir / "failed-output.3mf";
+
+    try {
+        detail::WriteFileAtomically(final_path, [&](const std::filesystem::path& temp_path) {
+            std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
+            if (!out.is_open()) {
+                throw IOError("Cannot open file for writing: " + temp_path.string());
+            }
+            out.write("partial", 7);
+            out.flush();
+            throw IOError("simulated write failure");
+        });
+        FAIL() << "expected atomic write helper to propagate writer failure";
+    } catch (const IOError& e) { EXPECT_EQ(std::string(e.what()), "simulated write failure"); }
+
+    EXPECT_FALSE(std::filesystem::exists(final_path));
+    EXPECT_TRUE(IsDirectoryEmpty(temp_dir));
+
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
 }
 
 TEST(ThreeMfWriter, DeflateModeFallsBackToStoreOnCompressionFailure) {

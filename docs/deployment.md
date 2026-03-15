@@ -367,6 +367,8 @@ server {
 > - 后端 `--max-pixels`（默认 `16777216`）限制的是**解码后像素数**，与文件大小限制独立；仅放宽 Nginx 限制并不能避免后端 `413 image_too_large`。
 > - Web 部署若要“限制更紧”，请同时下调后端 `--max-upload-mb`/`--max-pixels` 与 Nginx `client_max_body_size`。
 > - `--max-result-mb` 现在仅追踪内存中的制品大小（preview、mask、layer previews）。3MF 结果已自动落盘到 `data_dir/tmp/results/`，不计入内存预算。因此该值可以比旧版本大幅降低（如 64MB），同时容纳更多已完成任务。
+> - 失败或中断的 3MF 导出会主动回收未提交的临时文件；服务启动时也会清扫 `data_dir/tmp/results/` 与 fallback 结果目录中的历史残留，避免旧的半写入文件持续占满 `tmpfs`。
+> - 如需排查结果目录占用，可执行 `docker exec chromaprint3d du -sh /app/data/tmp/results` 查看总量，再用 `docker exec chromaprint3d ls -lhS /app/data/tmp/results | head -30` 定位最大文件。
 
 ### 2.5 配置防火墙
 

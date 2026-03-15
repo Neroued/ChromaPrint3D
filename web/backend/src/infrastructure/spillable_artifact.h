@@ -34,4 +34,30 @@ private:
     std::size_t size_ = 0;
 };
 
+/// RAII guard for a temp file that has been created but not yet committed into a SpillableArtifact.
+/// Deletes the file on destruction unless Commit() transfers ownership.
+class PendingArtifactFile {
+public:
+    PendingArtifactFile() = default;
+    explicit PendingArtifactFile(std::filesystem::path path);
+    ~PendingArtifactFile();
+
+    PendingArtifactFile(PendingArtifactFile&& other) noexcept;
+    PendingArtifactFile& operator=(PendingArtifactFile&& other) noexcept;
+
+    PendingArtifactFile(const PendingArtifactFile&)            = delete;
+    PendingArtifactFile& operator=(const PendingArtifactFile&) = delete;
+
+    bool has_path() const { return !path_.empty(); }
+
+    const std::filesystem::path& path() const { return path_; }
+
+    SpillableArtifact Commit(std::size_t size);
+
+private:
+    void Cleanup() noexcept;
+
+    std::filesystem::path path_;
+};
+
 } // namespace chromaprint3d::backend

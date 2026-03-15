@@ -4,7 +4,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
+#include <random>
+#include <system_error>
+#include <utility>
 
 namespace ChromaPrint3D::detail {
 
@@ -16,6 +20,71 @@ bool HasMetadataKey(const std::vector<ThreeMfMetadataEntry>& metadata, const std
     return std::any_of(metadata.begin(), metadata.end(),
                        [&](const ThreeMfMetadataEntry& entry) { return entry.name == key; });
 }
+
+std::string RandomHex(std::size_t byte_count) {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::random_device rd;
+    std::string out;
+    out.reserve(byte_count * 2);
+    for (std::size_t i = 0; i < byte_count; ++i) {
+        const auto value = static_cast<unsigned char>(rd());
+        out.push_back(kHex[(value >> 4U) & 0x0F]);
+        out.push_back(kHex[value & 0x0F]);
+    }
+    return out;
+}
+
+std::filesystem::path MakeAtomicTempPath(const std::filesystem::path& final_path) {
+    const auto dir           = final_path.parent_path();
+    const auto filename_base = final_path.filename().string();
+    for (int attempt = 0; attempt < 16; ++attempt) {
+        auto candidate = dir / (filename_base + ".tmp-" + RandomHex(8));
+        std::error_code ec;
+        if (!std::filesystem::exists(candidate, ec) && !ec) { return candidate; }
+    }
+    throw IOError("Failed to allocate temporary output path for " + final_path.string());
+}
+
+class PendingAtomicFile {
+public:
+    explicit PendingAtomicFile(std::filesystem::path path) : path_(std::move(path)) {}
+
+    ~PendingAtomicFile() { Cleanup(); }
+
+    PendingAtomicFile(const PendingAtomicFile&)            = delete;
+    PendingAtomicFile& operator=(const PendingAtomicFile&) = delete;
+
+    const std::filesystem::path& path() const { return path_; }
+
+    void CommitTo(const std::filesystem::path& final_path) {
+        std::error_code ec;
+#if defined(_WIN32)
+        if (std::filesystem::exists(final_path, ec) && !ec) {
+            std::filesystem::remove(final_path, ec);
+            if (ec) {
+                throw IOError("Failed to replace existing output file " + final_path.string() +
+                              ": " + ec.message());
+            }
+        }
+#endif
+        std::filesystem::rename(path_, final_path, ec);
+        if (ec) {
+            throw IOError("Failed to move temp output file into place for " + final_path.string() +
+                          ": " + ec.message());
+        }
+        path_.clear();
+    }
+
+private:
+    void Cleanup() noexcept {
+        if (path_.empty()) return;
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+        path_.clear();
+    }
+
+    std::filesystem::path path_;
+};
 
 } // namespace
 
@@ -97,15 +166,48 @@ ThreeMfWriter::WriteToBuffer(const std::vector<ThreeMfInputObject>& objects) con
     return zip_bytes;
 }
 
+void WriteFileAtomically(const std::filesystem::path& final_path,
+                         const std::function<void(const std::filesystem::path&)>& writer) {
+    if (final_path.empty()) { throw InputError("output path is empty"); }
+
+    const auto dir = final_path.parent_path();
+    if (!dir.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (ec) {
+            throw IOError("Failed to create output directory " + dir.string() + ": " +
+                          ec.message());
+        }
+    }
+
+    PendingAtomicFile pending(MakeAtomicTempPath(final_path));
+    writer(pending.path());
+    pending.CommitTo(final_path);
+}
+
+void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
+                                 const std::vector<uint8_t>& bytes) {
+    WriteFileAtomically(final_path, [&](const std::filesystem::path& temp_path) {
+        std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
+        if (!out.is_open()) {
+            throw IOError("Cannot open file for writing: " + temp_path.string());
+        }
+        out.write(reinterpret_cast<const char*>(bytes.data()),
+                  static_cast<std::streamsize>(bytes.size()));
+        if (!out.good()) { throw IOError("Cannot write to " + final_path.string()); }
+    });
+}
+
 void ThreeMfWriter::WriteToFile(const std::string& path,
                                 const std::vector<ThreeMfInputObject>& objects) const {
     if (path.empty()) { throw InputError("3MF output path is empty"); }
 
     ThreeMfDocument document = BuildDocument(objects);
     OpcPartSet part_set      = BuildOpcPartSet(document);
-
-    StreamingZipWriter zip(path, options_);
-    WriteAllEntries(zip, part_set, document);
+    WriteFileAtomically(path, [&](const std::filesystem::path& temp_path) {
+        StreamingZipWriter zip(temp_path.string(), options_);
+        WriteAllEntries(zip, part_set, document);
+    });
 }
 
 } // namespace ChromaPrint3D::detail

@@ -3,6 +3,7 @@
 #include "three_mf_ir.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -57,6 +58,14 @@ OpcPartSet BuildOpcPartSet(const ThreeMfDocument& document);
 
 // Generate external objects model XML (mesh data only, Bambu namespaces, empty build).
 std::string BuildObjectsModelXml(const std::vector<ThreeMfMeshResource>& resources);
+
+// Atomically replace the target file by first writing a sibling temporary file.
+void WriteFileAtomically(const std::filesystem::path& final_path,
+                         const std::function<void(const std::filesystem::path&)>& writer);
+
+// Convenience wrapper for atomically writing an in-memory buffer to disk.
+void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
+                                 const std::vector<uint8_t>& bytes);
 
 // Streaming mesh XML serialization (implemented in three_mf_opc.cpp).
 // Writes XML in chunks to the sink callback, avoiding full XML materialization.
