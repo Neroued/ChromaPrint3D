@@ -47,8 +47,7 @@ if(NOT Drogon_FOUND AND NOT TARGET Drogon::Drogon AND NOT TARGET drogon)
     endif()
 endif()
 
-set(CHROMAPRINT3D_BACKEND_SOURCES
-    server_main.cpp
+set(CHROMAPRINT3D_BACKEND_LIBRARY_SOURCES
     src/config/server_config.cpp
     src/infrastructure/session_store.cpp
     src/infrastructure/task_runtime.cpp
@@ -60,12 +59,6 @@ set(CHROMAPRINT3D_BACKEND_SOURCES
     src/presentation/cors_advice.cpp
     src/presentation/api_v1_controller.cpp)
 
-add_executable(chromaprint3d_server ${CHROMAPRINT3D_BACKEND_SOURCES})
-
-target_include_directories(chromaprint3d_server PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
 if(TARGET Drogon::Drogon)
     set(CHROMAPRINT3D_DROGON_TARGET Drogon::Drogon)
 elseif(TARGET drogon)
@@ -74,7 +67,17 @@ else()
     message(FATAL_ERROR "Drogon target not found after discovery/fetch")
 endif()
 
-target_link_libraries(chromaprint3d_server PRIVATE
+add_library(chromaprint3d_backend STATIC ${CHROMAPRINT3D_BACKEND_LIBRARY_SOURCES})
+
+target_include_directories(chromaprint3d_backend PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+target_link_libraries(chromaprint3d_backend PUBLIC
     ChromaPrint3D::core
     Threads::Threads
     ${CHROMAPRINT3D_DROGON_TARGET})
+
+add_executable(chromaprint3d_server server_main.cpp)
+
+target_link_libraries(chromaprint3d_server PRIVATE chromaprint3d_backend)

@@ -797,7 +797,11 @@ ServiceResult ServerFacade::DownloadBoardMeta(const std::string& board_id, TaskA
     filename += ".json";
     auto meta_json = board->meta.ToJsonString();
     std::vector<uint8_t> bytes(meta_json.begin(), meta_json.end());
-    out = TaskArtifact{std::move(bytes), "application/json", std::move(filename)};
+    TaskArtifact artifact;
+    artifact.bytes        = std::move(bytes);
+    artifact.content_type = "application/json";
+    artifact.filename     = std::move(filename);
+    out                   = std::move(artifact);
     return ServiceResult::Success(200, json::object());
 }
 
