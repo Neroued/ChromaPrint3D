@@ -9,12 +9,12 @@
 #include "chromaprint3d/recipe_map.h"
 #include "chromaprint3d/print_profile.h"
 #include "chromaprint3d/error.h"
+#include "geo/three_mf_writer.h"
 
 #include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <filesystem>
-#include <fstream>
 #include <optional>
 #include <set>
 #include <string>
@@ -379,13 +379,7 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     const bool file_only = !request.output_3mf_path.empty() && request.output_3mf_file_only;
 
     auto write_buffer_to_file = [&](const std::vector<uint8_t>& buf) {
-        auto dir = std::filesystem::path(request.output_3mf_path).parent_path();
-        if (!dir.empty()) { std::filesystem::create_directories(dir); }
-        std::ofstream ofs(request.output_3mf_path, std::ios::binary);
-        if (ofs) {
-            ofs.write(reinterpret_cast<const char*>(buf.data()),
-                      static_cast<std::streamsize>(buf.size()));
-        }
+        detail::WriteBufferToFileAtomically(request.output_3mf_path, buf);
     };
 
     if (has_transparent) {

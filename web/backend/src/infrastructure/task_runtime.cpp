@@ -72,9 +72,16 @@ const char* TaskStatusToString(RuntimeTaskStatus status) {
 
 namespace {
 
-bool TryPrepareTempDir(const std::filesystem::path& dir) {
+bool CleanupTempDirRoot(const std::filesystem::path& dir) {
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
+    return !ec;
+}
+
+bool TryPrepareTempDir(const std::filesystem::path& dir) {
+    if (!CleanupTempDirRoot(dir)) return false;
+
+    std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) return false;
     std::filesystem::permissions(dir, std::filesystem::perms::owner_all,
@@ -82,10 +89,15 @@ bool TryPrepareTempDir(const std::filesystem::path& dir) {
     return !ec;
 }
 
+bool SamePath(const std::filesystem::path& a, const std::filesystem::path& b) {
+    return a.lexically_normal() == b.lexically_normal();
+}
+
 constexpr std::size_t kVectorSvgSpillThresholdBytes = 2 * 1024 * 1024;
 
 SpillableArtifact SpillSvgToFile(const std::filesystem::path& path, const std::string& svg) {
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    PendingArtifactFile pending(path);
+    std::ofstream out(pending.path(), std::ios::binary | std::ios::trunc);
     if (!out.is_open()) {
         throw std::runtime_error("failed to open svg spill file: " + path.string());
     }
@@ -99,7 +111,7 @@ SpillableArtifact SpillSvgToFile(const std::filesystem::path& path, const std::s
         throw std::runtime_error("failed to persist full svg payload to spill file: " +
                                  path.string());
     }
-    return SpillableArtifact::FromFile(path, written_size);
+    return pending.Commit(written_size);
 }
 
 } // namespace
@@ -111,6 +123,10 @@ TaskRuntime::TaskRuntime(std::int64_t worker_count, std::int64_t max_queue,
       max_total_result_bytes_(max_total_result_bytes) {
     auto primary  = std::filesystem::path(data_dir) / "tmp" / "results";
     auto fallback = std::filesystem::temp_directory_path() / "chromaprint3d_results";
+
+    if (!SamePath(primary, fallback) && !CleanupTempDirRoot(fallback)) {
+        spdlog::warn("TaskRuntime: failed to clean stale fallback temp dir {}", fallback.string());
+    }
 
     if (TryPrepareTempDir(primary)) {
         temp_dir_ = primary;
@@ -152,6 +168,7 @@ SubmitResult TaskRuntime::SubmitConvertRaster(const std::string& owner,
                               auto temp_path               = temp_dir_ / (id + "_model.3mf");
                               request.output_3mf_path      = temp_path.string();
                               request.output_3mf_file_only = true;
+                              PendingArtifactFile pending_3mf(temp_path);
 
                               ChromaPrint3D::ProgressCallback progress_cb =
                                   [this, id](ChromaPrint3D::ConvertStage stage, float progress) {
@@ -163,8 +180,9 @@ SubmitResult TaskRuntime::SubmitConvertRaster(const std::string& owner,
                                       });
                                   };
 
-                              auto result    = ChromaPrint3D::ConvertRaster(request, progress_cb);
-                              auto file_size = std::filesystem::file_size(temp_path);
+                              auto result      = ChromaPrint3D::ConvertRaster(request, progress_cb);
+                              auto file_size   = std::filesystem::file_size(temp_path);
+                              auto spilled_3mf = pending_3mf.Commit(file_size);
 
                               UpdateTaskRecord(id, [&](TaskRecord& rec) {
                                   auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
@@ -172,8 +190,7 @@ SubmitResult TaskRuntime::SubmitConvertRaster(const std::string& owner,
                                   cp->result          = std::move(result);
                                   cp->progress        = 1.0f;
                                   cp->has_3mf_on_disk = true;
-                                  rec.spilled_3mf =
-                                      SpillableArtifact::FromFile(temp_path, file_size);
+                                  rec.spilled_3mf     = std::move(spilled_3mf);
                               });
                           });
 }
@@ -189,6 +206,7 @@ SubmitResult TaskRuntime::SubmitConvertVector(const std::string& owner,
                               auto temp_path               = temp_dir_ / (id + "_model.3mf");
                               request.output_3mf_path      = temp_path.string();
                               request.output_3mf_file_only = true;
+                              PendingArtifactFile pending_3mf(temp_path);
 
                               ChromaPrint3D::ProgressCallback progress_cb =
                                   [this, id](ChromaPrint3D::ConvertStage stage, float progress) {
@@ -200,8 +218,9 @@ SubmitResult TaskRuntime::SubmitConvertVector(const std::string& owner,
                                       });
                                   };
 
-                              auto result    = ChromaPrint3D::ConvertVector(request, progress_cb);
-                              auto file_size = std::filesystem::file_size(temp_path);
+                              auto result      = ChromaPrint3D::ConvertVector(request, progress_cb);
+                              auto file_size   = std::filesystem::file_size(temp_path);
+                              auto spilled_3mf = pending_3mf.Commit(file_size);
 
                               UpdateTaskRecord(id, [&](TaskRecord& rec) {
                                   auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
@@ -209,8 +228,7 @@ SubmitResult TaskRuntime::SubmitConvertVector(const std::string& owner,
                                   cp->result          = std::move(result);
                                   cp->progress        = 1.0f;
                                   cp->has_3mf_on_disk = true;
-                                  rec.spilled_3mf =
-                                      SpillableArtifact::FromFile(temp_path, file_size);
+                                  rec.spilled_3mf     = std::move(spilled_3mf);
                               });
                           });
 }
