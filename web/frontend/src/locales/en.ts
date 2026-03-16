@@ -53,6 +53,14 @@ export default {
       makerWorldLink: 'MakerWorld',
       makerWorldSuffix: '',
     },
+    update: {
+      newVersionAvailable: 'New version {version} is available',
+      changelog: 'Changelog',
+      download: 'Download',
+      checkForUpdate: 'Check for updates',
+      checking: 'Checking...',
+      upToDate: 'You are up to date',
+    },
   },
 
   convert: {

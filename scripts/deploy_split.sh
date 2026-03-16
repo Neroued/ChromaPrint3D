@@ -73,9 +73,17 @@ if [[ "$WEB_INSTALL_DEPS" == "1" ]]; then
 fi
 
 info "Building web frontend..."
+BUILD_ENV=()
 if [[ -n "${VITE_API_BASE:-}" ]]; then
     info "Using VITE_API_BASE=$VITE_API_BASE"
-    (cd "$ROOT_DIR/web/frontend" && VITE_API_BASE="$VITE_API_BASE" npm run build)
+    BUILD_ENV+=(VITE_API_BASE="$VITE_API_BASE")
+fi
+if [[ -n "${VITE_UPDATE_MANIFEST_URL:-}" ]]; then
+    info "Using VITE_UPDATE_MANIFEST_URL=$VITE_UPDATE_MANIFEST_URL"
+    BUILD_ENV+=(VITE_UPDATE_MANIFEST_URL="$VITE_UPDATE_MANIFEST_URL")
+fi
+if (( ${#BUILD_ENV[@]} > 0 )); then
+    (cd "$ROOT_DIR/web/frontend" && env "${BUILD_ENV[@]}" npm run build)
 else
     (cd "$ROOT_DIR/web/frontend" && npm run build)
 fi

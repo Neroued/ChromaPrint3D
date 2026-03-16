@@ -402,6 +402,7 @@ cd web/frontend
 # 建议新建 .env.production.local（该文件默认不进 Git）
 cat > .env.production.local <<'EOF'
 VITE_API_BASE=https://api.chromaprint3d.com:9443
+VITE_UPDATE_MANIFEST_URL=https://chromaprint3d.com/version-manifest.json
 VITE_SITE_ICP_NUMBER=京ICP备12345678号-1
 VITE_SITE_ICP_URL=https://beian.miit.gov.cn/
 VITE_SITE_PUBLIC_SECURITY_RECORD_NUMBER=京公网安备11010502000001号
@@ -422,6 +423,7 @@ npm run build
 >   working-directory: web/frontend
 >   env:
 >     VITE_API_BASE: https://api.chromaprint3d.com:9443
+>     VITE_UPDATE_MANIFEST_URL: https://chromaprint3d.com/version-manifest.json
 >   run: |
 >     npm ci
 >     npm run build
@@ -496,6 +498,13 @@ server {
     location = /index.html {
         add_header Cache-Control "no-store, must-revalidate";
         try_files $uri =404;
+    }
+
+    # 版本更新 manifest（供跨域的自部署实例和 Electron 检查新版本）
+    location = /version-manifest.json {
+        add_header Access-Control-Allow-Origin  "*" always;
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+        add_header Cache-Control "public, max-age=300";
     }
 
     # SPA 路由回退
@@ -684,6 +693,8 @@ docker run -d -p 8080:8080 neroued/chromaprint3d:latest
 ```
 
 访问 `http://localhost:8080` 即可使用，无需配置 `--cors-origin`。
+
+如需启用版本更新提醒，可在构建前端时设置 `VITE_UPDATE_MANIFEST_URL` 环境变量，指向官方 manifest 文件（如 `https://chromaprint3d.com/version-manifest.json`）。未设置时更新检查功能不会激活。
 
 ### Docker 镜像标签说明
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Usage: ./scripts/release.sh <new_version>
+# Usage: ./scripts/release.sh <new_version> [changelog]
 #   e.g. ./scripts/release.sh 1.2.6
+#   e.g. ./scripts/release.sh 1.3.0 "- New feature A\n- Bug fix B"
 #
 # Creates a release branch + PR. After the PR is merged, the
 # release-tag.yml workflow auto-creates the git tag, which triggers
@@ -11,7 +12,8 @@
 #   1. Validate version format and prerequisites
 #   2. Create release/v<version> branch from origin/master
 #   3. Update version in CMakeLists.txt, web/frontend/package.json, web/electron/package.json
-#   4. Commit, push branch, and open PR via gh
+#   4. Generate web/frontend/public/version-manifest.json
+#   5. Commit, push branch, and open PR via gh
 
 set -euo pipefail
 
@@ -23,7 +25,8 @@ info() { echo "==> $*"; }
 # ---------- Args ----------
 
 VERSION="${1:-}"
-[[ -z "$VERSION" ]] && die "Usage: $0 <version>  (e.g. 1.2.0)"
+CHANGELOG="${2:-}"
+[[ -z "$VERSION" ]] && die "Usage: $0 <version> [changelog]  (e.g. 1.2.0)"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Version must be MAJOR.MINOR.PATCH (got: $VERSION)"
 
 TAG="v${VERSION}"
@@ -97,10 +100,23 @@ grep -q "VERSION ${VERSION}" "$ROOT/CMakeLists.txt" || die "Failed to update CMa
 grep -q "\"version\": \"${VERSION}\"" "$ROOT/web/frontend/package.json" || die "Failed to update package.json"
 grep -q "\"version\": \"${VERSION}\"" "$ROOT/web/electron/package.json" || die "Failed to update electron package.json"
 
+# ---------- 2b. Generate version manifest ----------
+
+info "Generating version-manifest.json..."
+mkdir -p "$ROOT/web/frontend/public"
+cat > "$ROOT/web/frontend/public/version-manifest.json" <<MANIFEST
+{
+  "version": "${VERSION}",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v${VERSION}",
+  "changelog": "${CHANGELOG}",
+  "published_at": "$(date -u +%Y-%m-%d)"
+}
+MANIFEST
+
 # ---------- 3. Commit, push, create PR ----------
 
 info "Committing version bump..."
-git add CMakeLists.txt web/frontend/package.json web/electron/package.json
+git add CMakeLists.txt web/frontend/package.json web/electron/package.json web/frontend/public/version-manifest.json
 git commit -m "release: v${VERSION}"
 
 info "Pushing branch $RELEASE_BRANCH..."
@@ -116,6 +132,7 @@ Bumps version to \`${VERSION}\` in:
 - \`CMakeLists.txt\`
 - \`web/frontend/package.json\`
 - \`web/electron/package.json\`
+- \`web/frontend/public/version-manifest.json\`
 
 After this PR is merged, the \`release-tag\` workflow will automatically
 create tag \`${TAG}\` and trigger the full release pipeline.")

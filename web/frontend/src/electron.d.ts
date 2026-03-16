@@ -1,10 +1,12 @@
 export {}
 
 declare global {
+  const __APP_VERSION__: string
   type ElectronEnvApi = {
     apiBase?: string
     uploadMaxMb?: number
     uploadMaxPixels?: number
+    updateManifestUrl?: string
   }
 
   type ElectronStorageApi = {

@@ -33,9 +33,12 @@ import Calibration8ColorPanel from './components/Calibration8ColorPanel.vue'
 import MattingPanel from './components/MattingPanel.vue'
 import VectorizePanel from './components/VectorizePanel.vue'
 import ColorDBUploadSection from './components/calibration/ColorDBUploadSection.vue'
+import UpdateBanner from './components/UpdateBanner.vue'
+import CheckUpdateLink from './components/CheckUpdateLink.vue'
 import { darkThemeOverrides, lightThemeOverrides } from './theme'
 import { useAppStore } from './stores/app'
 import { useAppLifecycle } from './composables/feature/useAppLifecycle'
+import { useUpdateChecker } from './composables/feature/useUpdateChecker'
 import { isElectronRuntime } from './runtime/platform'
 import {
   getSiteIcpNumber,
@@ -82,6 +85,9 @@ if (activeTab.value === 'calibration' || activeTab.value === 'calibration-8color
 }
 
 useAppLifecycle()
+
+const { initOnce: initUpdateChecker } = useUpdateChecker()
+initUpdateChecker()
 
 function handleColorDBUpdated() {
   appStore.refreshColorDBs()
@@ -144,6 +150,7 @@ function toggleLocale() {
 
         <NLayoutContent class="app-shell__content">
           <div class="app-shell__content-inner">
+            <UpdateBanner />
             <div class="app-shell__announce">
               <div class="app-shell__announce-inner">
                 <span class="app-shell__announce-text">
@@ -292,6 +299,7 @@ function toggleLocale() {
             <NText depth="3" class="app-shell__meta-text">
               ChromaPrint3D{{ serverVersion ? ` v${serverVersion}` : '' }}
             </NText>
+            <CheckUpdateLink />
             <NText depth="3" class="app-shell__meta-text">
               Multi-color 3D Print Image Processor
             </NText>

@@ -83,6 +83,14 @@ export default {
       makerWorldLink: 'MakerWorld',
       makerWorldSuffix: '上查看我的打印作品',
     },
+    update: {
+      newVersionAvailable: '新版本 {version} 已发布',
+      changelog: '更新内容',
+      download: '前往下载',
+      checkForUpdate: '检查更新',
+      checking: '正在检查...',
+      upToDate: '已是最新版本',
+    },
   },
 
   convert: {
