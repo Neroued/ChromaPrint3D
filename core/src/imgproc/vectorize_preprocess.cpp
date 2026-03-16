@@ -51,9 +51,10 @@ PreprocessResult PreprocessForVectorize(const cv::Mat& bgr, bool enable_color_sm
         total_px < 1000000) {
         float target_factor =
             static_cast<float>(upscale_short_edge) / static_cast<float>(std::max(1, short_edge));
-        float factor = std::min(2.0f, target_factor);
-        int new_h    = std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * factor)));
-        int new_w    = std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * factor)));
+        float max_factor = (short_edge <= 128) ? 4.0f : 2.0f;
+        float factor     = std::min(max_factor, target_factor);
+        int new_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * factor)));
+        int new_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * factor)));
         if (static_cast<std::int64_t>(new_h) * static_cast<std::int64_t>(new_w) > 4000000LL) {
             factor =
                 std::sqrt(4000000.0f / static_cast<float>(std::max<std::int64_t>(1, total_px)));
@@ -61,10 +62,13 @@ PreprocessResult PreprocessForVectorize(const cv::Mat& bgr, bool enable_color_sm
             new_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * factor)));
         }
         if (factor > 1.05f) {
-            cv::resize(bgr, result.bgr, cv::Size(new_w, new_h), 0, 0, cv::INTER_LANCZOS4);
+            int interp = (short_edge <= 128) ? cv::INTER_CUBIC : cv::INTER_LANCZOS4;
+            cv::resize(bgr, result.bgr, cv::Size(new_w, new_h), 0, 0, interp);
             result.scale *= factor;
-            spdlog::debug("Vectorize preprocess upscale applied: {}x{} -> {}x{}, factor={:.3f}", w,
-                          h, new_w, new_h, factor);
+            spdlog::debug("Vectorize preprocess upscale applied: {}x{} -> {}x{}, factor={:.3f}, "
+                          "interp={}",
+                          w, h, new_w, new_h, factor,
+                          (interp == cv::INTER_CUBIC) ? "cubic" : "lanczos4");
         }
     }
 

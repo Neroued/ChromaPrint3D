@@ -123,33 +123,41 @@ TEST(EdgeMetrics, IdenticalImagesF1One) {
 
 TEST(Scoring, PerfectScore) {
     VectorizeMetrics m;
-    m.coverage           = 1.0;
-    m.delta_e_mean       = 0;
-    m.ssim               = 1.0;
-    m.edge_f1            = 1.0;
-    m.tiny_fragment_rate = 0;
+    m.coverage            = 1.0;
+    m.delta_e_mean        = 0;
+    m.border_delta_e_mean = 0;
+    m.overlap             = 0;
+    m.ssim                = 1.0;
+    m.edge_f1             = 1.0;
+    m.tiny_fragment_rate  = 0;
 
     double score = ComputeScore(m);
-    // 40*1 + 30*1 + 15*1 + 15*(1-0)*1 = 100
+    // fidelity = (0.7*1.0 + 0.3*1.0) * (1 - 0.15*0) = 1.0  -> 40*1 = 40
+    // structure = 1.0 -> 30, edge = 1.0 -> 15, efficiency = 1.0 -> 15
+    // total = 100
     EXPECT_NEAR(score, 100.0, 0.01);
 }
 
 TEST(Scoring, DegradedScore) {
     VectorizeMetrics m;
-    m.delta_e_mean       = 20.0;
-    m.ssim               = 0.5;
-    m.edge_f1            = 0.7;
-    m.coverage           = 0.95;
-    m.tiny_fragment_rate = 0.8;
+    m.delta_e_mean        = 20.0;
+    m.border_delta_e_mean = 30.0;
+    m.overlap             = 0.4;
+    m.ssim                = 0.5;
+    m.edge_f1             = 0.7;
+    m.coverage            = 0.95;
+    m.tiny_fragment_rate  = 0.8;
 
     ScoreWeights w;
     double score = ComputeScore(m, w);
-    // fidelity  = max(0, 1 - 20/40) = 0.5  -> 40*0.5 = 20.0
-    // structure = 0.5                       -> 30*0.5 = 15.0
-    // edge      = 0.7                       -> 15*0.7 = 10.5
-    // efficiency = (1-0.8)*0.95 = 0.19      -> 15*0.19 = 2.85
-    // total = 48.35
-    EXPECT_NEAR(score, 48.35, 0.1);
+    // base_fidelity = max(0, 1 - 20/40) = 0.5
+    // border_factor = max(0, 1 - 30/60) = 0.5
+    // fidelity = (0.7*0.5 + 0.3*0.5) * (1 - 0.15*0.4) = 0.5 * 0.94 = 0.47  -> 40*0.47 = 18.8
+    // structure = 0.5 -> 30*0.5 = 15.0
+    // edge = 0.7 -> 15*0.7 = 10.5
+    // efficiency = (1-0.8)*0.95 = 0.19 -> 15*0.19 = 2.85
+    // total = 47.15
+    EXPECT_NEAR(score, 47.15, 0.1);
     EXPECT_GT(score, 0.0);
     EXPECT_LT(score, 100.0);
 }

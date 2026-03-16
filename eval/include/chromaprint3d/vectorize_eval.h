@@ -151,11 +151,13 @@ std::vector<ImageResult> EvaluateBatch(const Manifest& manifest, const EvalConfi
 // ── Scoring ──────────────────────────────────────────────────────────────────
 
 struct ScoreWeights {
-    double fidelity        = 40;
-    double structure       = 30;
-    double edge            = 15;
-    double efficiency      = 15;
-    double delta_e_ceiling = 40;
+    double fidelity               = 40;
+    double structure              = 30;
+    double edge                   = 15;
+    double efficiency             = 15;
+    double delta_e_ceiling        = 40;
+    double overlap_penalty_weight = 0.15;
+    double border_delta_e_weight  = 0.3;
 };
 
 double ComputeScore(const VectorizeMetrics& m, const ScoreWeights& w = {});

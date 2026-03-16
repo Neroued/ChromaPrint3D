@@ -19,7 +19,14 @@ namespace ChromaPrint3D {
 // ── Scoring ──────────────────────────────────────────────────────────────────
 
 double ComputeScore(const VectorizeMetrics& m, const ScoreWeights& w) {
-    double fidelity   = std::max(0.0, 1.0 - m.delta_e_mean / w.delta_e_ceiling);
+    double base_fidelity = std::max(0.0, 1.0 - m.delta_e_mean / w.delta_e_ceiling);
+    double border_factor = std::max(0.0, 1.0 - m.border_delta_e_mean / (w.delta_e_ceiling * 1.5));
+    double fidelity =
+        (1.0 - w.border_delta_e_weight) * base_fidelity + w.border_delta_e_weight * border_factor;
+
+    double overlap_penalty = std::clamp(m.overlap, 0.0, 1.0);
+    fidelity *= (1.0 - w.overlap_penalty_weight * overlap_penalty);
+
     double structure  = std::clamp(m.ssim, 0.0, 1.0);
     double edge       = std::clamp(m.edge_f1, 0.0, 1.0);
     double efficiency = std::clamp((1.0 - m.tiny_fragment_rate) * m.coverage, 0.0, 1.0);

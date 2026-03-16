@@ -262,6 +262,24 @@ float LocalCurvature(const std::vector<Vec2f>& pts, int i, int n) {
     return cross / (len1 * len2);
 }
 
+void SmoothOpenChain(std::vector<Vec2f>& pts, float max_displacement, int iterations) {
+    if (pts.size() < 5) return;
+    const int n = static_cast<int>(pts.size());
+
+    for (int iter = 0; iter < iterations; ++iter) {
+        std::vector<Vec2f> prev = pts;
+        for (int i = 2; i < n - 2; ++i) {
+            Vec2f s = (prev[i - 2] + prev[i - 1] * 4.0f + prev[i] * 6.0f + prev[i + 1] * 4.0f +
+                       prev[i + 2]) *
+                      (1.0f / 16.0f);
+            Vec2f delta = s - prev[i];
+            float dist  = delta.Length();
+            if (dist > max_displacement) s = prev[i] + delta * (max_displacement / dist);
+            pts[i] = s;
+        }
+    }
+}
+
 void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int iterations) {
     if (pts.size() < 5) return;
     const int n = static_cast<int>(pts.size());
@@ -293,6 +311,91 @@ void SmoothClosedLoop(std::vector<Vec2f>& pts, float max_displacement, int itera
     }
 }
 
+CubicBezier ReverseBezierSegment(const CubicBezier& seg) {
+    return {seg.p3, seg.p2, seg.p1, seg.p0};
+}
+
+std::vector<CubicBezier> ReverseBezierChain(const std::vector<CubicBezier>& chain) {
+    std::vector<CubicBezier> rev;
+    rev.reserve(chain.size());
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        rev.push_back(ReverseBezierSegment(*it));
+    }
+    return rev;
+}
+
+struct EdgeRefLoop {
+    std::vector<OrientedEdgeRef> refs;
+};
+
+std::vector<EdgeRefLoop> ChainEdgeRefsIntoLoops(const BoundaryGraph& graph,
+                                                const std::vector<OrientedEdgeRef>& refs) {
+    std::vector<EdgeRefLoop> loops;
+    if (refs.empty()) return loops;
+
+    std::unordered_map<int, std::vector<int>> node_to_refs;
+    for (int i = 0; i < static_cast<int>(refs.size()); ++i) {
+        int sn = EdgeStartNode(graph, refs[i]);
+        node_to_refs[sn].push_back(i);
+    }
+
+    std::vector<bool> used(refs.size(), false);
+
+    for (int seed = 0; seed < static_cast<int>(refs.size()); ++seed) {
+        if (used[seed]) continue;
+
+        EdgeRefLoop loop;
+        int cur = seed;
+        bool ok = true;
+
+        while (true) {
+            if (used[cur]) {
+                ok = (cur == seed && !loop.refs.empty());
+                break;
+            }
+            used[cur] = true;
+            loop.refs.push_back(refs[cur]);
+
+            int end_node = EdgeEndNode(graph, refs[cur]);
+            auto it      = node_to_refs.find(end_node);
+            if (it == node_to_refs.end()) {
+                ok = false;
+                break;
+            }
+
+            int next = -1;
+            for (int ri : it->second) {
+                if (!used[ri]) {
+                    next = ri;
+                    break;
+                }
+            }
+            if (next < 0) {
+                if (EdgeStartNode(graph, refs[seed]) == end_node && !loop.refs.empty()) {
+                    ok = true;
+                }
+                break;
+            }
+            cur = next;
+        }
+
+        if (ok && !loop.refs.empty()) { loops.push_back(std::move(loop)); }
+    }
+    return loops;
+}
+
+double BezierChainSignedArea(const std::vector<CubicBezier>& segs) {
+    std::vector<Vec2f> pts;
+    pts.reserve(segs.size() * 4);
+    for (const auto& s : segs) {
+        pts.push_back(s.p0);
+        pts.push_back(s.p1);
+        pts.push_back(s.p2);
+    }
+    if (!segs.empty()) pts.push_back(segs.back().p3);
+    return PolylineSignedArea(pts);
+}
+
 } // namespace
 
 ContourSmoothConfig ContourSmoothFromLevel(float smoothness) {
@@ -319,23 +422,57 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
     spdlog::debug("AssembleContoursFromGraph start: edges={}, num_labels={}", graph.edges.size(),
                   num_labels);
 
+    // ── Phase 1: Pre-smooth each BoundaryEdge independently ─────────────────
+    const int num_edges = static_cast<int>(graph.edges.size());
+    std::vector<std::vector<Vec2f>> edge_smoothed(num_edges);
+
+    for (int eid = 0; eid < num_edges; ++eid) {
+        edge_smoothed[eid] = graph.edges[eid].points;
+        if (edge_smoothed[eid].size() < 2) continue;
+        DecimateNearCollinear(edge_smoothed[eid], smooth_cfg.decimate_epsilon);
+        if (edge_smoothed[eid].size() >= 5) {
+            SmoothOpenChain(edge_smoothed[eid], smooth_cfg.smooth_max_displacement,
+                            std::max(1, smooth_cfg.smooth_iterations));
+        }
+    }
+    spdlog::debug("Edge pre-smoothing done: edges={}", num_edges);
+
+    // ── Phase 2: Per-label assembly with shared smoothed points + loop fitting
     for (int label = 0; label < num_labels; ++label) {
         auto refs = CollectEdgesForLabel(graph, label);
         if (refs.empty()) continue;
 
-        auto loops = ChainEdgesIntoLoops(graph, refs);
-        if (loops.empty()) {
+        auto ref_loops = ChainEdgeRefsIntoLoops(graph, refs);
+        if (ref_loops.empty()) {
             spdlog::warn("AssembleContoursFromGraph: refs found but no loops, label={}, refs={}",
                          label, refs.size());
             continue;
         }
 
-        for (auto& lp : loops) {
-            DecimateNearCollinear(lp, smooth_cfg.decimate_epsilon);
-            SmoothClosedLoop(lp, smooth_cfg.smooth_max_displacement, smooth_cfg.smooth_iterations);
+        std::vector<std::vector<Vec2f>> loops;
+        for (auto& rl : ref_loops) {
+            std::vector<Vec2f> loop;
+            for (size_t ri = 0; ri < rl.refs.size(); ++ri) {
+                const auto& ref = rl.refs[ri];
+                const auto& pts = edge_smoothed[ref.edge_id];
+                if (pts.empty()) continue;
+                if (ref.reversed) {
+                    int start = loop.empty() ? static_cast<int>(pts.size()) - 1
+                                             : static_cast<int>(pts.size()) - 2;
+                    for (int k = start; k >= 0; --k) loop.push_back(pts[k]);
+                } else {
+                    size_t start = loop.empty() ? 0 : 1;
+                    for (size_t k = start; k < pts.size(); ++k) loop.push_back(pts[k]);
+                }
+            }
+            if (loop.size() > 1 && (loop.front() - loop.back()).LengthSquared() < 1e-6f) {
+                loop.pop_back();
+            }
+            if (loop.size() >= 3) loops.push_back(std::move(loop));
         }
 
-        // Classify loops as outer (CCW, positive area) or hole (CW, negative area)
+        if (loops.empty()) continue;
+
         struct ClassifiedLoop {
             std::vector<Vec2f> points;
             double signed_area;
@@ -349,10 +486,6 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             classified.push_back({std::move(lp), sa, std::abs(sa), sa});
         }
 
-        // Make all contours CCW (positive area) for consistent Bezier fitting,
-        // but preserve original winding direction as the ground truth for outer vs hole.
-        // In the BoundaryGraph convention (label on left), the original signed area
-        // determines the role: negative = outer contour, positive = hole.
         for (auto& cl : classified) {
             if (cl.signed_area < 0) {
                 std::reverse(cl.points.begin(), cl.points.end());
@@ -360,12 +493,9 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             }
         }
 
-        // Sort by area descending
         std::sort(classified.begin(), classified.end(),
                   [](const auto& a, const auto& b) { return a.abs_area > b.abs_area; });
 
-        // Classify outer vs hole using original winding direction, then use
-        // centroid-based PointInPolygon only to assign each hole to its parent outer.
         struct ContourInfo {
             int parent   = -1;
             bool is_hole = false;
@@ -376,11 +506,10 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
         for (int i = 0; i < static_cast<int>(classified.size()); ++i) {
             bool is_hole_by_winding = classified[i].original_signed_area > 0;
             if (!is_hole_by_winding) continue;
-
             info[i].is_hole = true;
 
             Vec2f centroid{0, 0};
-            for (const auto& p : classified[i].points) { centroid = centroid + p; }
+            for (const auto& p : classified[i].points) centroid = centroid + p;
             centroid = centroid * (1.0f / static_cast<float>(classified[i].points.size()));
 
             for (int j = 0; j < static_cast<int>(classified.size()); ++j) {
@@ -392,7 +521,6 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             }
         }
 
-        // Group outer contours with their holes
         std::unordered_map<int, std::vector<int>> outer_to_holes;
         std::vector<int> outers;
         for (int i = 0; i < static_cast<int>(classified.size()); ++i) {
@@ -418,12 +546,10 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
                 shape.color = palette[label];
             }
 
-            // Outer contour — ensure CCW
             auto outer_bc = PointsToBezierContour(classified[oi].points, true, fit_cfg);
             if (outer_bc.segments.empty()) continue;
             shape.contours.push_back(std::move(outer_bc));
 
-            // Holes — ensure CW (reverse the CCW points)
             auto hit = outer_to_holes.find(oi);
             if (hit != outer_to_holes.end()) {
                 for (int hi : hit->second) {
@@ -441,11 +567,10 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             shapes.push_back(std::move(shape));
             ++shape_count_out;
         }
-        spdlog::debug(
-            "AssembleContoursFromGraph label summary: label={}, refs={}, loops={}, outers={}, "
-            "dropped_small_outer={}, dropped_small_hole={}, shapes={}",
-            label, refs.size(), loops.size(), outers.size(), dropped_small_outer,
-            dropped_small_hole, shape_count_out);
+        spdlog::debug("AssembleContoursFromGraph label={}: refs={}, loops={}, outers={}, "
+                      "dropped_outer={}, dropped_hole={}, shapes={}",
+                      label, refs.size(), ref_loops.size(), outers.size(), dropped_small_outer,
+                      dropped_small_hole, shape_count_out);
     }
     const auto elapsed_ms =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();

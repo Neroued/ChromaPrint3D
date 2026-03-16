@@ -167,10 +167,30 @@ void ApplyCoverageGuard(std::vector<VectorizedShape>& shapes, const cv::Mat& lab
             patch.area  = g.area;
             patch.contours.push_back(RingToBezier(g.outer));
             for (const auto& hole : g.holes) patch.contours.push_back(RingToBezier(hole));
-            if (!patch.contours.empty()) {
-                shapes.push_back(std::move(patch));
-                ++patch_shapes_added;
+            if (patch.contours.empty()) continue;
+
+            cv::Mat patch_raster(h, w, CV_8UC1, cv::Scalar(0));
+            {
+                std::vector<std::vector<cv::Point>> polys;
+                for (const auto& c : patch.contours) {
+                    auto poly = FlattenContour(c, w, h);
+                    if (poly.size() >= 3) polys.push_back(std::move(poly));
+                }
+                if (!polys.empty()) cv::fillPoly(patch_raster, polys, cv::Scalar(255));
             }
+            cv::Mat overlap_mask;
+            cv::bitwise_and(patch_raster, coverage, overlap_mask);
+            int patch_px   = cv::countNonZero(patch_raster);
+            int overlap_px = cv::countNonZero(overlap_mask);
+            if (patch_px > 0 &&
+                static_cast<float>(overlap_px) / static_cast<float>(patch_px) > 0.5f) {
+                spdlog::debug("CoverageGuard skip high-overlap patch: patch_px={}, overlap={}",
+                              patch_px, overlap_px);
+                continue;
+            }
+
+            shapes.push_back(std::move(patch));
+            ++patch_shapes_added;
         }
     }
     const auto elapsed_ms =

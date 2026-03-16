@@ -434,9 +434,9 @@ std::vector<Rgb> ComputePalette(const cv::Mat& bgr, const cv::Mat& labels, int n
         for (int c = 0; c < bgr.cols; ++c) {
             int lid = lrow[c];
             if (lid < 0 || lid >= num_labels) continue;
-            sums[lid][0] += brow[c][2] / 255.0; // R
-            sums[lid][1] += brow[c][1] / 255.0; // G
-            sums[lid][2] += brow[c][0] / 255.0; // B
+            sums[lid][0] += brow[c][2] / 255.0;
+            sums[lid][1] += brow[c][1] / 255.0;
+            sums[lid][2] += brow[c][0] / 255.0;
             counts[lid]++;
         }
     }
@@ -638,27 +638,145 @@ int EstimateOptimalColors(const cv::Mat& bgr) {
     return best_k;
 }
 
+struct BBox {
+    float xmin = std::numeric_limits<float>::max();
+    float ymin = std::numeric_limits<float>::max();
+    float xmax = std::numeric_limits<float>::lowest();
+    float ymax = std::numeric_limits<float>::lowest();
+
+    void Expand(const Vec2f& p) {
+        xmin = std::min(xmin, p.x);
+        ymin = std::min(ymin, p.y);
+        xmax = std::max(xmax, p.x);
+        ymax = std::max(ymax, p.y);
+    }
+
+    bool Overlaps(const BBox& o) const {
+        return xmin < o.xmax && xmax > o.xmin && ymin < o.ymax && ymax > o.ymin;
+    }
+};
+
+BBox ComputeShapeBBox(const VectorizedShape& s) {
+    BBox bb;
+    for (const auto& c : s.contours) {
+        for (const auto& seg : c.segments) {
+            bb.Expand(seg.p0);
+            bb.Expand(seg.p1);
+            bb.Expand(seg.p2);
+            bb.Expand(seg.p3);
+        }
+    }
+    return bb;
+}
+
+// Must be called AFTER shapes are sorted by area (painter's algorithm).
+// Merges only consecutive runs of same-color fill shapes whose bboxes are
+// pairwise non-overlapping, so the Z-order is preserved exactly.
+void MergeAdjacentSameColorShapes(std::vector<VectorizedShape>& shapes) {
+    if (shapes.size() < 2) return;
+
+    constexpr float kMergeColorThreshold = 3.0f;
+    auto color_match                     = [](const Rgb& a, const Rgb& b) -> bool {
+        Lab la = a.ToLab(), lb = b.ToLab();
+        return Lab::DeltaE76(la, lb) < kMergeColorThreshold;
+    };
+
+    const size_t n = shapes.size();
+    std::vector<VectorizedShape> merged;
+    merged.reserve(n);
+
+    size_t i = 0;
+    while (i < n) {
+        if (shapes[i].is_stroke || shapes[i].contours.empty()) {
+            merged.push_back(std::move(shapes[i]));
+            ++i;
+            continue;
+        }
+
+        // Start a run of consecutive same-color shapes
+        size_t run_start = i;
+        std::vector<BBox> run_bboxes;
+        run_bboxes.push_back(ComputeShapeBBox(shapes[i]));
+
+        size_t j = i + 1;
+        while (j < n && !shapes[j].is_stroke &&
+               color_match(shapes[run_start].color, shapes[j].color)) {
+            BBox jbb          = ComputeShapeBBox(shapes[j]);
+            bool overlaps_any = false;
+            for (const auto& rb : run_bboxes) {
+                if (jbb.Overlaps(rb)) {
+                    overlaps_any = true;
+                    break;
+                }
+            }
+            if (overlaps_any) break;
+            run_bboxes.push_back(jbb);
+            ++j;
+        }
+
+        if (j - run_start == 1) {
+            merged.push_back(std::move(shapes[i]));
+        } else {
+            VectorizedShape combined;
+            combined.color = shapes[run_start].color;
+            combined.area  = shapes[run_start].area;
+            for (size_t k = run_start; k < j; ++k) {
+                for (auto& c : shapes[k].contours) combined.contours.push_back(std::move(c));
+            }
+            merged.push_back(std::move(combined));
+        }
+        i = j;
+    }
+
+    int reduced = static_cast<int>(n) - static_cast<int>(merged.size());
+    if (reduced > 0) {
+        spdlog::info("MergeAdjacentSameColorShapes: {} -> {} shapes (reduced by {})", n,
+                     merged.size(), reduced);
+    }
+    shapes = std::move(merged);
+}
+
 } // namespace
 
 VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerConfig& cfg,
                                           const cv::Mat& opaque_mask) {
     const auto pipeline_start = std::chrono::steady_clock::now();
-    const int resolved_colors = (cfg.num_colors == 0) ? EstimateOptimalColors(bgr) : cfg.num_colors;
+    int resolved_colors       = (cfg.num_colors == 0) ? EstimateOptimalColors(bgr) : cfg.num_colors;
+
+    const int short_edge = std::min(bgr.cols, bgr.rows);
+    const bool is_small  = short_edge <= 128;
+
+    float adaptive_smoothing_spatial = cfg.smoothing_spatial;
+    float adaptive_smoothing_color   = cfg.smoothing_color;
+    int adaptive_min_region          = cfg.min_region_area;
+    int adaptive_upscale_short_edge  = cfg.upscale_short_edge;
+
+    if (is_small) {
+        if (cfg.num_colors == 0) resolved_colors = std::min(resolved_colors, 8);
+        adaptive_smoothing_spatial  = std::min(cfg.smoothing_spatial, 8.0f);
+        adaptive_smoothing_color    = std::min(cfg.smoothing_color, 15.0f);
+        adaptive_min_region         = std::max(cfg.min_region_area, short_edge * short_edge / 50);
+        adaptive_upscale_short_edge = std::min(cfg.upscale_short_edge, 400);
+        spdlog::info("Small image adaptation: short_edge={}, colors={}, smoothing=({:.0f},{:.0f}), "
+                     "min_region={}, upscale_target={}",
+                     short_edge, resolved_colors, adaptive_smoothing_spatial,
+                     adaptive_smoothing_color, adaptive_min_region, adaptive_upscale_short_edge);
+    }
 
     spdlog::info("VectorizePotracePipeline start: input={}x{}, num_colors={}{}, "
                  "min_region_area={}, curve_fit_error={:.2f}, contour_simplify={:.2f}, "
                  "svg_stroke={}, coverage_fix={}, max_working_pixels={}",
                  bgr.cols, bgr.rows, resolved_colors, cfg.num_colors == 0 ? " (auto)" : "",
-                 cfg.min_region_area, cfg.curve_fit_error, cfg.contour_simplify,
+                 adaptive_min_region, cfg.curve_fit_error, cfg.contour_simplify,
                  cfg.svg_enable_stroke, cfg.enable_coverage_fix, cfg.max_working_pixels);
     const bool multicolor = resolved_colors > 2;
-    auto preproc =
-        PreprocessForVectorize(bgr, multicolor, cfg.smoothing_spatial, cfg.smoothing_color,
-                               cfg.upscale_short_edge, cfg.max_working_pixels);
-    cv::Mat working    = preproc.bgr;
-    cv::Mat unsmoothed = preproc.unsmoothed_bgr;
-    const float scale  = preproc.scale;
-    const bool scaled  = std::abs(scale - 1.0f) > 1e-6f;
+    auto preproc          = PreprocessForVectorize(bgr, multicolor, adaptive_smoothing_spatial,
+                                                   adaptive_smoothing_color, adaptive_upscale_short_edge,
+                                                   cfg.max_working_pixels);
+    cv::Mat working       = preproc.bgr;
+    cv::Mat unsmoothed    = preproc.unsmoothed_bgr;
+    const float scale     = preproc.scale;
+    const bool scaled     = std::abs(scale - 1.0f) > 1e-6f;
 
     cv::Mat working_mask = opaque_mask;
     if (scaled && !opaque_mask.empty()) {
@@ -710,7 +828,14 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
         spdlog::info("Vectorize label refinement applied: passes={}", cfg.refine_passes);
     }
 
-    MergeSmallComponents(seg.labels, seg.lab, seg.centers_lab, std::max(2, cfg.min_region_area),
+    int area_proportional_min =
+        std::min(200, static_cast<int>(working.rows * working.cols * 0.0005f));
+    int effective_min_region = std::max(adaptive_min_region, area_proportional_min);
+    spdlog::debug("MergeSmallComponents min_region: cfg={}, adaptive={}, proportional={}, "
+                  "effective={}",
+                  cfg.min_region_area, adaptive_min_region, area_proportional_min,
+                  effective_min_region);
+    MergeSmallComponents(seg.labels, seg.lab, seg.centers_lab, std::max(2, effective_min_region),
                          cfg.max_merge_color_dist);
     if (multicolor) {
         MorphologicalCleanup(seg.labels, static_cast<int>(seg.centers_lab.size()), 1);
@@ -800,14 +925,16 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
                 if (lid >= 0 && lid < num_labels) label_pixel_count[lid] += 1.0;
             }
         }
+        constexpr float kCoverageColorThreshold = 5.0f;
+        std::vector<Lab> palette_lab(num_labels);
+        for (int rid = 0; rid < num_labels; ++rid) palette_lab[rid] = palette[rid].ToLab();
+
         for (const auto& s : shapes) {
             if (s.is_stroke) continue;
+            Lab shape_lab = s.color.ToLab();
             for (int rid = 0; rid < num_labels; ++rid) {
-                if (rid < static_cast<int>(palette.size())) {
-                    uint8_t sr, sg, sb, pr, pg, pb;
-                    s.color.ToRgb255(sr, sg, sb);
-                    palette[rid].ToRgb255(pr, pg, pb);
-                    if (sr == pr && sg == pg && sb == pb) { label_shape_area[rid] += s.area; }
+                if (Lab::DeltaE76(shape_lab, palette_lab[rid]) < kCoverageColorThreshold) {
+                    label_shape_area[rid] += s.area;
                 }
             }
         }
@@ -815,7 +942,7 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
         for (int rid = 0; rid < num_labels; ++rid) {
             if (label_pixel_count[rid] < 1.0) {
                 label_covered[rid] = true;
-            } else if (label_shape_area[rid] > label_pixel_count[rid] * 0.1) {
+            } else if (label_shape_area[rid] > label_pixel_count[rid] * 0.3) {
                 label_covered[rid] = true;
             }
         }
@@ -906,17 +1033,26 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
                      labels_traced, direct_shapes_added);
     }
 
-    // Thin-line enhancement: detect narrow sub-regions and add stroke paths
+    // Thin-line enhancement: detect narrow sub-regions and add stroke paths.
+    // Cap total strokes at 2x the number of fill shapes to prevent stroke
+    // dominance that hurts efficiency (tiny_fragment_rate) and inflates overlap.
     if (cfg.svg_enable_stroke && multicolor && num_labels > 1) {
-        const float thin_radius = std::clamp(cfg.thin_line_max_radius, 0.1f, 50.0f);
-        int labels_with_thin    = 0;
-        int stroke_added        = 0;
-        for (int rid = 0; rid < num_labels; ++rid) {
+        const int fill_count       = static_cast<int>(shapes.size());
+        const int max_stroke_count = fill_count * 2;
+
+        const int working_short_edge = std::min(working.cols, working.rows);
+        const float adaptive_thin_radius =
+            (working_short_edge <= 400) ? std::clamp(cfg.thin_line_max_radius * 0.6f, 0.1f, 50.0f)
+                                        : std::clamp(cfg.thin_line_max_radius, 0.1f, 50.0f);
+
+        int labels_with_thin = 0;
+        int stroke_added     = 0;
+        for (int rid = 0; rid < num_labels && stroke_added < max_stroke_count; ++rid) {
             cv::Mat mask = (seg.labels == rid);
             mask.convertTo(mask, CV_8UC1, 255);
             if (cv::countNonZero(mask) <= 0) continue;
 
-            cv::Mat thin = DetectThinRegion(mask, thin_radius);
+            cv::Mat thin = DetectThinRegion(mask, adaptive_thin_radius);
             if (cv::countNonZero(thin) < 3) continue;
             ++labels_with_thin;
 
@@ -926,11 +1062,14 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
             if (cv::countNonZero(skel) < 3) continue;
 
             auto strokes = ExtractStrokePaths(skel, dist, palette[rid], 3.0f);
-            stroke_added += static_cast<int>(strokes.size());
-            for (auto& s : strokes) shapes.push_back(std::move(s));
+            for (auto& s : strokes) {
+                if (stroke_added >= max_stroke_count) break;
+                shapes.push_back(std::move(s));
+                ++stroke_added;
+            }
         }
-        spdlog::info("Vectorize thin-line enhancement: labels={}, strokes_added={}",
-                     labels_with_thin, stroke_added);
+        spdlog::info("Vectorize thin-line enhancement: labels={}, strokes_added={} (cap={})",
+                     labels_with_thin, stroke_added, max_stroke_count);
     } else if (cfg.svg_enable_stroke) {
         spdlog::debug("Vectorize thin-line enhancement skipped: multicolor={}, num_labels={}",
                       multicolor, num_labels);
@@ -940,6 +1079,8 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
         if (a.is_stroke != b.is_stroke) return !a.is_stroke;
         return a.area > b.area;
     });
+
+    MergeAdjacentSameColorShapes(shapes);
 
     if (cfg.enable_coverage_fix) {
         float effective_coverage_ratio = cfg.min_coverage_ratio;
