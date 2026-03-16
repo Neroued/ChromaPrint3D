@@ -895,24 +895,10 @@ VectorizerResult VectorizePotracePipeline(const cv::Mat& bgr, const VectorizerCo
         fit_cfg.error_threshold            = std::clamp(effective_curve_fit_error, 0.05f, 10.0f);
         fit_cfg.corner_angle_threshold_deg = std::clamp(cfg.corner_angle_threshold, 60.0f, 179.0f);
         auto smooth_cfg                    = ContourSmoothFromLevel(cfg.smoothness);
-        shapes =
-            AssembleContoursFromGraph(boundary_graph, num_labels, palette, cfg.min_contour_area,
-                                      cfg.min_hole_area, &fit_cfg, smooth_cfg);
+        shapes = AssembleContoursFromGraph(boundary_graph, num_labels, palette,
+                                           cfg.min_contour_area, cfg.min_hole_area, &fit_cfg,
+                                           smooth_cfg, cfg.merge_segment_tolerance);
         spdlog::info("BoundaryGraph contour assembly done: shapes={}", shapes.size());
-
-        if (cfg.merge_segment_tolerance > 0.0f) {
-            int merged_total = 0;
-            for (auto& shape : shapes) {
-                for (auto& contour : shape.contours) {
-                    int before = static_cast<int>(contour.segments.size());
-                    MergeNearLinearSegments(contour.segments, cfg.merge_segment_tolerance);
-                    merged_total += before - static_cast<int>(contour.segments.size());
-                }
-            }
-            if (merged_total > 0) {
-                spdlog::info("MergeNearLinearSegments: removed {} segments", merged_total);
-            }
-        }
 
         // Potrace fallback for labels that BoundaryGraph failed to produce shapes for.
         // Determine covered labels by checking pixel coverage against shapes.

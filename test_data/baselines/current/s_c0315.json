@@ -23,8 +23,8 @@
   "island_count": 0,
   "same_color_gap_pixels": 5037,
   "color_compression": 0.2222,
-  "vectorize_time_ms": 244.2,
-  "eval_time_ms": 22.8,
+  "vectorize_time_ms": 227.2,
+  "eval_time_ms": 19.9,
   "width": 188,
   "height": 253
 }

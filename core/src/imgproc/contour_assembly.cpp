@@ -411,7 +411,8 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
                                                        const std::vector<Rgb>& palette,
                                                        float min_contour_area, float min_hole_area,
                                                        const CurveFitConfig* fit_cfg,
-                                                       const ContourSmoothConfig& smooth_cfg) {
+                                                       const ContourSmoothConfig& smooth_cfg,
+                                                       float merge_tolerance) {
     std::vector<VectorizedShape> shapes;
     if (graph.edges.empty() || num_labels <= 0) {
         spdlog::debug("AssembleContoursFromGraph skipped: edges={}, num_labels={}",
@@ -437,7 +438,59 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
     }
     spdlog::debug("Edge pre-smoothing done: edges={}", num_edges);
 
-    // ── Phase 2: Per-label assembly with shared smoothed points + loop fitting
+    // ── Phase 1.5: Per-edge Bezier fitting ──────────────────────────────────
+    // Fit Bezier curves to each edge independently so that both labels sharing
+    // an edge reference the exact same curve segments — guaranteeing watertight
+    // boundaries after assembly.
+    std::vector<std::vector<CubicBezier>> edge_beziers(num_edges);
+    if (fit_cfg) {
+        for (int eid = 0; eid < num_edges; ++eid) {
+            const auto& pts = edge_smoothed[eid];
+            if (pts.size() < 2) continue;
+
+            bool is_self_loop = (graph.edges[eid].node_start == graph.edges[eid].node_end);
+            if (is_self_loop && pts.size() >= 3) {
+                auto loop_pts = pts;
+                if (loop_pts.size() > 1 &&
+                    (loop_pts.front() - loop_pts.back()).LengthSquared() < 1e-6f)
+                    loop_pts.pop_back();
+                if (loop_pts.size() >= 3)
+                    edge_beziers[eid] = FitBezierToClosedPolyline(loop_pts, *fit_cfg);
+            } else {
+                edge_beziers[eid] = FitBezierToPolyline(pts, *fit_cfg);
+            }
+
+            if (edge_beziers[eid].empty()) {
+                auto fb           = MakeDegenerateBezierContour(pts, is_self_loop);
+                edge_beziers[eid] = std::move(fb.segments);
+            }
+        }
+    } else {
+        for (int eid = 0; eid < num_edges; ++eid) {
+            const auto& pts = edge_smoothed[eid];
+            if (pts.size() < 2) continue;
+            bool is_self_loop = (graph.edges[eid].node_start == graph.edges[eid].node_end);
+            auto fb           = MakeDegenerateBezierContour(pts, is_self_loop);
+            edge_beziers[eid] = std::move(fb.segments);
+        }
+    }
+    spdlog::debug("Per-edge Bezier fitting done: edges={}", num_edges);
+
+    // ── Phase 1.5b: Per-edge MergeNearLinearSegments ────────────────────────
+    // Done per-edge (not per-contour) so both sides of a shared boundary see
+    // the identical merge result, preserving the watertight guarantee.
+    if (merge_tolerance > 0.0f) {
+        int merged_total = 0;
+        for (int eid = 0; eid < num_edges; ++eid) {
+            int before = static_cast<int>(edge_beziers[eid].size());
+            MergeNearLinearSegments(edge_beziers[eid], merge_tolerance);
+            merged_total += before - static_cast<int>(edge_beziers[eid].size());
+        }
+        if (merged_total > 0)
+            spdlog::debug("Per-edge MergeNearLinear: removed {} segments", merged_total);
+    }
+
+    // ── Phase 2: Per-label assembly from pre-fitted Bezier segments ─────────
     for (int label = 0; label < num_labels; ++label) {
         auto refs = CollectEdgesForLabel(graph, label);
         if (refs.empty()) continue;
@@ -449,46 +502,46 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             continue;
         }
 
-        std::vector<std::vector<Vec2f>> loops;
-        for (auto& rl : ref_loops) {
-            std::vector<Vec2f> loop;
-            for (size_t ri = 0; ri < rl.refs.size(); ++ri) {
-                const auto& ref = rl.refs[ri];
-                const auto& pts = edge_smoothed[ref.edge_id];
-                if (pts.empty()) continue;
-                if (ref.reversed) {
-                    int start = loop.empty() ? static_cast<int>(pts.size()) - 1
-                                             : static_cast<int>(pts.size()) - 2;
-                    for (int k = start; k >= 0; --k) loop.push_back(pts[k]);
-                } else {
-                    size_t start = loop.empty() ? 0 : 1;
-                    for (size_t k = start; k < pts.size(); ++k) loop.push_back(pts[k]);
-                }
-            }
-            if (loop.size() > 1 && (loop.front() - loop.back()).LengthSquared() < 1e-6f) {
-                loop.pop_back();
-            }
-            if (loop.size() >= 3) loops.push_back(std::move(loop));
-        }
-
-        if (loops.empty()) continue;
-
-        struct ClassifiedLoop {
-            std::vector<Vec2f> points;
+        struct ClassifiedContour {
+            BezierContour contour;
+            std::vector<Vec2f> polygon;
             double signed_area;
             double abs_area;
             double original_signed_area;
         };
 
-        std::vector<ClassifiedLoop> classified;
-        for (auto& lp : loops) {
-            double sa = PolylineSignedArea(lp);
-            classified.push_back({std::move(lp), sa, std::abs(sa), sa});
+        std::vector<ClassifiedContour> classified;
+        for (auto& rl : ref_loops) {
+            BezierContour contour;
+            contour.closed = true;
+            for (const auto& ref : rl.refs) {
+                const auto& segs = edge_beziers[ref.edge_id];
+                if (ref.reversed) {
+                    for (int k = static_cast<int>(segs.size()) - 1; k >= 0; --k)
+                        contour.segments.push_back(
+                            {segs[k].p3, segs[k].p2, segs[k].p1, segs[k].p0});
+                } else {
+                    for (const auto& s : segs) contour.segments.push_back(s);
+                }
+            }
+            if (contour.segments.empty()) continue;
+            contour.segments.back().p3 = contour.segments.front().p0;
+
+            double sa = BezierContourSignedArea(contour);
+
+            std::vector<Vec2f> poly;
+            poly.reserve(contour.segments.size());
+            for (const auto& seg : contour.segments) poly.push_back(seg.p0);
+
+            classified.push_back({std::move(contour), std::move(poly), sa, std::abs(sa), sa});
         }
+
+        if (classified.empty()) continue;
 
         for (auto& cl : classified) {
             if (cl.signed_area < 0) {
-                std::reverse(cl.points.begin(), cl.points.end());
+                ReverseBezierContour(cl.contour);
+                std::reverse(cl.polygon.begin(), cl.polygon.end());
                 cl.signed_area = -cl.signed_area;
             }
         }
@@ -509,12 +562,12 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
             info[i].is_hole = true;
 
             Vec2f centroid{0, 0};
-            for (const auto& p : classified[i].points) centroid = centroid + p;
-            centroid = centroid * (1.0f / static_cast<float>(classified[i].points.size()));
+            for (const auto& p : classified[i].polygon) centroid = centroid + p;
+            centroid = centroid * (1.0f / static_cast<float>(classified[i].polygon.size()));
 
             for (int j = 0; j < static_cast<int>(classified.size()); ++j) {
                 if (j == i || info[j].is_hole) continue;
-                if (PointInPolygon(centroid, classified[j].points)) {
+                if (PointInPolygon(centroid, classified[j].polygon)) {
                     info[i].parent = j;
                     break;
                 }
@@ -546,9 +599,8 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
                 shape.color = palette[label];
             }
 
-            auto outer_bc = PointsToBezierContour(classified[oi].points, true, fit_cfg);
-            if (outer_bc.segments.empty()) continue;
-            shape.contours.push_back(std::move(outer_bc));
+            if (classified[oi].contour.segments.empty()) continue;
+            shape.contours.push_back(std::move(classified[oi].contour));
 
             auto hit = outer_to_holes.find(oi);
             if (hit != outer_to_holes.end()) {
@@ -557,10 +609,10 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
                         ++dropped_small_hole;
                         continue;
                     }
-                    auto hole_pts = classified[hi].points;
-                    std::reverse(hole_pts.begin(), hole_pts.end());
-                    auto hole_bc = PointsToBezierContour(hole_pts, true, fit_cfg);
-                    if (!hole_bc.segments.empty()) { shape.contours.push_back(std::move(hole_bc)); }
+                    ReverseBezierContour(classified[hi].contour);
+                    if (!classified[hi].contour.segments.empty()) {
+                        shape.contours.push_back(std::move(classified[hi].contour));
+                    }
                 }
             }
 

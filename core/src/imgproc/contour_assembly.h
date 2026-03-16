@@ -39,6 +39,7 @@ std::vector<VectorizedShape> AssembleContoursFromGraph(const BoundaryGraph& grap
                                                        const std::vector<Rgb>& palette,
                                                        float min_contour_area, float min_hole_area,
                                                        const CurveFitConfig* fit_cfg = nullptr,
-                                                       const ContourSmoothConfig& smooth_cfg = {});
+                                                       const ContourSmoothConfig& smooth_cfg = {},
+                                                       float merge_tolerance = 0.0f);
 
 } // namespace ChromaPrint3D::detail
