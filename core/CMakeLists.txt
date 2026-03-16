@@ -43,6 +43,7 @@ target_sources(chromaprint3d PRIVATE
     src/imgproc/occlusion.cpp
     src/imgproc/gradient.cpp
     src/imgproc/vector_preview.cpp
+    src/imgproc/shape_width_analyzer.cpp
     src/color_db/color_db.cpp
     src/match/match.cpp
     src/match/slic_segmenter.cpp
@@ -70,21 +71,6 @@ target_sources(chromaprint3d PRIVATE
     src/logging/logging.cpp
     src/matting/matting.cpp
     src/matting/matting_postprocess.cpp
-    src/imgproc/svg_writer.cpp
-    src/imgproc/potrace_adapter.cpp
-    src/imgproc/topology_repair.cpp
-    src/imgproc/coverage_guard.cpp
-    src/imgproc/vectorize_preprocess.cpp
-    src/imgproc/boundary_graph.cpp
-    src/imgproc/contour_assembly.cpp
-    src/imgproc/curve_fitting.cpp
-    src/imgproc/subpixel_refine.cpp
-    src/imgproc/aa_detector.cpp
-    src/imgproc/morphology_utils.cpp
-    src/imgproc/shape_width_analyzer.cpp
-    src/imgproc/thin_line_vectorizer.cpp
-    src/imgproc/vectorize_potrace_pipeline.cpp
-    src/imgproc/vectorizer.cpp
     src/detail/icc_utils.cpp)
 
 # ── Optional: infer module for DL matting ─────────────────────────────────────
@@ -132,16 +118,6 @@ if(LCMS2_LIBRARY AND LCMS2_INCLUDE_DIR)
 else()
     message(WARNING "lcms2 not found — ICC color management disabled")
 endif()
-
-find_library(POTRACE_LIBRARY potrace REQUIRED)
-find_path(POTRACE_INCLUDE_DIR potracelib.h REQUIRED)
-if(NOT POTRACE_LIBRARY OR NOT POTRACE_INCLUDE_DIR)
-    message(FATAL_ERROR "Potrace is required. Please install libpotrace-dev.")
-endif()
-target_include_directories(chromaprint3d PRIVATE ${POTRACE_INCLUDE_DIR})
-target_link_libraries(chromaprint3d PRIVATE ${POTRACE_LIBRARY})
-target_compile_definitions(chromaprint3d PRIVATE CHROMAPRINT3D_HAS_POTRACE=1)
-message(STATUS "Found mandatory potrace: ${POTRACE_LIBRARY}")
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

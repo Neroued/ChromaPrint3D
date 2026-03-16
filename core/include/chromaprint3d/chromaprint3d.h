@@ -28,4 +28,3 @@
 #include "pipeline.h"
 #include "encoding.h"
 #include "logging.h"
-#include "vectorizer.h"

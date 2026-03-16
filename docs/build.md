@@ -74,7 +74,6 @@ cmake --build build -j$(nproc)
 | `gen_stage` | 生成建模阶梯色板 |
 | `gen_representative_board` | 从配方文件生成代表性校准板 |
 | `svg_to_3mf` | SVG 转 3MF |
-| `raster_to_svg` | 栅格图转 SVG |
 
 ### 2.4 构建 Web 前端
 

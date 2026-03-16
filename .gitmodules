@@ -4,3 +4,6 @@
 [submodule "3dparty/clipper2"]
 	path = 3dparty/clipper2
 	url = https://github.com/AngusJohnson/Clipper2.git
+[submodule "3dparty/neroued_vectorizer"]
+	path = 3dparty/neroued_vectorizer
+	url = https://github.com/Neroued/neroued_vectorizer.git

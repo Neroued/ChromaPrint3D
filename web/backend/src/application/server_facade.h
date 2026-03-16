@@ -104,7 +104,7 @@ private:
                                      const std::optional<SessionSnapshot>& session,
                                      ChromaPrint3D::ConvertVectorRequest& out) const;
     ServiceResult BuildVectorizeConfig(const nlohmann::json& params,
-                                       ChromaPrint3D::VectorizerConfig& out) const;
+                                       neroued::vectorizer::VectorizerConfig& out) const;
 
     ServerConfig cfg_;
     DataRepository data_;

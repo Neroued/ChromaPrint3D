@@ -111,7 +111,6 @@ RasterProcResult RasterProc::RunFromBuffer(const std::vector<uint8_t>& buffer,
     spdlog::info("RasterProc: decoding image from buffer ({} bytes, name={})", buffer.size(), name);
     cv::Mat input;
     try {
-        // Keep buffer-path behavior consistent with file-path and vectorizer path.
         input = detail::LoadImageIcc(buffer.data(), buffer.size());
     } catch (const std::exception& e) {
         throw IOError(std::string("RasterProc::RunFromBuffer: failed to decode image: ") +

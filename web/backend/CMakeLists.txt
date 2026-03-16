@@ -73,8 +73,16 @@ target_include_directories(chromaprint3d_backend PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# neroued_vectorizer (for raster-to-SVG vectorization)
+set(NV_BUILD_EVAL OFF CACHE BOOL "" FORCE)
+set(NV_BUILD_APPS OFF CACHE BOOL "" FORCE)
+set(NV_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory("${CMAKE_SOURCE_DIR}/3dparty/neroued_vectorizer"
+                 "${CMAKE_BINARY_DIR}/_deps/neroued_vectorizer" EXCLUDE_FROM_ALL)
+
 target_link_libraries(chromaprint3d_backend PUBLIC
     ChromaPrint3D::core
+    neroued::vectorizer
     Threads::Threads
     ${CHROMAPRINT3D_DROGON_TARGET})
 

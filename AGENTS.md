@@ -12,8 +12,7 @@
 ## 项目全景（任务导向）
 
 - `core/`：C++ 核心算法与导出链路（图像处理、配方匹配、体素/网格、3MF）
-- `eval/`：矢量化质量评估管线（PSNR/SSIM/Delta E/路径分析/基线对比/回归判定）
-- `apps/`：CLI 工具入口（图像转 3MF、校准板、ColorDB 构建、矢量化评估等）
+- `apps/`：CLI 工具入口（图像转 3MF、校准板、ColorDB 构建等）
 - `web/backend/`：Drogon HTTP API（`/api/v1/*`）
 - `web/frontend/`：Vue3 + TypeScript 前端
 - `modeling/`：Python 建模与拟合流水线（Stage A/B、配方选择、模型包）
@@ -29,7 +28,7 @@
 | 调整配方匹配策略 | [docs/agents/core/README.md](docs/agents/core/README.md) + [docs/agents/tasks/tune_color_match.md](docs/agents/tasks/tune_color_match.md) |
 | 新增/修改命令行工具参数 | [docs/agents/apps/README.md](docs/agents/apps/README.md) + [docs/agents/tasks/extend_cli_flag.md](docs/agents/tasks/extend_cli_flag.md) |
 | 修改前端页面与参数面板 | [docs/agents/web/frontend/README.md](docs/agents/web/frontend/README.md) |
-| 矢量化质量评估与回归检测 | [eval/include/chromaprint3d/vectorize_eval.h](eval/include/chromaprint3d/vectorize_eval.h) + [docs/agents/apps/README.md](docs/agents/apps/README.md) |
+| 矢量化质量评估与回归检测 | [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)（已迁移） |
 | 更新建模拟合流程 | [docs/agents/modeling/README.md](docs/agents/modeling/README.md) |
 
 ## 模块索引入口

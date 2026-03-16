@@ -2,7 +2,7 @@
 
 ## 模块职责
 
-`apps/` 提供面向用户和开发调试的 CLI 程序入口，链接 `ChromaPrint3D::core` 或 `ChromaPrint3D::eval`。
+`apps/` 提供面向用户和开发调试的 CLI 程序入口，链接 `ChromaPrint3D::core`。
 
 ## 可执行程序与源码映射
 
@@ -14,8 +14,6 @@
 | `build_colordb` | `apps/build_colordb.cpp` |
 | `raster_to_3mf` | `apps/raster_to_3mf.cpp` |
 | `svg_to_3mf` | `apps/svg_to_3mf.cpp` |
-| `raster_to_svg` | `apps/raster_to_svg.cpp` |
-| `evaluate_svg` | `apps/evaluate_svg.cpp` |
 | `gen_representative_board` | `apps/gen_representative_board.cpp` |
 | `gen_stage` | `apps/gen_stage.cpp` |
 | `gen_test_preset_3mf` | `apps/gen_test_preset_3mf.cpp` |
@@ -28,6 +26,8 @@
 | 调整默认值 | 对应 `apps/*.cpp` 默认配置处 |
 | 输出文件命名规则调整 | 对应 `apps/*.cpp` 输出路径生成逻辑 |
 | 将核心新能力暴露到 CLI | 对应 `apps/*.cpp` + `core/include/chromaprint3d/*.h` |
+
+> 矢量化 CLI 工具（raster_to_svg、evaluate_svg）已迁移至独立库 [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)。
 
 ## 变更注意事项
 
@@ -42,8 +42,6 @@
 ```bash
 cmake --build build -j$(nproc)
 build/bin/raster_to_3mf --help
-build/bin/raster_to_svg --help
-build/bin/evaluate_svg --help
 ```
 
 ## 相关任务手册

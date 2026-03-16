@@ -48,7 +48,6 @@ if(CHROMAPRINT3D_BUILD_INFER)
 endif()
 
 add_subdirectory(core)
-add_subdirectory(eval)
 
 if(CHROMAPRINT3D_BUILD_APPS)
     add_subdirectory(apps)

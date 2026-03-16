@@ -8,7 +8,7 @@
 
 ## 可执行工具清单
 
-当前 `apps/CMakeLists.txt` 定义了 8 个 CLI：
+当前 `apps/CMakeLists.txt` 定义了 7 个 CLI：
 
 | 可执行文件 | 用途 |
 |---|---|
@@ -16,10 +16,11 @@
 | `build_colordb` | 从校准板照片构建 ColorDB |
 | `raster_to_3mf` | 栅格图像转多色 3MF |
 | `svg_to_3mf` | SVG 转多色 3MF |
-| `raster_to_svg` | 栅格图像向量化为 SVG |
 | `gen_representative_board` | 从配方集生成代表性校准板 |
 | `gen_stage` | 生成阶梯校准模型 |
 | `gen_test_preset_3mf` | 生成预设映射测试 3MF（调试工具） |
+
+> 矢量化 CLI 工具（raster_to_svg、evaluate_svg）已迁移至独立库 [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)。
 
 ## 典型使用流程
 
@@ -38,11 +39,11 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    rasterInput[输入栅格图] --> raster2svg[raster_to_svg]
-    raster2svg --> svgInput[输出 SVG]
-    svgInput --> svg2mf[svg_to_3mf]
+    svgInput[输入 SVG] --> svg2mf[svg_to_3mf]
     svg2mf --> modelOut[输出 3MF]
 ```
+
+> 栅格图转 SVG（raster_to_svg）已迁移至 [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)。
 
 ## 各工具快速参考
 
@@ -92,16 +93,7 @@ flowchart TD
   --base-layers 6 --double-sided 1
 ```
 
-### 5) `raster_to_svg`
-
-用途：栅格图像做共享边界向量化并输出 SVG。  
-示例：
-
-```bash
-./build/bin/raster_to_svg --image input.png --out output.svg --colors 16
-```
-
-### 6) `gen_representative_board`
+### 5) `gen_representative_board`
 
 用途：从配方集生成代表性校准板。  
 示例：
@@ -110,7 +102,7 @@ flowchart TD
 ./build/bin/gen_representative_board --recipes recipes.json --ref-db color_db.json --out board.3mf
 ```
 
-### 7) `gen_stage`
+### 6) `gen_stage`
 
 用途：生成固定阶梯校准模型。  
 示例：
@@ -119,7 +111,7 @@ flowchart TD
 ./build/bin/gen_stage --out stage.3mf
 ```
 
-### 8) `gen_test_preset_3mf`
+### 7) `gen_test_preset_3mf`
 
 用途：生成切片预设/AMS 映射测试用 3MF（开发调试用途）。  
 示例（位置参数）：

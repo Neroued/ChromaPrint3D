@@ -20,6 +20,7 @@ namespace chromaprint3d::backend {
 
 using json = nlohmann::json;
 using namespace ChromaPrint3D;
+using neroued::vectorizer::VectorizerConfig;
 
 namespace {
 

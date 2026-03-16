@@ -300,7 +300,7 @@ SubmitResult TaskRuntime::SubmitMatting(const std::string& owner, std::vector<ui
 
 SubmitResult TaskRuntime::SubmitVectorize(const std::string& owner,
                                           std::vector<uint8_t> image_buffer,
-                                          ChromaPrint3D::VectorizerConfig config,
+                                          neroued::vectorizer::VectorizerConfig config,
                                           const std::string& image_name) {
     VectorizeTaskPayload payload;
     payload.image_name = image_name;
@@ -322,9 +322,9 @@ SubmitResult TaskRuntime::SubmitVectorize(const std::string& owner,
                 config.corner_angle_threshold, config.smoothing_spatial, config.smoothing_color,
                 config.upscale_short_edge, config.max_working_pixels, config.slic_region_size,
                 config.svg_enable_stroke, config.svg_stroke_width);
-            ChromaPrint3D::VectorizerResult result;
+            neroued::vectorizer::VectorizerResult result;
             try {
-                result = ChromaPrint3D::Vectorize(buf.data(), buf.size(), config);
+                result = neroued::vectorizer::Vectorize(buf.data(), buf.size(), config);
             } catch (const std::exception& e) {
                 spdlog::error("Vectorize task core failed: task_id={}, image_bytes={}, error={}",
                               id, input_bytes, e.what());

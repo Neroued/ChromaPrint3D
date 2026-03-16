@@ -5,7 +5,8 @@
 #include "chromaprint3d/matting.h"
 #include "chromaprint3d/matting_postprocess.h"
 #include "chromaprint3d/pipeline.h"
-#include "chromaprint3d/vectorizer.h"
+
+#include <neroued/vectorizer/vectorizer.h>
 
 #include <atomic>
 #include <chrono>
@@ -64,7 +65,7 @@ struct MattingTaskPayload {
 
 struct VectorizeTaskPayload {
     std::string image_name;
-    ChromaPrint3D::VectorizerConfig config;
+    neroued::vectorizer::VectorizerConfig config;
 
     double decode_ms    = 0;
     double vectorize_ms = 0;
@@ -129,7 +130,7 @@ public:
                                const std::string& method, const std::string& image_name,
                                const ChromaPrint3D::MattingRegistry& registry);
     SubmitResult SubmitVectorize(const std::string& owner, std::vector<uint8_t> image_buffer,
-                                 ChromaPrint3D::VectorizerConfig config,
+                                 neroued::vectorizer::VectorizerConfig config,
                                  const std::string& image_name);
 
     /// Lightweight admission check before expensive decode/preprocess.

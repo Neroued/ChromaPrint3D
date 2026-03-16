@@ -41,10 +41,10 @@ docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
 | 命令 | 说明 |
 |---|---|
 | `raster_to_3mf` | 图像转多色 3MF 模型 |
-| `raster_to_svg` | 图像转 SVG 矢量图 |
-| `evaluate_svg` | 矢量化质量评估（单图指标 / 批量 benchmark / 基线对比） |
 | `gen_calibration_board` | 生成校准板 3MF |
 | `build_colordb` | 从校准板照片构建 ColorDB |
+
+> 矢量化 CLI 工具（raster_to_svg、evaluate_svg）已迁移至独立库 [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)。
 
 ## 开发者跳转
 
@@ -97,10 +97,10 @@ Then open `http://localhost:8080`.
 | Command | Description |
 |---|---|
 | `raster_to_3mf` | Convert image to multi-color 3MF model |
-| `raster_to_svg` | Convert image to SVG vector |
-| `evaluate_svg` | Vectorization quality evaluation (single metrics / batch benchmark / baseline comparison) |
 | `gen_calibration_board` | Generate calibration board 3MF |
 | `build_colordb` | Build ColorDB from calibration photo |
+
+> Vectorization CLI tools (raster_to_svg, evaluate_svg) have been migrated to the standalone library [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer).
 
 ### Developer Entry
 

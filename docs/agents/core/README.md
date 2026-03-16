@@ -19,7 +19,6 @@
 | 目标 | 入口文件 |
 |---|---|
 | 修改栅格预处理 | `core/src/imgproc/raster_proc.cpp` |
-| 修改栅格到矢量化参数行为 | `core/src/imgproc/vectorizer.cpp`、`core/src/imgproc/vectorize_potrace_pipeline.cpp` |
 | 修改颜色匹配主流程 | `core/src/match/match.cpp` |
 | 修改候选筛选/评分 | `core/src/match/candidate_select.cpp` |
 | 修改配方与打印配置映射 | `core/src/match/recipe_map.cpp`、`core/src/match/print_profile.cpp` |
