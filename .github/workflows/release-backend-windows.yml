@@ -207,7 +207,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build
-          key: cmake-windows-x86_64-${{ hashFiles('CMakeLists.txt', 'web/backend/CMakeLists.txt', '3dparty/spdlog/CMakeLists.txt', '3dparty/clipper2/CPP/CMakeLists.txt', 'infer/CMakeLists.txt') }}
+          key: cmake-windows-x86_64-${{ hashFiles('CMakeLists.txt', 'web/backend/CMakeLists.txt', '3dparty/spdlog/CMakeLists.txt', '3dparty/clipper2/CPP/CMakeLists.txt', '3dparty/neroued_vectorizer/CMakeLists.txt', 'infer/CMakeLists.txt') }}
           restore-keys: cmake-windows-x86_64-
 
       - name: Configure CMake (Windows)
