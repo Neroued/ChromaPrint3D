@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A PAT is required so that the tag push triggers the Release
+          # workflow.  Tags pushed with the default GITHUB_TOKEN do not
+          # fire further workflow runs (GitHub security policy).
+          token: ${{ secrets.RELEASE_PAT || github.token }}
 
       - name: Extract version from branch name
         id: version
