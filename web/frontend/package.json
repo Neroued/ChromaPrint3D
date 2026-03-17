@@ -1,6 +1,6 @@
 {
   "name": "chromaprint3d-web",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Web frontend for ChromaPrint3D — multi-color 3D print image processor",
   "type": "module",
   "license": "Apache-2.0",

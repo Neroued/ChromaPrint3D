@@ -1,0 +1,6 @@
+{
+  "version": "1.2.7",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.7",
+  "changelog": "- 新增版本更新通知（Web 和 Electron 客户端）\n- 矢量化模块迁移至 neroued_vectorizer 子模块\n- 更新 neroued_vectorizer 子模块至 v0.1.1",
+  "published_at": "2026-03-17"
+}
