@@ -57,13 +57,13 @@ struct ConvertRasterRequest {
     ColorSpace color_space       = ColorSpace::Lab;       ///< Color space used for matching.
     int k_candidates             = 1; ///< Number of candidate colors to consider per pixel.
     ClusterMethod cluster_method = ClusterMethod::KMeans; ///< Non-dither clustering method.
-    int cluster_count            = 64;                    ///< K-Means cluster count.
-    int slic_target_superpixels  = 256;                   ///< SLIC target superpixel count.
-    float slic_compactness       = 10.0f;                 ///< SLIC compactness weight (> 0).
-    int slic_iterations          = 10;                    ///< SLIC refinement iterations.
-    float slic_min_region_ratio  = 0.25f;                 ///< SLIC small-region merge ratio [0, 1].
-    DitherMethod dither          = DitherMethod::None;    ///< Dithering method for matching.
-    float dither_strength        = 0.8f;                  ///< Dither intensity [0, 1].
+    int cluster_count            = 0;     ///< 0 = auto-detect, 1 = per-pixel, >= 2 = manual.
+    int slic_target_superpixels  = 256;   ///< SLIC target superpixel count.
+    float slic_compactness       = 10.0f; ///< SLIC compactness weight (> 0).
+    int slic_iterations          = 10;    ///< SLIC refinement iterations.
+    float slic_min_region_ratio  = 0.25f; ///< SLIC small-region merge ratio [0, 1].
+    DitherMethod dither          = DitherMethod::None; ///< Dithering method for matching.
+    float dither_strength        = 0.8f;               ///< Dither intensity [0, 1].
     std::vector<std::string> allowed_channel_keys; ///< Allowed channel filters (empty = use all;
                                                    ///< "color|material" format).
 

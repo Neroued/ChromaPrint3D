@@ -203,7 +203,10 @@ npm run dev
 ### 5.5 Raster 匹配参数说明
 
 - `cluster_method`：`kmeans`（默认）或 `slic`
-- `kmeans` 路径参数：`cluster_count`
+- `kmeans` 路径参数：`cluster_count`（默认 `0`）
+  - `0`：自动检测最优聚类数
+  - `1`：逐像素匹配（不聚类）
+  - `>= 2`：手动指定聚类数
 - `slic` 路径参数：`slic_target_superpixels`、`slic_compactness`、`slic_iterations`、`slic_min_region_ratio`
 - 互斥规则：当 `cluster_method=slic` 时，后端会强制 `dither=none`
 

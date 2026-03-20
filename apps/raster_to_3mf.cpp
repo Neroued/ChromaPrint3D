@@ -26,7 +26,7 @@ struct Options {
 
     ColorSpace color_space           = ColorSpace::Lab;
     int k_candidates                 = 1;
-    int cluster_count                = 64;
+    int cluster_count                = 0;
     PrintMode print_mode             = PrintMode::Mode0p08x5;
     bool flip_y                      = true;
     NozzleSize nozzle_size           = NozzleSize::N04;
@@ -59,7 +59,7 @@ void PrintUsage(const char* exe) {
         "  --mode 0.08x5|0.04x10   Target print mode (default 0.08x5)\n"
         "  --color-space lab|rgb   Match in Lab or RGB (default lab)\n"
         "  --k N               Top-k candidates (default 1)\n"
-        "  --clusters N        Cluster count for color matching (default 4096, <=1 disable)\n"
+        "  --clusters N        Cluster count (0=auto-detect, 1=per-pixel, >=2=manual; default 0)\n"
         "  --model-pack PATH   Phase A model package json\n"
         "  --model-enable 0|1  Enable model fallback when model pack is provided (default 1)\n"
         "  --model-only 0|1    Match by model only (requires --model-pack, default 0)\n"
