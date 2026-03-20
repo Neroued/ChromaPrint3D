@@ -120,6 +120,18 @@ curl -s http://127.0.0.1:8080/api/v1/vectorize/defaults
 ctest --test-dir build --output-on-failure
 ```
 
+### 3.5 C++ 格式检查
+
+CI 会对所有变更的 C++ 文件执行 `clang-format-18` 格式检查（见 `.clang-format` 配置），未通过时 PR 会被阻止合并。建议在本地提交前对修改的文件运行格式化：
+
+```bash
+# 安装（Ubuntu / Debian）
+sudo apt install clang-format-18
+
+# 对修改的文件执行格式化
+clang-format -i <修改的文件>
+```
+
 ## 4. Electron 本地开发
 
 Electron 主进程会自动拉起后端（要求后端二进制已构建完成）。

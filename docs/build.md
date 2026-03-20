@@ -20,23 +20,42 @@ git submodule update --init --recursive
 
 ### 2.1 环境要求
 
+**必需：**
+
 | 依赖 | 最低版本 | 说明 |
 |---|---|---|
 | CMake | 3.25 | 构建系统 |
 | C++ 编译器 | C++20 | 推荐 `g++-13` 或更高 |
 | OpenCV | 4.5+ | 图像处理依赖 |
-| zlib | 1.2+ | 3MF ZIP Deflate 压缩后端（可选，缺失时回退 Store） |
+| Potrace | — | 矢量化后端（neroued_vectorizer 依赖） |
+| uuid 库 | — | UUID 生成（Drogon 依赖） |
+| pkg-config | — | 库发现工具 |
 | Node.js | 22+ | 前端构建 |
-| Python | 3.10+ | 建模管线（可选） |
+
+**推荐：**
+
+| 依赖 | 说明 |
+|---|---|
+| Ninja | 更快的构建后端，CI 和 Docker 构建均使用 |
+| ccache | 编译缓存，显著加速增量编译 |
+| clang-format 18 | CI 强制检查 C++ 格式，建议本地安装以便提交前自检 |
+
+**可选：**
+
+| 依赖 | 说明 |
+|---|---|
+| zlib 1.2+ | 3MF ZIP Deflate 压缩后端（缺失时回退 Store） |
+| Python 3.10+ | 建模管线 |
 
 ### 2.2 安装系统依赖（示例）
 
 ```bash
 # Ubuntu / Debian
-sudo apt install libopencv-dev zlib1g-dev
+sudo apt install build-essential g++-13 cmake ninja-build pkg-config ccache \
+    libopencv-dev libpotrace-dev uuid-dev zlib1g-dev
 
 # macOS
-brew install opencv zlib
+brew install cmake ninja ccache opencv potrace ossp-uuid zlib
 ```
 
 ### 2.3 构建 C++ 核心与应用
@@ -164,4 +183,7 @@ Electron 开发启动命令与调试流程见 [docs/development.md](development.
 - CMake 版本过低：升级到 3.25+
 - C++20 报错：确认使用 `g++-13` 或更高
 - 前端构建失败：确认 Node.js 版本满足 `22+`
+- 链接报 `potrace` 符号缺失：安装 `libpotrace-dev`（Ubuntu）或 `potrace`（macOS）
+- 链接报 `uuid` 符号缺失：安装 `uuid-dev`（Ubuntu）或 `ossp-uuid`（macOS）
+- PR 格式检查失败：安装 `clang-format-18` 并在提交前执行 `clang-format -i <修改的文件>`
 
