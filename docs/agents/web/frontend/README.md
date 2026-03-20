@@ -24,6 +24,7 @@
 | 新增/调整后端参数映射 | `src/domain/params/convertParamBuilders.ts` + `src/api/convert.ts` |
 | 调整任务轮询与状态处理 | `src/composables/useAsyncTask.ts` + `src/services/convertService.ts` |
 | 调整分层预览行为 | `src/domain/result/layerPreview.ts` + `src/components/ResultPanel.vue` |
+| 调整配方编辑器 | `src/components/recipeEditor/*.vue` + `src/api/recipeEditor.ts` + `src/composables/useRasterRegionMap.ts` |
 | 调整 Browser/Electron 行为差异 | `src/runtime/*.ts` + `src/electron.d.ts` |
 
 ## 分层边界（强约束）

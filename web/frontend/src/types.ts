@@ -120,6 +120,7 @@ export interface TaskResult {
   has_3mf: boolean
   has_preview: boolean
   has_source_mask: boolean
+  has_region_map?: boolean
   layer_previews?: LayerPreviewsSummary
 }
 
@@ -143,6 +144,8 @@ export interface TaskStatus {
   created_at_ms: number
   error: string | null
   result: TaskResult | null
+  match_only?: boolean
+  generate_error?: string
 }
 
 // ---- ColorDB info (matches backend ColorDBInfoToJson) ----
@@ -150,6 +153,7 @@ export interface TaskStatus {
 export interface PaletteChannel {
   color: string
   material: string
+  hex_color?: string
 }
 
 export interface ColorDBInfo {
@@ -389,4 +393,46 @@ export function getPixelSizePresets(t: (key: string) => string): PixelSizePreset
     { label: t('param.pixelSizePresets.nozzle04'), value: 0.42 },
     { label: t('common.custom'), value: 0 },
   ]
+}
+
+// ---- Recipe Editor ----
+
+export interface LabColor {
+  L: number
+  a: number
+  b: number
+}
+
+export interface RecipeInfo {
+  recipe: number[]
+  mapped_lab: LabColor
+  hex: string
+  from_model: boolean
+}
+
+export interface RegionInfo {
+  region_id: number
+  recipe_index: number
+  pixel_count: number
+}
+
+export interface RecipeEditorSummary {
+  width: number
+  height: number
+  region_count: number
+  regions: RegionInfo[]
+  unique_recipes: RecipeInfo[]
+  region_recipe_indices: number[]
+  palette: PaletteChannel[]
+  color_layers: number
+}
+
+export interface RecipeCandidate {
+  recipe: number[]
+  predicted_lab: LabColor
+  hex: string
+  delta_e76: number
+  lightness_diff: number
+  hue_diff: number
+  from_model: boolean
 }

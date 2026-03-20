@@ -95,6 +95,13 @@ struct RecipeMap {
                                      const ModelPackage* model_package = nullptr,
                                      const ModelGateConfig& model_gate = ModelGateConfig{},
                                      MatchStats* out_stats             = nullptr);
+
+    /// Replace recipes for all pixels in \p target_region_ids with \p new_recipe.
+    /// Also updates \c mapped_color and \c source_mask for affected pixels.
+    void ReplaceRecipeInRegions(const struct RasterRegionMap& region_map,
+                                const std::vector<int>& target_region_ids,
+                                const std::vector<uint8_t>& new_recipe, const Lab& new_mapped_color,
+                                bool new_from_model);
 };
 
 } // namespace ChromaPrint3D

@@ -132,6 +132,80 @@ void ApiV1Controller::SubmitConvertRaster(const drogon::HttpRequestPtr& req, Cal
     ReplyJson(std::move(cb), result, created ? std::optional<std::string>(token) : std::nullopt);
 }
 
+void ApiV1Controller::SubmitConvertRasterMatchOnly(const drogon::HttpRequestPtr& req,
+                                                   Callback&& cb) {
+    drogon::MultiPartParser parser;
+    if (parser.parse(req) != 0) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_multipart", "Invalid multipart form"));
+        return;
+    }
+    auto image = FindUploadFile(parser, "image");
+    if (!image) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_request", "Missing required field: image"));
+        return;
+    }
+    auto params  = parser.getOptionalParameter<std::string>("params");
+    bool created = false;
+    auto token   = Facade().EnsureSession(SessionToken(req), &created);
+    auto result =
+        Facade().SubmitConvertRasterMatchOnly(token, ToBytes(*image), image->getFileName(), params);
+    ReplyJson(std::move(cb), result, created ? std::optional<std::string>(token) : std::nullopt);
+}
+
+void ApiV1Controller::RecipeEditorSummary(const drogon::HttpRequestPtr& req, Callback&& cb,
+                                          const std::string& task_id) {
+    auto token = SessionToken(req);
+    if (!token) {
+        ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "Session required"));
+        return;
+    }
+    ReplyJson(std::move(cb), Facade().RecipeEditorSummary(*token, task_id));
+}
+
+void ApiV1Controller::RecipeEditorAlternatives(const drogon::HttpRequestPtr& req, Callback&& cb,
+                                               const std::string& task_id) {
+    auto token = SessionToken(req);
+    if (!token) {
+        ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "Session required"));
+        return;
+    }
+    std::string body(req->body());
+    if (body.empty()) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_request", "Request body is empty"));
+        return;
+    }
+    ReplyJson(std::move(cb), Facade().RecipeEditorAlternatives(*token, task_id, body));
+}
+
+void ApiV1Controller::RecipeEditorReplace(const drogon::HttpRequestPtr& req, Callback&& cb,
+                                          const std::string& task_id) {
+    auto token = SessionToken(req);
+    if (!token) {
+        ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "Session required"));
+        return;
+    }
+    std::string body(req->body());
+    if (body.empty()) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_request", "Request body is empty"));
+        return;
+    }
+    ReplyJson(std::move(cb), Facade().RecipeEditorReplace(*token, task_id, body));
+}
+
+void ApiV1Controller::RecipeEditorGenerate(const drogon::HttpRequestPtr& req, Callback&& cb,
+                                           const std::string& task_id) {
+    auto token = SessionToken(req);
+    if (!token) {
+        ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "Session required"));
+        return;
+    }
+    ReplyJson(std::move(cb), Facade().RecipeEditorGenerate(*token, task_id));
+}
+
 void ApiV1Controller::SubmitConvertVector(const drogon::HttpRequestPtr& req, Callback&& cb) {
     drogon::MultiPartParser parser;
     if (parser.parse(req) != 0) {

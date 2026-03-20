@@ -64,6 +64,18 @@ public:
                                   const std::string& image_name,
                                   const std::optional<std::string>& params_json);
 
+    ServiceResult SubmitConvertRasterMatchOnly(const std::string& owner,
+                                               const std::vector<uint8_t>& image,
+                                               const std::string& image_name,
+                                               const std::optional<std::string>& params_json);
+
+    ServiceResult RecipeEditorSummary(const std::string& owner, const std::string& task_id) const;
+    ServiceResult RecipeEditorAlternatives(const std::string& owner, const std::string& task_id,
+                                           const std::string& body_json);
+    ServiceResult RecipeEditorReplace(const std::string& owner, const std::string& task_id,
+                                      const std::string& body_json);
+    ServiceResult RecipeEditorGenerate(const std::string& owner, const std::string& task_id);
+
     ServiceResult ListTasks(const std::string& owner) const;
     ServiceResult GetTask(const std::string& owner, const std::string& id) const;
     ServiceResult DeleteTask(const std::string& owner, const std::string& id);

@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NCard, NText, NSpace, NAlert } from 'naive-ui'
+import { NButton, NCard, NText, NSpace, NAlert } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useAsyncTask } from '../composables/useAsyncTask'
 import { useBlobDownload } from '../composables/useBlobDownload'
-import { fetchConvertTaskStatus, submitConvertTask } from '../services/convertService'
+import {
+  fetchConvertTaskStatus,
+  submitConvertTask,
+  submitMatchOnlyTask,
+} from '../services/convertService'
 import { getResultPath } from '../services/resultService'
 import { useAppStore } from '../stores/app'
 import ProgressActionGroup from './common/ProgressActionGroup.vue'
@@ -133,6 +137,54 @@ async function handleConvert() {
   await submitTask()
 }
 
+function submitMatchOnly() {
+  const file = selectedFile.value!
+  return submitMatchOnlyTask(file, params.value)
+}
+
+const {
+  status: matchStatus,
+  loading: matchLoading,
+  error: matchError,
+  submit: submitMatch,
+  reset: resetMatch,
+} = useAsyncTask<TaskStatus>(submitMatchOnly, fetchConvertTaskStatus, {
+  onCompleted(s) {
+    appStore.setCompletedTask(s)
+    appStore.setRecipeEditorTaskId(s.id)
+  },
+  onFailed() {
+    appStore.markTaskFailed()
+  },
+})
+
+watch(selectedFile, () => {
+  resetMatch()
+})
+
+const matchIsRunning = computed(() => {
+  const s = matchStatus.value?.status
+  return s === 'pending' || s === 'running'
+})
+
+const matchProgressPercent = computed(() => {
+  if (!matchStatus.value) return 0
+  const overall = computeOverallProgress(matchStatus.value.stage, matchStatus.value.progress)
+  return Math.round(overall * 100)
+})
+
+const canMatchPreview = computed(() => {
+  return (
+    selectedFile.value !== null && !loading.value && !matchLoading.value && !isVectorInput.value
+  )
+})
+
+async function handleMatchPreview() {
+  if (!selectedFile.value) return
+  appStore.markTaskStarted()
+  await submitMatch()
+}
+
 async function handleDownload3MF() {
   if (!canDownload3mf.value || isDownloading3mf.value) return
   isDownloading3mf.value = true
@@ -150,12 +202,28 @@ async function handleDownload3MF() {
   <NCard size="small">
     <NSpace vertical :size="12">
       <NSpace vertical :size="8">
+        <NButton
+          v-if="!isVectorInput"
+          block
+          size="large"
+          type="info"
+          ghost
+          :disabled="!canMatchPreview"
+          :loading="matchLoading"
+          @click="handleMatchPreview"
+        >
+          {{
+            matchIsRunning
+              ? `${t('convert.matchPreview')} ${matchProgressPercent}%`
+              : t('convert.matchPreview')
+          }}
+        </NButton>
         <ProgressActionGroup
           :primary-label="convertButtonText"
           :primary-disabled="!canSubmit"
           :primary-show-progress="showRunningProgress"
           :primary-progress-percent="progressPercent"
-          :secondary-visible="isCompleted && Boolean(result?.has_3mf)"
+          :secondary-visible="completedTask?.status === 'completed' && Boolean(result?.has_3mf)"
           :secondary-label="t('convert.download3mf')"
           secondary-type="success"
           :secondary-disabled="!canDownload3mf || isDownloading3mf"
@@ -178,6 +246,9 @@ async function handleDownload3MF() {
 
       <NAlert v-if="error" type="error" closable @close="error = null">
         {{ error }}
+      </NAlert>
+      <NAlert v-if="matchError" type="error" closable @close="matchError = null">
+        {{ matchError }}
       </NAlert>
     </NSpace>
   </NCard>

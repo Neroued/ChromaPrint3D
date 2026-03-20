@@ -2,12 +2,15 @@
 #include "chromaprint3d/color.h"
 #include "chromaprint3d/color_db.h"
 #include "chromaprint3d/error.h"
+#include "chromaprint3d/raster_region_map.h"
 #include "detail/layer_preview_color.h"
 
 #include <opencv2/imgproc.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <unordered_set>
 
 namespace ChromaPrint3D {
 
@@ -141,6 +144,33 @@ cv::Mat RecipeMap::ToLayerBgraImage(int layer_idx, const std::vector<Channel>& p
         }
     }
     return bgra;
+}
+
+void RecipeMap::ReplaceRecipeInRegions(const RasterRegionMap& region_map,
+                                       const std::vector<int>& target_region_ids,
+                                       const std::vector<uint8_t>& new_recipe,
+                                       const Lab& new_mapped_color, bool new_from_model) {
+    if (static_cast<int>(new_recipe.size()) != color_layers) {
+        throw InputError("new_recipe size does not match color_layers");
+    }
+
+    const std::size_t total  = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    const std::size_t layers = static_cast<std::size_t>(color_layers);
+
+    std::unordered_set<uint32_t> target_set;
+    target_set.reserve(target_region_ids.size());
+    for (int rid : target_region_ids) { target_set.insert(static_cast<uint32_t>(rid)); }
+
+    for (std::size_t i = 0; i < total; ++i) {
+        const uint32_t rid = region_map.region_ids[i];
+        if (rid == RasterRegionMap::kMaskedRegion) { continue; }
+        if (target_set.count(rid) == 0) { continue; }
+
+        std::copy(new_recipe.begin(), new_recipe.end(),
+                  recipes.begin() + static_cast<std::ptrdiff_t>(i * layers));
+        mapped_color[i] = new_mapped_color;
+        source_mask[i]  = new_from_model ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0);
+    }
 }
 
 } // namespace ChromaPrint3D

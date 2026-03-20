@@ -82,8 +82,33 @@ std::vector<std::string> ResolveDBPaths(const std::vector<std::string>& input_pa
     return std::vector<std::string>(unique_paths.begin(), unique_paths.end());
 }
 
-ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallback progress) {
-    spdlog::info("ConvertRaster started: image={}, dbs={}, model_pack={}",
+std::size_t MatchRasterResult::EstimateBytes() const {
+    std::size_t bytes = sizeof(*this);
+    bytes += recipe_map.recipes.capacity();
+    bytes += recipe_map.mask.capacity();
+    bytes += recipe_map.mapped_color.capacity() * sizeof(Lab);
+    bytes += recipe_map.source_mask.capacity();
+    bytes += recipe_map.name.capacity();
+
+    for (const auto& ch : profile.palette) {
+        bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
+    }
+
+    for (const auto& db : dbs) {
+        for (const auto& entry : db.entries) { bytes += sizeof(Entry) + entry.recipe.capacity(); }
+        for (const auto& ch : db.palette) {
+            bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
+        }
+    }
+
+    bytes += preset_dir.capacity();
+    return bytes;
+}
+
+// ── MatchRaster: stages 1-3 (load → preprocess → match) ─────────────────────
+
+MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallback progress) {
+    spdlog::info("MatchRaster started: image={}, dbs={}, model_pack={}",
                  request.image_path.empty() ? "(buffer)" : request.image_path,
                  request.preloaded_dbs.empty() ? request.db_paths.size()
                                                : request.preloaded_dbs.size(),
@@ -94,7 +119,6 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     // === 1. Load resources ===
     NotifyProgress(progress, ConvertStage::LoadingResources, 0.0f);
 
-    // Load or reference ColorDBs
     std::vector<ColorDB> owned_dbs;
     std::vector<const ColorDB*> db_ptrs;
 
@@ -110,8 +134,6 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     if (db_ptrs.empty()) { throw InputError("No ColorDB available"); }
     spdlog::info("Loaded {} ColorDB(s)", db_ptrs.size());
 
-    // Build a contiguous span of ColorDBs for the API that requires span<const ColorDB>
-    // We need a contiguous vector for span, so copy pointers' data if using preloaded
     std::vector<ColorDB> db_span_storage;
     if (!request.preloaded_dbs.empty()) {
         db_span_storage.reserve(db_ptrs.size());
@@ -120,25 +142,21 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     const std::vector<ColorDB>& dbs_ref =
         request.preloaded_dbs.empty() ? owned_dbs : db_span_storage;
 
-    // Load filament config if preset_dir is available
     std::optional<FilamentConfig> fil_config;
     if (!request.preset_dir.empty()) {
         fil_config.emplace(FilamentConfig::LoadFromDir(request.preset_dir));
     }
 
-    // Build PrintProfile
     PrintProfile profile     = PrintProfile::BuildFromColorDBs(dbs_ref, request.print_mode,
                                                            fil_config ? &*fil_config : nullptr);
     profile.nozzle_size      = request.nozzle_size;
     profile.face_orientation = request.face_orientation;
 
-    // Filter channels if requested
     if (!request.allowed_channel_keys.empty()) {
         profile.FilterChannels(request.allowed_channel_keys);
         spdlog::info("Filtered profile palette to {} channel(s)", profile.NumChannels());
     }
 
-    // Load model package if needed
     std::optional<ModelPackage> owned_model_pack;
     const ModelPackage* model_pack_ptr = request.preloaded_model_pack;
     if (!model_pack_ptr && !request.model_pack_path.empty()) {
@@ -153,7 +171,6 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     // === 2. Process image ===
     NotifyProgress(progress, ConvertStage::Preprocessing, 0.0f);
 
-    // Resolve pixel_mm early (needed for target_mm -> pixel conversion)
     const float resolved_pixel_mm =
         (request.pixel_mm > 0.0f) ? request.pixel_mm
                                   : (profile.line_width_mm > 0.0f ? profile.line_width_mm : 0.42f);
@@ -168,7 +185,7 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
         if (request.target_height_mm > 0.0f)
             imgproc_cfg.max_height =
                 static_cast<int>(std::floor(request.target_height_mm / resolved_pixel_mm));
-        imgproc_cfg.scale = 1e6f; // allow upscaling to fill target
+        imgproc_cfg.scale = 1e6f;
         spdlog::info("Target-size mode: {:.1f}x{:.1f} mm -> {}x{} px (pixel_mm={:.3f})",
                      request.target_width_mm, request.target_height_mm, imgproc_cfg.max_width,
                      imgproc_cfg.max_height, resolved_pixel_mm);
@@ -206,7 +223,7 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     match_cfg.dither                  = request.dither;
     match_cfg.dither_strength         = request.dither_strength;
     if (match_cfg.cluster_method == ClusterMethod::Slic && match_cfg.dither != DitherMethod::None) {
-        spdlog::warn("ConvertRaster: SLIC selected, forcing dither=none");
+        spdlog::warn("MatchRaster: SLIC selected, forcing dither=none");
         match_cfg.dither = DitherMethod::None;
     }
 
@@ -233,53 +250,84 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
                  match_stats.clusters_total, match_stats.db_only, match_stats.model_fallback,
                  match_stats.avg_db_de, match_stats.avg_model_de);
 
-    // === 4. Build result ===
+    // === Populate result ===
+    const ResolvedGeometryOptions geometry = ResolveGeometryOptions(request, profile);
+
+    MatchRasterResult result;
+    result.recipe_map        = std::move(recipe_map);
+    result.profile           = std::move(profile);
+    result.stats             = match_stats;
+    result.resolved_pixel_mm = resolved_pixel_mm;
+    result.layer_height_mm =
+        (request.layer_height_mm > 0.0f)
+            ? request.layer_height_mm
+            : (result.profile.layer_height_mm > 0.0f ? result.profile.layer_height_mm : 0.08f);
+    result.base_layers          = geometry.base_layers;
+    result.custom_base_layers   = (request.base_layers >= 0);
+    result.double_sided         = geometry.double_sided;
+    result.transparent_layer_mm = request.transparent_layer_mm;
+    result.flip_y               = request.flip_y;
+    result.nozzle_size          = request.nozzle_size;
+    result.face_orientation     = request.face_orientation;
+    result.preset_dir           = request.preset_dir;
+    result.match_config         = match_cfg;
+    result.model_gate           = model_gate;
+    result.input_width          = img.width;
+    result.input_height         = img.height;
+
+    if (!request.preloaded_dbs.empty()) {
+        result.dbs = std::move(db_span_storage);
+    } else {
+        result.dbs = std::move(owned_dbs);
+    }
+
+    spdlog::info("MatchRaster completed: {}x{}, pixel_mm={:.3f}", result.input_width,
+                 result.input_height, result.resolved_pixel_mm);
+    return result;
+}
+
+// ── GenerateRasterModel: stages 4-5 (preview/layer render → 3D export) ───────
+
+ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progress) {
+    spdlog::info("GenerateRasterModel started: {}x{}", mr.input_width, mr.input_height);
+
     ConvertResult result;
-    result.stats        = match_stats;
-    result.input_width  = img.width;
-    result.input_height = img.height;
+    result.stats        = mr.stats;
+    result.input_width  = mr.input_width;
+    result.input_height = mr.input_height;
 
-    // Generate preview
-    if (request.generate_preview) {
-        cv::Mat preview_bgra = recipe_map.ToBgraImage();
-        if (!preview_bgra.empty()) {
-            result.preview_png = EncodePng(preview_bgra);
-            if (!request.preview_path.empty()) { SaveImage(preview_bgra, request.preview_path); }
-        }
+    // === Generate preview and source mask ===
+    {
+        cv::Mat preview_bgra = mr.recipe_map.ToBgraImage();
+        if (!preview_bgra.empty()) { result.preview_png = EncodePng(preview_bgra); }
+    }
+    {
+        cv::Mat source_mask = mr.recipe_map.ToSourceMaskImage();
+        if (!source_mask.empty()) { result.source_mask_png = EncodePng(source_mask); }
     }
 
-    // Generate source mask
-    if (request.generate_source_mask) {
-        cv::Mat source_mask = recipe_map.ToSourceMaskImage();
-        if (!source_mask.empty()) {
-            result.source_mask_png = EncodePng(source_mask);
-            if (!request.source_mask_path.empty()) {
-                SaveImage(source_mask, request.source_mask_path);
-            }
-        }
-    }
-
-    result.layer_previews.layers      = profile.color_layers;
-    result.layer_previews.width       = img.width;
-    result.layer_previews.height      = img.height;
-    result.layer_previews.layer_order = profile.layer_order;
-    result.layer_previews.palette.reserve(profile.palette.size());
-    for (std::size_t i = 0; i < profile.palette.size(); ++i) {
-        const auto& channel = profile.palette[i];
+    // === Generate layer previews ===
+    result.layer_previews.layers      = mr.profile.color_layers;
+    result.layer_previews.width       = mr.input_width;
+    result.layer_previews.height      = mr.input_height;
+    result.layer_previews.layer_order = mr.profile.layer_order;
+    result.layer_previews.palette.reserve(mr.profile.palette.size());
+    for (std::size_t i = 0; i < mr.profile.palette.size(); ++i) {
+        const auto& channel = mr.profile.palette[i];
         result.layer_previews.palette.push_back(
             LayerPreviewChannel{static_cast<int>(i), channel.color, channel.material});
     }
-    result.layer_previews.layer_pngs.resize(static_cast<std::size_t>(profile.color_layers));
+    result.layer_previews.layer_pngs.resize(static_cast<std::size_t>(mr.profile.color_layers));
     std::atomic<bool> has_layer_preview_error{false};
     std::string layer_preview_error_message;
 #ifdef _OPENMP
 #    pragma omp parallel for schedule(dynamic)
 #endif
-    for (int layer_idx = 0; layer_idx < profile.color_layers; ++layer_idx) {
+    for (int layer_idx = 0; layer_idx < mr.profile.color_layers; ++layer_idx) {
         if (has_layer_preview_error.load(std::memory_order_relaxed)) { continue; }
 
         try {
-            cv::Mat layer_bgra = recipe_map.ToLayerBgraImage(layer_idx, profile.palette);
+            cv::Mat layer_bgra = mr.recipe_map.ToLayerBgraImage(layer_idx, mr.profile.palette);
             if (layer_bgra.empty()) {
                 throw InputError("Failed to render raster layer preview image");
             }
@@ -314,18 +362,16 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
                              : layer_preview_error_message);
     }
 
-    // === 5. Build 3D model and export ===
+    // === Build 3D model ===
     NotifyProgress(progress, ConvertStage::BuildingModel, 0.0f);
 
-    const ResolvedGeometryOptions geometry = ResolveGeometryOptions(request, profile);
-
-    const float transparent_mm = request.transparent_layer_mm;
+    const float transparent_mm = mr.transparent_layer_mm;
     const bool has_transparent = transparent_mm > 0.0f;
     if (has_transparent) {
-        if (request.face_orientation != FaceOrientation::FaceDown) {
+        if (mr.face_orientation != FaceOrientation::FaceDown) {
             throw InputError("transparent_layer_mm requires FaceDown orientation");
         }
-        if (geometry.double_sided) {
+        if (mr.double_sided) {
             throw InputError("transparent_layer_mm not supported with double_sided");
         }
         if (transparent_mm != 0.04f && transparent_mm != 0.08f) {
@@ -334,12 +380,12 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     }
 
     BuildModelIRConfig build_cfg;
-    build_cfg.flip_y       = request.flip_y;
-    build_cfg.base_layers  = geometry.base_layers;
-    build_cfg.double_sided = geometry.double_sided;
+    build_cfg.flip_y       = mr.flip_y;
+    build_cfg.base_layers  = mr.base_layers;
+    build_cfg.double_sided = mr.double_sided;
 
-    ColorDB profile_db = profile.ToColorDB("MergedPrintProfile");
-    ModelIR model      = ModelIR::Build(recipe_map, profile_db, build_cfg);
+    ColorDB profile_db = mr.profile.ToColorDB("MergedPrintProfile");
+    ModelIR model      = ModelIR::Build(mr.recipe_map, profile_db, build_cfg);
 
     NotifyProgress(progress, ConvertStage::BuildingModel, 1.0f);
     spdlog::info("Stage: building_model completed, grids={}, layers={}", model.voxel_grids.size(),
@@ -347,12 +393,9 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     NotifyProgress(progress, ConvertStage::Exporting, 0.0f);
 
     BuildMeshConfig mesh_cfg;
-    mesh_cfg.pixel_mm = resolved_pixel_mm;
-    mesh_cfg.layer_height_mm =
-        (request.layer_height_mm > 0.0f)
-            ? request.layer_height_mm
-            : (profile.layer_height_mm > 0.0f ? profile.layer_height_mm : 0.08f);
-    mesh_cfg.double_sided = geometry.double_sided;
+    mesh_cfg.pixel_mm        = mr.resolved_pixel_mm;
+    mesh_cfg.layer_height_mm = mr.layer_height_mm;
+    mesh_cfg.double_sided    = mr.double_sided;
 
     {
         constexpr float kDefaultGap = 0.005f;
@@ -363,9 +406,9 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
                          max_gap);
             gap = max_gap;
         }
-        if (geometry.double_sided && geometry.base_layers > 0 &&
-            gap >= static_cast<float>(geometry.base_layers) * mesh_cfg.layer_height_mm) {
-            const float limit = static_cast<float>(geometry.base_layers) * mesh_cfg.layer_height_mm;
+        if (mr.double_sided && mr.base_layers > 0 &&
+            gap >= static_cast<float>(mr.base_layers) * mesh_cfg.layer_height_mm) {
+            const float limit = static_cast<float>(mr.base_layers) * mesh_cfg.layer_height_mm;
             spdlog::warn("base_color_gap_mm {:.4f} clamped to {:.4f} (base thickness)", gap,
                          limit * 0.5f);
             gap = limit * 0.5f;
@@ -373,30 +416,27 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
         mesh_cfg.base_color_gap_mm = gap;
     }
 
-    PrintProfile export_profile = profile;
-    export_profile.base_layers  = geometry.base_layers;
+    PrintProfile export_profile = mr.profile;
+    export_profile.base_layers  = mr.base_layers;
 
-    const bool file_only = !request.output_3mf_path.empty() && request.output_3mf_file_only;
+    std::optional<FilamentConfig> fil_config;
+    if (!mr.preset_dir.empty()) { fil_config.emplace(FilamentConfig::LoadFromDir(mr.preset_dir)); }
 
-    auto write_buffer_to_file = [&](const std::vector<uint8_t>& buf) {
-        detail::WriteBufferToFileAtomically(request.output_3mf_path, buf);
-    };
-
+    // === Export 3MF ===
     if (has_transparent) {
         std::vector<Mesh> meshes = BuildMeshes(model, mesh_cfg);
-        Mesh t_mesh              = BuildTransparentLayerFromModelIR(model, resolved_pixel_mm,
+        Mesh t_mesh              = BuildTransparentLayerFromModelIR(model, mr.resolved_pixel_mm,
                                                                     mesh_cfg.layer_height_mm, transparent_mm);
         meshes.push_back(std::move(t_mesh));
 
         auto ns = BuildMeshNamesAndSlots(meshes.size(), model.palette, model.base_channel_idx,
                                          model.base_layers, true);
 
-        std::vector<uint8_t> buffer;
-        if (!request.preset_dir.empty()) {
-            auto preset = SlicerPreset::FromProfile(request.preset_dir, export_profile,
-                                                    fil_config ? &*fil_config : nullptr,
-                                                    geometry.double_sided);
-            preset.custom_base_layers   = (request.base_layers >= 0);
+        if (!mr.preset_dir.empty()) {
+            auto preset =
+                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                                          fil_config ? &*fil_config : nullptr, mr.double_sided);
+            preset.custom_base_layers   = mr.custom_base_layers;
             preset.transparent_layer_mm = transparent_mm;
             FilamentSlot t_slot;
             t_slot.type        = "PLA";
@@ -405,76 +445,72 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
             preset.filaments.push_back(std::move(t_slot));
 
             if (!preset.preset_json_path.empty()) {
-                buffer = Export3mfFromMeshes(meshes, model.palette, ns.names, ns.slots, preset,
-                                             request.face_orientation, model.name);
-                spdlog::info("Raster pipeline (transparent): preset from {}",
+                result.model_3mf = Export3mfFromMeshes(meshes, model.palette, ns.names, ns.slots,
+                                                       preset, mr.face_orientation, model.name);
+                spdlog::info("GenerateRasterModel (transparent): preset from {}",
                              preset.preset_json_path);
             } else {
-                spdlog::warn("Raster pipeline (transparent): preset not found in {}",
-                             request.preset_dir);
-                buffer =
-                    Export3mfFromMeshes(meshes, model.palette, ns.names, request.face_orientation);
+                spdlog::warn("GenerateRasterModel (transparent): preset not found in {}",
+                             mr.preset_dir);
+                result.model_3mf =
+                    Export3mfFromMeshes(meshes, model.palette, ns.names, mr.face_orientation);
             }
         } else {
-            buffer = Export3mfFromMeshes(meshes, model.palette, ns.names, request.face_orientation);
-        }
-
-        if (!request.output_3mf_path.empty()) { write_buffer_to_file(buffer); }
-        if (!file_only) { result.model_3mf = std::move(buffer); }
-    } else if (file_only) {
-        auto dir = std::filesystem::path(request.output_3mf_path).parent_path();
-        if (!dir.empty()) { std::filesystem::create_directories(dir); }
-
-        if (!request.preset_dir.empty()) {
-            auto preset = SlicerPreset::FromProfile(request.preset_dir, export_profile,
-                                                    fil_config ? &*fil_config : nullptr,
-                                                    geometry.double_sided);
-            preset.custom_base_layers = (request.base_layers >= 0);
-            if (!preset.preset_json_path.empty()) {
-                Export3mfToFile(request.output_3mf_path, model, mesh_cfg, preset,
-                                request.face_orientation);
-                spdlog::info("Raster pipeline: injected slicer preset from {}",
-                             preset.preset_json_path);
-            } else {
-                spdlog::warn("Raster pipeline: preset file not found in {}, exporting standard 3MF",
-                             request.preset_dir);
-                Export3mfToFile(request.output_3mf_path, model, mesh_cfg, request.face_orientation);
-            }
-        } else {
-            Export3mfToFile(request.output_3mf_path, model, mesh_cfg, request.face_orientation);
+            result.model_3mf =
+                Export3mfFromMeshes(meshes, model.palette, ns.names, mr.face_orientation);
         }
     } else {
-        if (!request.preset_dir.empty()) {
-            auto preset = SlicerPreset::FromProfile(request.preset_dir, export_profile,
-                                                    fil_config ? &*fil_config : nullptr,
-                                                    geometry.double_sided);
-            preset.custom_base_layers = (request.base_layers >= 0);
+        if (!mr.preset_dir.empty()) {
+            auto preset =
+                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                                          fil_config ? &*fil_config : nullptr, mr.double_sided);
+            preset.custom_base_layers = mr.custom_base_layers;
             if (!preset.preset_json_path.empty()) {
-                result.model_3mf =
-                    Export3mfToBuffer(model, mesh_cfg, preset, request.face_orientation);
-                spdlog::info("Raster pipeline: injected slicer preset from {}",
+                result.model_3mf = Export3mfToBuffer(model, mesh_cfg, preset, mr.face_orientation);
+                spdlog::info("GenerateRasterModel: injected slicer preset from {}",
                              preset.preset_json_path);
             } else {
-                spdlog::warn("Raster pipeline: preset file not found in {}, exporting standard 3MF",
-                             request.preset_dir);
-                result.model_3mf = Export3mfToBuffer(model, mesh_cfg, request.face_orientation);
+                spdlog::warn("GenerateRasterModel: preset not found in {}, standard 3MF",
+                             mr.preset_dir);
+                result.model_3mf = Export3mfToBuffer(model, mesh_cfg, mr.face_orientation);
             }
         } else {
-            result.model_3mf = Export3mfToBuffer(model, mesh_cfg, request.face_orientation);
+            result.model_3mf = Export3mfToBuffer(model, mesh_cfg, mr.face_orientation);
         }
-
-        if (!request.output_3mf_path.empty()) { write_buffer_to_file(result.model_3mf); }
     }
 
-    result.resolved_pixel_mm  = resolved_pixel_mm;
-    result.physical_width_mm  = static_cast<float>(img.width) * resolved_pixel_mm;
-    result.physical_height_mm = static_cast<float>(img.height) * resolved_pixel_mm;
+    result.resolved_pixel_mm  = mr.resolved_pixel_mm;
+    result.physical_width_mm  = static_cast<float>(mr.input_width) * mr.resolved_pixel_mm;
+    result.physical_height_mm = static_cast<float>(mr.input_height) * mr.resolved_pixel_mm;
 
     NotifyProgress(progress, ConvertStage::Exporting, 1.0f);
-    spdlog::info("ConvertRaster completed: 3mf={} bytes, preview={} bytes, source_mask={} bytes, "
-                 "physical={:.1f}x{:.1f} mm",
+    spdlog::info("GenerateRasterModel completed: 3mf={} bytes, preview={} bytes, "
+                 "source_mask={} bytes, physical={:.1f}x{:.1f} mm",
                  result.model_3mf.size(), result.preview_png.size(), result.source_mask_png.size(),
                  result.physical_width_mm, result.physical_height_mm);
+
+    return result;
+}
+
+// ── ConvertRaster: full pipeline (calls MatchRaster + GenerateRasterModel) ───
+
+ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallback progress) {
+    MatchRasterResult match_result = MatchRaster(request, progress);
+    ConvertResult result           = GenerateRasterModel(match_result, progress);
+
+    if (!request.output_3mf_path.empty() && !result.model_3mf.empty()) {
+        detail::WriteBufferToFileAtomically(request.output_3mf_path, result.model_3mf);
+        if (request.output_3mf_file_only) {
+            result.model_3mf.clear();
+            result.model_3mf.shrink_to_fit();
+        }
+    }
+    if (!request.preview_path.empty() && !result.preview_png.empty()) {
+        detail::WriteBufferToFileAtomically(request.preview_path, result.preview_png);
+    }
+    if (!request.source_mask_path.empty() && !result.source_mask_png.empty()) {
+        detail::WriteBufferToFileAtomically(request.source_mask_path, result.source_mask_png);
+    }
 
     return result;
 }

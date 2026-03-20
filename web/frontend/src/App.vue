@@ -28,6 +28,7 @@ import ImageUpload from './components/ImageUpload.vue'
 import ParamPanel from './components/ParamPanel.vue'
 import ConvertPanel from './components/ConvertPanel.vue'
 import ResultPanel from './components/ResultPanel.vue'
+import RecipeEditorPanel from './components/recipeEditor/RecipeEditorPanel.vue'
 import CalibrationPanel from './components/CalibrationPanel.vue'
 import Calibration8ColorPanel from './components/Calibration8ColorPanel.vue'
 import MattingPanel from './components/MattingPanel.vue'
@@ -50,8 +51,16 @@ import {
 const { t, locale } = useI18n()
 
 const appStore = useAppStore()
-const { activeTab, serverOnline, serverVersion, activeTasks, totalTasks, isDark } =
-  storeToRefs(appStore)
+const {
+  activeTab,
+  serverOnline,
+  serverVersion,
+  activeTasks,
+  totalTasks,
+  isDark,
+  recipeEditorTaskId,
+  completedTask,
+} = storeToRefs(appStore)
 
 const activeTheme = computed(() => (isDark.value ? darkTheme : null))
 const activeThemeOverrides = computed(() =>
@@ -204,7 +213,16 @@ function toggleLocale() {
                       <ParamPanel />
                     </NGridItem>
                   </NGrid>
-                  <ResultPanel />
+                  <RecipeEditorPanel
+                    v-if="recipeEditorTaskId"
+                    :task-id="recipeEditorTaskId"
+                  />
+                  <ResultPanel
+                    v-if="
+                      !recipeEditorTaskId ||
+                      (completedTask?.status === 'completed' && completedTask?.result?.has_3mf)
+                    "
+                  />
                 </NSpace>
               </NTabPane>
 

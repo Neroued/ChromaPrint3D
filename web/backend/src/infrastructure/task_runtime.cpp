@@ -1,6 +1,8 @@
 #include "infrastructure/task_runtime.h"
 #include "infrastructure/random_utils.h"
 
+#include "chromaprint3d/color.h"
+#include "chromaprint3d/encoding.h"
 #include "chromaprint3d/image_io.h"
 #include "chromaprint3d/matting_postprocess.h"
 
@@ -12,9 +14,23 @@
 #include <cctype>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
+#include <map>
+#include <set>
+#include <sstream>
 #include <stdexcept>
 
 namespace {
+
+std::string LabToHex(const ChromaPrint3D::Lab& lab) {
+    auto rgb   = lab.ToRgb();
+    uint8_t r8 = 0, g8 = 0, b8 = 0;
+    rgb.ToRgb255(r8, g8, b8);
+    std::ostringstream hex;
+    hex << '#' << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(r8)
+        << std::setw(2) << static_cast<int>(g8) << std::setw(2) << static_cast<int>(b8);
+    return hex.str();
+}
 
 cv::Mat CompositeForeground(const cv::Mat& bgr, const cv::Mat& mask) {
     cv::Mat bgra;
@@ -231,6 +247,91 @@ SubmitResult TaskRuntime::SubmitConvertVector(const std::string& owner,
                                   rec.spilled_3mf     = std::move(spilled_3mf);
                               });
                           });
+}
+
+SubmitResult TaskRuntime::SubmitConvertRasterMatchOnly(const std::string& owner,
+                                                       ChromaPrint3D::ConvertRasterRequest req,
+                                                       const std::string& input_name) {
+    ConvertTaskPayload payload;
+    payload.input_name = input_name;
+    payload.match_only = true;
+
+    return SubmitInternal(
+        owner, TaskKind::Convert, payload,
+        [this, request = std::move(req)](const std::string& id) mutable {
+            if (request.dither != ChromaPrint3D::DitherMethod::None) {
+                throw std::runtime_error("Recipe editing requires dither=None");
+            }
+
+            ChromaPrint3D::ProgressCallback progress_cb =
+                [this, id](ChromaPrint3D::ConvertStage stage, float progress) {
+                    UpdateTaskPayload(id, [&](TaskPayload& p) {
+                        auto* cp = std::get_if<ConvertTaskPayload>(&p);
+                        if (!cp) return;
+                        cp->stage    = stage;
+                        cp->progress = progress;
+                    });
+                };
+
+            auto match_result = ChromaPrint3D::MatchRaster(request, progress_cb);
+
+            std::set<std::string> unique_recipes;
+            const int cl        = match_result.recipe_map.color_layers;
+            const auto& recipes = match_result.recipe_map.recipes;
+            const auto& mask    = match_result.recipe_map.mask;
+            const int total_px  = match_result.recipe_map.width * match_result.recipe_map.height;
+            for (int i = 0; i < total_px; ++i) {
+                if (mask[static_cast<std::size_t>(i)] == 0) continue;
+                std::string key;
+                for (int l = 0; l < cl; ++l) {
+                    if (l > 0) key += '-';
+                    key += std::to_string(
+                        recipes[static_cast<std::size_t>(i) * static_cast<std::size_t>(cl) +
+                                static_cast<std::size_t>(l)]);
+                }
+                unique_recipes.insert(std::move(key));
+            }
+
+            constexpr int kMaxUniqueRecipes = 128;
+            if (static_cast<int>(unique_recipes.size()) > kMaxUniqueRecipes) {
+                throw std::runtime_error(
+                    "Too many unique recipes: " + std::to_string(unique_recipes.size()) + ", max " +
+                    std::to_string(kMaxUniqueRecipes));
+            }
+
+            auto region_map    = ChromaPrint3D::RasterRegionMap::Build(match_result.recipe_map);
+            auto region_binary = region_map.SerializeRegionIds();
+
+            cv::Mat preview_bgra = match_result.recipe_map.ToBgraImage();
+            std::vector<uint8_t> preview_png;
+            if (!preview_bgra.empty()) { preview_png = ChromaPrint3D::EncodePng(preview_bgra); }
+
+            cv::Mat source_mask_img = match_result.recipe_map.ToSourceMaskImage();
+            std::vector<uint8_t> source_mask_png;
+            if (!source_mask_img.empty()) {
+                source_mask_png = ChromaPrint3D::EncodePng(source_mask_img);
+            }
+
+            UpdateTaskRecord(id, [&](TaskRecord& rec) {
+                auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
+                if (!cp) return;
+                cp->result.stats             = match_result.stats;
+                cp->result.input_width       = match_result.input_width;
+                cp->result.input_height      = match_result.input_height;
+                cp->result.resolved_pixel_mm = match_result.resolved_pixel_mm;
+                cp->result.physical_width_mm =
+                    static_cast<float>(match_result.input_width) * match_result.resolved_pixel_mm;
+                cp->result.physical_height_mm =
+                    static_cast<float>(match_result.input_height) * match_result.resolved_pixel_mm;
+                cp->result.preview_png       = std::move(preview_png);
+                cp->result.source_mask_png   = std::move(source_mask_png);
+                cp->progress                 = 1.0f;
+                cp->match_only               = true;
+                cp->raster_region_map        = std::move(region_map);
+                cp->raster_region_map_binary = std::move(region_binary);
+                cp->raster_match_state       = std::make_optional(std::move(match_result));
+            });
+        });
 }
 
 SubmitResult TaskRuntime::SubmitMatting(const std::string& owner, std::vector<uint8_t> image_buffer,
@@ -460,6 +561,209 @@ bool TaskRuntime::PostprocessMatting(const std::string& owner, const std::string
     return true;
 }
 
+// --------------- Recipe Editor Sync Methods ---------------
+
+std::optional<nlohmann::json> TaskRuntime::GetRecipeEditorSummary(const std::string& owner,
+                                                                  const std::string& id) const {
+    std::lock_guard<std::mutex> lock(task_mtx_);
+    auto it = tasks_.find(id);
+    if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
+    if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+    return GetRecipeEditorSummaryLocked(it->second);
+}
+
+std::optional<nlohmann::json>
+TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string& id,
+                                     const ChromaPrint3D::Lab& target_lab, int max_candidates,
+                                     int offset, const ChromaPrint3D::ModelPackage* model_pack) {
+    std::lock_guard<std::mutex> lock(task_mtx_);
+    auto it = tasks_.find(id);
+    if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
+
+    auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+    if (!cp || !cp->match_only) return std::nullopt;
+    if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+    if (!cp->raster_match_state.has_value()) return std::nullopt;
+
+    const auto& mstate = *cp->raster_match_state;
+
+    auto candidates = ChromaPrint3D::FindAlternativeRecipes(target_lab, mstate.dbs, mstate.profile,
+                                                            mstate.match_config, max_candidates,
+                                                            offset, model_pack, mstate.model_gate);
+
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& c : candidates) {
+        std::string hex = LabToHex(c.predicted_color);
+
+        nlohmann::json obj = {{"recipe", c.recipe},
+                              {"predicted_lab",
+                               {{"L", c.predicted_color.l()},
+                                {"a", c.predicted_color.a()},
+                                {"b", c.predicted_color.b()}}},
+                              {"hex", hex},
+                              {"delta_e76", c.delta_e76},
+                              {"lightness_diff", c.lightness_diff},
+                              {"hue_diff", c.hue_diff},
+                              {"from_model", c.from_model}};
+        arr.push_back(std::move(obj));
+    }
+    return arr;
+}
+
+bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
+                                const std::vector<int>& target_region_ids,
+                                const std::vector<uint8_t>& new_recipe,
+                                const ChromaPrint3D::Lab& new_mapped_color, bool new_from_model,
+                                int& status_code, std::string& message,
+                                nlohmann::json& out_summary) {
+    std::lock_guard<std::mutex> lock(task_mtx_);
+    auto it = tasks_.find(id);
+    if (it == tasks_.end() || it->second.snapshot.owner != owner) {
+        status_code = 404;
+        message     = "task not found";
+        return false;
+    }
+    if (it->second.snapshot.status != RuntimeTaskStatus::Completed) {
+        status_code = 409;
+        message     = "task not in completed state";
+        return false;
+    }
+
+    auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+    if (!cp || !cp->match_only) {
+        status_code = 400;
+        message     = "not a match_only task";
+        return false;
+    }
+    if (!cp->raster_match_state.has_value() || !cp->raster_region_map.has_value()) {
+        status_code = 500;
+        message     = "missing match state";
+        return false;
+    }
+
+    auto& mstate = *cp->raster_match_state;
+    auto& rmap   = *cp->raster_region_map;
+
+    try {
+        mstate.recipe_map.ReplaceRecipeInRegions(rmap, target_region_ids, new_recipe,
+                                                 new_mapped_color, new_from_model);
+    } catch (const std::exception& e) {
+        status_code = 400;
+        message     = e.what();
+        return false;
+    }
+
+    rmap                         = ChromaPrint3D::RasterRegionMap::Build(mstate.recipe_map);
+    cp->raster_region_map_binary = rmap.SerializeRegionIds();
+
+    cv::Mat preview_bgra = mstate.recipe_map.ToBgraImage();
+    if (!preview_bgra.empty()) { cp->result.preview_png = ChromaPrint3D::EncodePng(preview_bgra); }
+
+    cv::Mat source_mask_img = mstate.recipe_map.ToSourceMaskImage();
+    if (!source_mask_img.empty()) {
+        cp->result.source_mask_png = ChromaPrint3D::EncodePng(source_mask_img);
+    }
+
+    std::size_t old_bytes     = it->second.artifact_bytes;
+    std::size_t new_bytes     = ComputeArtifactBytes(it->second.snapshot);
+    total_artifact_bytes_     = total_artifact_bytes_ - old_bytes + new_bytes;
+    it->second.artifact_bytes = new_bytes;
+
+    auto summary = GetRecipeEditorSummaryLocked(it->second);
+    if (summary.has_value()) { out_summary = std::move(*summary); }
+
+    status_code = 200;
+    return true;
+}
+
+SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const std::string& id,
+                                              const ChromaPrint3D::ModelPackage* /*model_pack*/) {
+    {
+        std::lock_guard<std::mutex> lock(task_mtx_);
+        auto it = tasks_.find(id);
+        if (it == tasks_.end() || it->second.snapshot.owner != owner) {
+            return {false, 404, id, "task not found"};
+        }
+        if (it->second.snapshot.status != RuntimeTaskStatus::Completed) {
+            return {false, 409, id, "task not in completed state"};
+        }
+        auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+        if (!cp || !cp->match_only) { return {false, 400, id, "not a match_only task"}; }
+        if (!cp->raster_match_state.has_value()) { return {false, 500, id, "missing match state"}; }
+
+        cp->generate_error.clear();
+        cp->result.model_3mf.clear();
+        it->second.spilled_3mf           = SpillableArtifact{};
+        it->second.snapshot.status       = RuntimeTaskStatus::Running;
+        it->second.snapshot.completed_at = {};
+        cp->stage                        = ChromaPrint3D::ConvertStage::BuildingModel;
+        cp->progress                     = 0.0f;
+    }
+
+    RunTask(id, [this, id](const std::string& /*tid*/) {
+        ChromaPrint3D::MatchRasterResult match_result_copy;
+        {
+            std::lock_guard<std::mutex> lock(task_mtx_);
+            auto it           = tasks_.find(id);
+            auto* cp          = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+            match_result_copy = *cp->raster_match_state;
+        }
+
+        auto temp_path               = temp_dir_ / (id + "_gen.3mf");
+        match_result_copy.preset_dir = temp_dir_.string();
+
+        ChromaPrint3D::ProgressCallback progress_cb = [this, id](ChromaPrint3D::ConvertStage stage,
+                                                                 float progress) {
+            UpdateTaskPayload(id, [&](TaskPayload& p) {
+                auto* cp = std::get_if<ConvertTaskPayload>(&p);
+                if (!cp) return;
+                cp->stage    = stage;
+                cp->progress = progress;
+            });
+        };
+
+        try {
+            auto gen_result = ChromaPrint3D::GenerateRasterModel(match_result_copy, progress_cb);
+
+            PendingArtifactFile pending_3mf;
+            SpillableArtifact spilled_3mf;
+            if (!gen_result.model_3mf.empty()) {
+                auto spill_path = temp_dir_ / (id + "_gen.3mf");
+                pending_3mf     = PendingArtifactFile(spill_path);
+                std::ofstream ofs(spill_path, std::ios::binary);
+                ofs.write(reinterpret_cast<const char*>(gen_result.model_3mf.data()),
+                          static_cast<std::streamsize>(gen_result.model_3mf.size()));
+                ofs.close();
+                spilled_3mf = pending_3mf.Commit(gen_result.model_3mf.size());
+                gen_result.model_3mf.clear();
+                gen_result.model_3mf.shrink_to_fit();
+            }
+
+            UpdateTaskRecord(id, [&](TaskRecord& rec) {
+                auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
+                if (!cp) return;
+                cp->result.model_3mf       = std::move(gen_result.model_3mf);
+                cp->result.layer_previews  = std::move(gen_result.layer_previews);
+                cp->result.preview_png     = std::move(gen_result.preview_png);
+                cp->result.source_mask_png = std::move(gen_result.source_mask_png);
+                cp->progress               = 1.0f;
+                cp->has_3mf_on_disk        = spilled_3mf.has_file();
+                rec.spilled_3mf            = std::move(spilled_3mf);
+            });
+        } catch (const std::exception& e) {
+            spdlog::error("GenerateRasterModel failed for task {}: {}", id, e.what());
+            UpdateTaskPayload(id, [&](TaskPayload& p) {
+                auto* cp = std::get_if<ConvertTaskPayload>(&p);
+                if (!cp) return;
+                cp->generate_error = e.what();
+                cp->result.model_3mf.clear();
+            });
+        }
+    });
+
+    return {true, 200, id, ""};
+}
+
 std::vector<TaskSnapshot> TaskRuntime::ListTasks(const std::string& owner) const {
     std::vector<TaskSnapshot> out;
     if (owner.empty()) return out;
@@ -568,6 +872,15 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
                 return std::nullopt;
             }
             return TaskArtifact{cp->result.source_mask_png, {}, "image/png", "source_mask.png"};
+        }
+        if (artifact == "raster-region-map") {
+            if (cp->raster_region_map_binary.empty()) {
+                status_code = 404;
+                message     = "Region map not available";
+                return std::nullopt;
+            }
+            return TaskArtifact{
+                cp->raster_region_map_binary, {}, "application/octet-stream", "region_map.bin"};
         }
         if (artifact.rfind(kLayerPreviewArtifactPrefix, 0) == 0) {
             const std::string index_text =
@@ -833,8 +1146,14 @@ std::size_t TaskRuntime::ComputeArtifactBytes(const TaskSnapshot& snapshot) cons
         for (const auto& png : cp->result.layer_previews.layer_pngs) {
             layer_preview_bytes += png.size();
         }
-        return cp->result.model_3mf.size() + cp->result.preview_png.size() +
-               cp->result.source_mask_png.size() + layer_preview_bytes;
+        std::size_t bytes = cp->result.model_3mf.size() + cp->result.preview_png.size() +
+                            cp->result.source_mask_png.size() + layer_preview_bytes;
+        bytes += cp->raster_region_map_binary.size();
+        if (cp->raster_match_state.has_value()) {
+            bytes += cp->raster_match_state->EstimateBytes();
+        }
+        if (cp->raster_region_map.has_value()) { bytes += cp->raster_region_map->EstimateBytes(); }
+        return bytes;
     }
     if (auto mp = std::get_if<MattingTaskPayload>(&snapshot.payload)) {
         return mp->mask_png.size() + mp->foreground_png.size() + mp->alpha_png.size() +
@@ -845,6 +1164,71 @@ std::size_t TaskRuntime::ComputeArtifactBytes(const TaskSnapshot& snapshot) cons
         return vp->svg_content.size();
     }
     return 0;
+}
+
+std::optional<nlohmann::json>
+TaskRuntime::GetRecipeEditorSummaryLocked(const TaskRecord& rec) const {
+    const auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
+    if (!cp || !cp->match_only) return std::nullopt;
+    if (!cp->raster_region_map.has_value() || !cp->raster_match_state.has_value())
+        return std::nullopt;
+
+    const auto& rmap   = *cp->raster_region_map;
+    const auto& mstate = *cp->raster_match_state;
+
+    nlohmann::json regions_arr = nlohmann::json::array();
+    std::vector<int> region_recipe_indices;
+    region_recipe_indices.reserve(rmap.regions.size());
+
+    std::map<std::string, int> recipe_to_idx;
+    nlohmann::json unique_recipes_arr = nlohmann::json::array();
+
+    for (const auto& reg : rmap.regions) {
+        std::string key;
+        for (std::size_t l = 0; l < reg.recipe.size(); ++l) {
+            if (l > 0) key += '-';
+            key += std::to_string(reg.recipe[l]);
+        }
+
+        int recipe_idx;
+        auto rit = recipe_to_idx.find(key);
+        if (rit == recipe_to_idx.end()) {
+            recipe_idx         = static_cast<int>(unique_recipes_arr.size());
+            recipe_to_idx[key] = recipe_idx;
+
+            nlohmann::json recipe_obj = {{"recipe", reg.recipe},
+                                         {"mapped_lab",
+                                          {{"L", reg.mapped_color.l()},
+                                           {"a", reg.mapped_color.a()},
+                                           {"b", reg.mapped_color.b()}}},
+                                         {"hex", LabToHex(reg.mapped_color)},
+                                         {"from_model", reg.from_model}};
+            unique_recipes_arr.push_back(std::move(recipe_obj));
+        } else {
+            recipe_idx = rit->second;
+        }
+
+        region_recipe_indices.push_back(recipe_idx);
+        nlohmann::json reg_obj = {{"region_id", reg.region_id},
+                                  {"recipe_index", recipe_idx},
+                                  {"pixel_count", reg.pixel_count}};
+        regions_arr.push_back(std::move(reg_obj));
+    }
+
+    nlohmann::json palette_arr = nlohmann::json::array();
+    for (const auto& ch : mstate.profile.palette) {
+        palette_arr.push_back(
+            {{"color", ch.color}, {"material", ch.material}, {"hex_color", ch.hex_color}});
+    }
+
+    return nlohmann::json{{"width", rmap.width},
+                          {"height", rmap.height},
+                          {"region_count", static_cast<int>(rmap.regions.size())},
+                          {"regions", std::move(regions_arr)},
+                          {"unique_recipes", std::move(unique_recipes_arr)},
+                          {"region_recipe_indices", region_recipe_indices},
+                          {"palette", std::move(palette_arr)},
+                          {"color_layers", mstate.recipe_map.color_layers}};
 }
 
 void TaskRuntime::CleanupLoop() {

@@ -25,10 +25,12 @@ export const useAppStore = defineStore('app', () => {
   const totalTasks = ref(0)
 
   const isDark = ref(false)
+  const recipeEditorTaskId = ref<string | null>(null)
 
   function setSelectedFile(file: File | null) {
     selectedFile.value = file
     completedTask.value = null
+    recipeEditorTaskId.value = null
   }
 
   function setImageDimensions(dims: ImageDimensions | null) {
@@ -53,10 +55,19 @@ export const useAppStore = defineStore('app', () => {
 
   function markTaskStarted() {
     completedTask.value = null
+    recipeEditorTaskId.value = null
   }
 
   function markTaskFailed() {
     completedTask.value = null
+  }
+
+  function setRecipeEditorTaskId(id: string | null) {
+    recipeEditorTaskId.value = id
+  }
+
+  function clearRecipeEditor() {
+    recipeEditorTaskId.value = null
   }
 
   function refreshColorDBs() {
@@ -119,6 +130,7 @@ export const useAppStore = defineStore('app', () => {
     activeTasks,
     totalTasks,
     isDark,
+    recipeEditorTaskId,
     setSelectedFile,
     setImageDimensions,
     setInputType,
@@ -127,6 +139,8 @@ export const useAppStore = defineStore('app', () => {
     setCompletedTask,
     markTaskStarted,
     markTaskFailed,
+    setRecipeEditorTaskId,
+    clearRecipeEditor,
     refreshColorDBs,
     checkHealth,
     initTheme,

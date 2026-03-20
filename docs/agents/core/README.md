@@ -22,6 +22,7 @@
 | 修改颜色匹配主流程 | `core/src/match/match.cpp` |
 | 修改候选筛选/评分 | `core/src/match/candidate_select.cpp` |
 | 修改配方与打印配置映射 | `core/src/match/recipe_map.cpp`、`core/src/match/print_profile.cpp` |
+| 修改配方区域编辑 | `core/src/match/raster_region_map.cpp`、`core/src/match/recipe_alternatives.cpp` |
 | 修改体素/网格生成 | `core/src/geo/geo.cpp`、`core/src/vecgeo/vector_mesh_builder.cpp` |
 | 修改 3MF 导出 | `core/src/geo/export_3mf.cpp` |
 | 修改 Bambu 预设与耗材元数据 | `core/src/geo/bambu_metadata.cpp` |
@@ -37,8 +38,12 @@
 ## 输入输出契约（高频）
 
 - 栅格转换编排：`ConvertRasterRequest` -> `ConvertResult`
+- 栅格匹配阶段：`ConvertRasterRequest` -> `MatchRasterResult`（两阶段）
+- 栅格模型生成：`MatchRasterResult` -> `ConvertResult`（两阶段）
 - 矢量转换编排：`ConvertVectorRequest` -> `ConvertResult`
 - 匹配结果：`RecipeMap`
+- 区域映射：`RasterRegionMap`（`raster_region_map.h`）
+- 候选配方：`RecipeCandidate`（`recipe_alternatives.h`）
 - 中间几何表示：`ModelIR` / `VoxelGrid`
 
 如需改公共接口，优先从 `core/include/chromaprint3d/*.h` 对照实现文件同步修改。

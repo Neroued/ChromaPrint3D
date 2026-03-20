@@ -53,6 +53,8 @@ target_sources(chromaprint3d PRIVATE
     src/match/model_package.cpp
     src/match/recipe_convert.cpp
     src/match/candidate_select.cpp
+    src/match/raster_region_map.cpp
+    src/match/recipe_alternatives.cpp
     src/match/vector_match.cpp
     src/calib/calib.cpp
     src/calib/loc.cpp

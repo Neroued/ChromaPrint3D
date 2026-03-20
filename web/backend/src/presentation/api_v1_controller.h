@@ -31,9 +31,20 @@ public:
 
     ADD_METHOD_TO(ApiV1Controller::SubmitConvertRaster, "/api/v1/convert/raster", drogon::Post,
                   drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::SubmitConvertRasterMatchOnly,
+                  "/api/v1/convert/raster/match-only", drogon::Post, drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::SubmitConvertVector, "/api/v1/convert/vector", drogon::Post,
                   drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::AnalyzeVectorWidth, "/api/v1/convert/vector/analyze-width",
+                  drogon::Post, drogon::Options);
+
+    ADD_METHOD_TO(ApiV1Controller::RecipeEditorSummary, "/api/v1/tasks/{1}/recipe-editor/summary",
+                  drogon::Get, drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::RecipeEditorAlternatives,
+                  "/api/v1/tasks/{1}/recipe-editor/alternatives", drogon::Post, drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::RecipeEditorReplace, "/api/v1/tasks/{1}/recipe-editor/replace",
+                  drogon::Post, drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::RecipeEditorGenerate, "/api/v1/tasks/{1}/recipe-editor/generate",
                   drogon::Post, drogon::Options);
 
     ADD_METHOD_TO(ApiV1Controller::MattingMethods, "/api/v1/matting/methods", drogon::Get,
@@ -79,8 +90,18 @@ public:
                                  const std::string& name);
 
     void SubmitConvertRaster(const drogon::HttpRequestPtr& req, Callback&& cb);
+    void SubmitConvertRasterMatchOnly(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitConvertVector(const drogon::HttpRequestPtr& req, Callback&& cb);
     void AnalyzeVectorWidth(const drogon::HttpRequestPtr& req, Callback&& cb);
+
+    void RecipeEditorSummary(const drogon::HttpRequestPtr& req, Callback&& cb,
+                             const std::string& task_id);
+    void RecipeEditorAlternatives(const drogon::HttpRequestPtr& req, Callback&& cb,
+                                  const std::string& task_id);
+    void RecipeEditorReplace(const drogon::HttpRequestPtr& req, Callback&& cb,
+                             const std::string& task_id);
+    void RecipeEditorGenerate(const drogon::HttpRequestPtr& req, Callback&& cb,
+                              const std::string& task_id);
 
     void MattingMethods(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitMatting(const drogon::HttpRequestPtr& req, Callback&& cb);

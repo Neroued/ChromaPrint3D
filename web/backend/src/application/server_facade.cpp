@@ -543,6 +543,130 @@ ServiceResult ServerFacade::SubmitVectorize(const std::string& owner,
     return ServiceResult::Success(202, {{"task_id", submit.task_id}, {"kind", "vectorize"}});
 }
 
+ServiceResult ServerFacade::SubmitConvertRasterMatchOnly(
+    const std::string& owner, const std::vector<uint8_t>& image, const std::string& image_name,
+    const std::optional<std::string>& params_json) {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+    auto accept = tasks_.CanAccept(owner);
+    if (!accept.ok) {
+        return ServiceResult::Error(accept.status_code, "queue_rejected", accept.message);
+    }
+    auto valid = ValidateDecodedImage(image);
+    if (!valid.ok) return valid;
+
+    json params;
+    auto parsed = ParseJsonObject(params_json, params);
+    if (!parsed.ok) return parsed;
+
+    auto session = sessions_.Snapshot(owner);
+
+    ConvertRasterRequest req;
+    auto built = BuildRasterRequest(params, image, image_name, session, req);
+    if (!built.ok) return built;
+
+    if (req.dither != ChromaPrint3D::DitherMethod::None) {
+        return ServiceResult::Error(400, "invalid_request", "Recipe editing requires dither=None");
+    }
+
+    auto submit =
+        tasks_.SubmitConvertRasterMatchOnly(owner, std::move(req), StripExtension(image_name));
+    if (!submit.ok) {
+        return ServiceResult::Error(submit.status_code, "submit_failed", submit.message);
+    }
+    return ServiceResult::Success(202, {{"task_id", submit.task_id}, {"kind", "convert"}});
+}
+
+ServiceResult ServerFacade::RecipeEditorSummary(const std::string& owner,
+                                                const std::string& task_id) const {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+    auto summary = tasks_.GetRecipeEditorSummary(owner, task_id);
+    if (!summary) return ServiceResult::Error(404, "not_found", "Summary not available");
+    return ServiceResult::Success(200, std::move(*summary));
+}
+
+ServiceResult ServerFacade::RecipeEditorAlternatives(const std::string& owner,
+                                                     const std::string& task_id,
+                                                     const std::string& body_json) {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+
+    json body;
+    try {
+        body = json::parse(body_json);
+    } catch (...) { return ServiceResult::Error(400, "invalid_request", "Invalid JSON body"); }
+
+    if (!body.contains("target_lab") || !body["target_lab"].is_object()) {
+        return ServiceResult::Error(400, "invalid_request", "Missing target_lab");
+    }
+    const auto& tlab = body["target_lab"];
+    ChromaPrint3D::Lab target(tlab.value("L", 0.0f), tlab.value("a", 0.0f), tlab.value("b", 0.0f));
+
+    int max_candidates = body.value("max_candidates", 10);
+    int offset         = body.value("offset", 0);
+
+    const ChromaPrint3D::ModelPackage* model_pack = nullptr;
+    if (data_.ModelPack().has_value()) { model_pack = &(*data_.ModelPack()); }
+
+    auto result =
+        tasks_.QueryRecipeAlternatives(owner, task_id, target, max_candidates, offset, model_pack);
+    if (!result) return ServiceResult::Error(404, "not_found", "Alternatives not available");
+    return ServiceResult::Success(200, {{"candidates", std::move(*result)}});
+}
+
+ServiceResult ServerFacade::RecipeEditorReplace(const std::string& owner,
+                                                const std::string& task_id,
+                                                const std::string& body_json) {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+
+    json body;
+    try {
+        body = json::parse(body_json);
+    } catch (...) { return ServiceResult::Error(400, "invalid_request", "Invalid JSON body"); }
+
+    if (!body.contains("region_ids") || !body["region_ids"].is_array()) {
+        return ServiceResult::Error(400, "invalid_request", "Missing region_ids array");
+    }
+    if (!body.contains("new_recipe") || !body["new_recipe"].is_array()) {
+        return ServiceResult::Error(400, "invalid_request", "Missing new_recipe array");
+    }
+    if (!body.contains("new_mapped_lab") || !body["new_mapped_lab"].is_object()) {
+        return ServiceResult::Error(400, "invalid_request", "Missing new_mapped_lab");
+    }
+
+    std::vector<int> region_ids;
+    for (const auto& v : body["region_ids"]) { region_ids.push_back(v.get<int>()); }
+
+    std::vector<uint8_t> new_recipe;
+    for (const auto& v : body["new_recipe"]) { new_recipe.push_back(v.get<uint8_t>()); }
+
+    const auto& lab_obj = body["new_mapped_lab"];
+    ChromaPrint3D::Lab new_mapped(lab_obj.value("L", 0.0f), lab_obj.value("a", 0.0f),
+                                  lab_obj.value("b", 0.0f));
+
+    bool new_from_model = body.value("from_model", false);
+
+    int status          = 500;
+    std::string message = "Unknown error";
+    json out_summary;
+    bool ok = tasks_.ReplaceRecipe(owner, task_id, region_ids, new_recipe, new_mapped,
+                                   new_from_model, status, message, out_summary);
+    if (!ok) return ServiceResult::Error(status, "replace_failed", message);
+    return ServiceResult::Success(200, std::move(out_summary));
+}
+
+ServiceResult ServerFacade::RecipeEditorGenerate(const std::string& owner,
+                                                 const std::string& task_id) {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+
+    const ChromaPrint3D::ModelPackage* model_pack = nullptr;
+    if (data_.ModelPack().has_value()) { model_pack = &(*data_.ModelPack()); }
+
+    auto submit = tasks_.SubmitGenerateModel(owner, task_id, model_pack);
+    if (!submit.ok) {
+        return ServiceResult::Error(submit.status_code, "generate_failed", submit.message);
+    }
+    return ServiceResult::Success(202, {{"task_id", submit.task_id}});
+}
+
 ServiceResult ServerFacade::ListTasks(const std::string& owner) const {
     if (owner.empty()) return ServiceResult::Success(200, {{"tasks", json::array()}});
     json tasks = json::array();
@@ -879,8 +1003,10 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
     j["error"] = task.error.empty() ? json(nullptr) : json(task.error);
 
     if (auto cp = std::get_if<ConvertTaskPayload>(&task.payload)) {
-        j["stage"]    = ConvertStageToString(cp->stage);
-        j["progress"] = cp->progress;
+        j["stage"]      = ConvertStageToString(cp->stage);
+        j["progress"]   = cp->progress;
+        j["match_only"] = cp->match_only;
+        if (!cp->generate_error.empty()) { j["generate_error"] = cp->generate_error; }
         if (task.status == RuntimeTaskStatus::Completed) {
             j["result"] = {
                 {"input_width", cp->result.input_width},
@@ -898,6 +1024,7 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
                 {"has_3mf", !cp->result.model_3mf.empty() || cp->has_3mf_on_disk},
                 {"has_preview", !cp->result.preview_png.empty()},
                 {"has_source_mask", !cp->result.source_mask_png.empty()},
+                {"has_region_map", !cp->raster_region_map_binary.empty()},
                 {"layer_previews", LayerPreviewsToJson(cp->result.layer_previews)},
             };
         } else {
