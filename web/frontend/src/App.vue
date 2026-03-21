@@ -33,6 +33,7 @@ import CalibrationPanel from './components/CalibrationPanel.vue'
 import Calibration8ColorPanel from './components/Calibration8ColorPanel.vue'
 import MattingPanel from './components/MattingPanel.vue'
 import VectorizePanel from './components/VectorizePanel.vue'
+import ColorDBBuildSection from './components/calibration/ColorDBBuildSection.vue'
 import ColorDBUploadSection from './components/calibration/ColorDBUploadSection.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
 import CheckUpdateLink from './components/CheckUpdateLink.vue'
@@ -88,7 +89,11 @@ if (activeTab.value === 'matting' || activeTab.value === 'vectorize') {
   activePreprocessTab.value = activeTab.value
   activeTab.value = 'preprocess'
 }
-if (activeTab.value === 'calibration' || activeTab.value === 'calibration-8color') {
+if (
+  activeTab.value === 'calibration' ||
+  activeTab.value === 'calibration-8color' ||
+  activeTab.value === 'colordb-build'
+) {
   activeCalibrationTab.value = activeTab.value
   activeTab.value = 'calibration-tools'
 }
@@ -104,6 +109,10 @@ function handleColorDBUpdated() {
 
 function goToColorDBUpload() {
   activeTab.value = 'colordb-upload'
+}
+
+function goToColorDBBuild() {
+  activeCalibrationTab.value = 'colordb-build'
 }
 
 function goToConvert() {
@@ -273,7 +282,7 @@ function toggleLocale() {
                       display-directive="show"
                     >
                       <div class="nested-tab-pane-content">
-                        <CalibrationPanel @colordb-updated="handleColorDBUpdated" />
+                        <CalibrationPanel @go-colordb-build="goToColorDBBuild" />
                       </div>
                     </NTabPane>
                     <NTabPane
@@ -282,7 +291,21 @@ function toggleLocale() {
                       display-directive="show"
                     >
                       <div class="nested-tab-pane-content">
-                        <Calibration8ColorPanel @colordb-updated="handleColorDBUpdated" />
+                        <Calibration8ColorPanel @go-colordb-build="goToColorDBBuild" />
+                      </div>
+                    </NTabPane>
+                    <NTabPane
+                      name="colordb-build"
+                      :tab="t('app.tabs.colordbBuild')"
+                      display-directive="show"
+                    >
+                      <div class="nested-tab-pane-content">
+                        <NSpace vertical :size="20" class="calibration-layout">
+                          <ColorDBBuildSection
+                            :tips="t('colordb.build.standaloneTip')"
+                            @colordb-updated="handleColorDBUpdated"
+                          />
+                        </NSpace>
                       </div>
                     </NTabPane>
                   </NTabs>

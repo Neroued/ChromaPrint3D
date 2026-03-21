@@ -1,5 +1,6 @@
 import type {
-  ColorDBInfo,
+  CalibrationLocateResult,
+  ColorDBBuildResult,
   Generate8ColorBoardRequest,
   GenerateBoardRequest,
   GenerateBoardResponse,
@@ -32,12 +33,33 @@ export function getBoardMetaPath(boardId: string): string {
   return `/api/v1/calibration/boards/${boardId}/meta`
 }
 
-export async function buildColorDB(image: File, meta: File, name: string): Promise<ColorDBInfo> {
+export async function locateCalibrationBoard(
+  image: File,
+  meta: File,
+): Promise<CalibrationLocateResult> {
+  const formData = new FormData()
+  formData.append('image', image)
+  formData.append('meta', meta)
+  return request<CalibrationLocateResult>('/api/v1/calibration/locate', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export async function buildColorDB(
+  image: File,
+  meta: File,
+  name: string,
+  corners?: [number, number][],
+): Promise<ColorDBBuildResult> {
   const formData = new FormData()
   formData.append('image', image)
   formData.append('meta', meta)
   formData.append('name', name)
-  return request<ColorDBInfo>('/api/v1/calibration/colordb', {
+  if (corners) {
+    formData.append('corners', JSON.stringify(corners))
+  }
+  return request<ColorDBBuildResult>('/api/v1/calibration/colordb', {
     method: 'POST',
     body: formData,
   })

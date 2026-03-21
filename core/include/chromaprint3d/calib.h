@@ -4,6 +4,7 @@
 #include "color_db.h"
 #include "mesh.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -158,9 +159,25 @@ BuildResultFromMeshes(const CalibrationBoardMeshes& cached, const std::vector<Ch
                       const SlicerPreset& preset,
                       FaceOrientation face_orientation = FaceOrientation::FaceUp);
 
+/// Result of calibration board location (fiducial center positions in image coordinates).
+struct CalibrationLocateResult {
+    std::array<std::array<float, 2>, 4> corners; ///< TL, TR, BR, BL fiducial centers.
+    int image_width  = 0;
+    int image_height = 0;
+};
+
+/// Locate calibration board fiducials in the image, returning corner positions.
+CalibrationLocateResult LocateCalibrationBoard(const std::vector<uint8_t>& image_buffer,
+                                               const CalibrationBoardMeta& meta);
+
 ColorDB GenColorDBFromImage(const std::string& image_path, const CalibrationBoardMeta& meta);
 ColorDB GenColorDBFromImage(const std::string& image_path, const std::string& json_path);
 ColorDB GenColorDBFromBuffer(const std::vector<uint8_t>& image_buffer,
                              const CalibrationBoardMeta& meta);
+
+/// Build ColorDB using caller-supplied corner positions (skipping auto-detection).
+ColorDB GenColorDBFromBuffer(const std::vector<uint8_t>& image_buffer,
+                             const CalibrationBoardMeta& meta,
+                             const std::array<std::array<float, 2>, 4>& corners);
 
 } // namespace ChromaPrint3D

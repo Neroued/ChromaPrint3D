@@ -73,6 +73,8 @@ public:
                   drogon::Get, drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::DownloadBoardMeta, "/api/v1/calibration/boards/{1}/meta",
                   drogon::Get, drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::LocateBoard, "/api/v1/calibration/locate", drogon::Post,
+                  drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::BuildColorDb, "/api/v1/calibration/colordb", drogon::Post,
                   drogon::Options);
     METHOD_LIST_END
@@ -123,6 +125,7 @@ public:
     void DownloadBoardModel(const drogon::HttpRequestPtr& req, Callback&& cb,
                             const std::string& id);
     void DownloadBoardMeta(const drogon::HttpRequestPtr& req, Callback&& cb, const std::string& id);
+    void LocateBoard(const drogon::HttpRequestPtr& req, Callback&& cb);
     void BuildColorDb(const drogon::HttpRequestPtr& req, Callback&& cb);
 
 private:

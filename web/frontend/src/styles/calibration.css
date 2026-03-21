@@ -95,6 +95,10 @@
   color: var(--n-text-color-3);
 }
 
+.calibration-meta-summary {
+  padding: 4px 0;
+}
+
 .calibration-error-alert {
   margin-top: 8px;
   white-space: pre-wrap;

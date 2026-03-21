@@ -430,77 +430,83 @@ static std::vector<cv::Point2f> RotatedVectors(const cv::Point2f& v) {
     };
 }
 
-} // namespace
+struct BoardGeometry {
+    int board_w  = 0;
+    int board_h  = 0;
+    int color_w  = 0;
+    int color_h  = 0;
+    int margin   = 0;
+    int tile     = 0;
+    int gap      = 0;
+    int scale    = 1;
+    float offset = 0.0f;
+    float main_r = 0.0f;
+    float tag_r  = 0.0f;
+    cv::Point2f tag_offset;
+    std::vector<cv::Point2f> canonical_main;
+};
 
-cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta) {
-    if (input.empty()) {
-        throw InputError("Input image is empty; please check the uploaded image");
-    }
-    cv::Mat bgr = detail::EnsureBgr(input);
-    if (bgr.empty()) {
+static BoardGeometry ComputeBoardGeometry(const CalibrationBoardMeta& meta) {
+    BoardGeometry g;
+    if (meta.grid_rows <= 0 || meta.grid_cols <= 0) {
         throw InputError(
-            "Image format conversion failed; ensure the uploaded file is a valid RGB/BGR image");
+            "Invalid grid dimensions in meta (grid_rows=" + std::to_string(meta.grid_rows) +
+            ", grid_cols=" + std::to_string(meta.grid_cols) + "); check the meta JSON file");
     }
 
-#ifdef DEBUG_DIR
-    SaveDebugImage("00_input.png", bgr);
-#endif
+    g.scale = meta.config.layout.resolution_scale;
+    if (g.scale <= 0) { g.scale = 1; }
 
-    const int grid_rows = meta.grid_rows;
-    const int grid_cols = meta.grid_cols;
-    if (grid_rows <= 0 || grid_cols <= 0) {
-        throw InputError("Invalid grid dimensions in meta (grid_rows=" + std::to_string(grid_rows) +
-                         ", grid_cols=" + std::to_string(grid_cols) +
-                         "); check the meta JSON file");
-    }
-
-    int scale = meta.config.layout.resolution_scale;
-    if (scale <= 0) { scale = 1; }
-
-    const int tile   = meta.config.layout.tile_factor * scale;
-    const int gap    = meta.config.layout.gap_factor * scale;
-    const int margin = meta.config.layout.margin_factor * scale;
-    if (tile <= 0) { throw InputError("Invalid tile_factor in meta; check the meta JSON file"); }
-    if (gap < 0 || margin < 0) {
+    g.tile   = meta.config.layout.tile_factor * g.scale;
+    g.gap    = meta.config.layout.gap_factor * g.scale;
+    g.margin = meta.config.layout.margin_factor * g.scale;
+    if (g.tile <= 0) { throw InputError("Invalid tile_factor in meta; check the meta JSON file"); }
+    if (g.gap < 0 || g.margin < 0) {
         throw InputError("Invalid gap_factor or margin_factor in meta; check the meta JSON file");
     }
 
-    const int color_w = grid_cols * tile + (grid_cols - 1) * gap;
-    const int color_h = grid_rows * tile + (grid_rows - 1) * gap;
-    const int board_w = color_w + 2 * margin;
-    const int board_h = color_h + 2 * margin;
-    if (board_w <= 0 || board_h <= 0) {
+    g.color_w = meta.grid_cols * g.tile + (meta.grid_cols - 1) * g.gap;
+    g.color_h = meta.grid_rows * g.tile + (meta.grid_rows - 1) * g.gap;
+    g.board_w = g.color_w + 2 * g.margin;
+    g.board_h = g.color_h + 2 * g.margin;
+    if (g.board_w <= 0 || g.board_h <= 0) {
         throw InputError("Computed board dimensions are invalid; check the meta JSON file");
     }
 
+    g.offset     = static_cast<float>(meta.config.layout.fiducial.offset_factor * g.scale);
+    float main_d = static_cast<float>(meta.config.layout.fiducial.main_d_factor * g.scale);
+    float tag_d  = static_cast<float>(meta.config.layout.fiducial.tag_d_factor * g.scale);
+    g.main_r     = main_d * 0.5f;
+    g.tag_r      = tag_d * 0.5f;
+
+    g.canonical_main = {
+        cv::Point2f(g.offset, g.offset),
+        cv::Point2f(static_cast<float>(g.board_w) - g.offset, g.offset),
+        cv::Point2f(static_cast<float>(g.board_w) - g.offset,
+                    static_cast<float>(g.board_h) - g.offset),
+        cv::Point2f(g.offset, static_cast<float>(g.board_h) - g.offset),
+    };
+
+    g.tag_offset =
+        cv::Point2f(static_cast<float>(meta.config.layout.fiducial.tag_dx_factor * g.scale),
+                    static_cast<float>(meta.config.layout.fiducial.tag_dy_factor * g.scale));
+
+    return g;
+}
+
+static std::vector<cv::Point2f> DetectFiducials(const cv::Mat& bgr, const BoardGeometry& geom) {
     double coarse_scale                     = 1.0;
     std::vector<cv::Point2f> coarse_corners = CoarseLocateBoard(bgr, coarse_scale);
 
     std::vector<cv::Point2f> board_corners = {
         cv::Point2f(0.0f, 0.0f),
-        cv::Point2f(static_cast<float>(board_w - 1), 0.0f),
-        cv::Point2f(static_cast<float>(board_w - 1), static_cast<float>(board_h - 1)),
-        cv::Point2f(0.0f, static_cast<float>(board_h - 1)),
+        cv::Point2f(static_cast<float>(geom.board_w - 1), 0.0f),
+        cv::Point2f(static_cast<float>(geom.board_w - 1), static_cast<float>(geom.board_h - 1)),
+        cv::Point2f(0.0f, static_cast<float>(geom.board_h - 1)),
     };
 
     cv::Mat H_img_to_board = cv::getPerspectiveTransform(coarse_corners, board_corners);
     cv::Mat H_board_to_img = H_img_to_board.inv();
-
-    const float offset = static_cast<float>(meta.config.layout.fiducial.offset_factor * scale);
-    const float main_d = static_cast<float>(meta.config.layout.fiducial.main_d_factor * scale);
-    const float tag_d  = static_cast<float>(meta.config.layout.fiducial.tag_d_factor * scale);
-    const float main_r = main_d * 0.5f;
-    const float tag_r  = tag_d * 0.5f;
-
-    const std::vector<cv::Point2f> canonical_main = {
-        cv::Point2f(offset, offset),
-        cv::Point2f(static_cast<float>(board_w) - offset, offset),
-        cv::Point2f(static_cast<float>(board_w) - offset, static_cast<float>(board_h) - offset),
-        cv::Point2f(offset, static_cast<float>(board_h) - offset),
-    };
-    const cv::Point2f tag_offset(
-        static_cast<float>(meta.config.layout.fiducial.tag_dx_factor * scale),
-        static_cast<float>(meta.config.layout.fiducial.tag_dy_factor * scale));
 
     cv::Mat gray;
     cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
@@ -509,10 +515,10 @@ cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoar
     std::vector<float> main_radii;
     main_centers.reserve(4);
     main_radii.reserve(4);
-    for (size_t i = 0; i < canonical_main.size(); ++i) {
-        const auto& canonical = canonical_main[i];
+    for (size_t i = 0; i < geom.canonical_main.size(); ++i) {
+        const auto& canonical = geom.canonical_main[i];
         cv::Point2f guess     = ProjectPoint(H_board_to_img, canonical);
-        float expected_r      = EstimateRadiusPx(H_board_to_img, canonical, main_r);
+        float expected_r      = EstimateRadiusPx(H_board_to_img, canonical, geom.main_r);
         float search_r        = std::max(10.0f, expected_r * 2.5f);
 
         int x0 = std::max(0, static_cast<int>(std::floor(guess.x - search_r)));
@@ -543,21 +549,21 @@ cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoar
 
     CircleResult tag_circle;
     float best_tag_score   = std::numeric_limits<float>::infinity();
-    const auto tag_offsets = RotatedVectors(tag_offset);
+    const auto tag_offsets = RotatedVectors(geom.tag_offset);
 
-    for (size_t corner_idx = 0; corner_idx < canonical_main.size(); ++corner_idx) {
-        const cv::Point2f& corner = canonical_main[corner_idx];
+    for (size_t corner_idx = 0; corner_idx < geom.canonical_main.size(); ++corner_idx) {
+        const cv::Point2f& corner = geom.canonical_main[corner_idx];
         for (size_t rot_idx = 0; rot_idx < tag_offsets.size(); ++rot_idx) {
             const cv::Point2f& v  = tag_offsets[rot_idx];
             cv::Point2f candidate = corner + v;
             if (candidate.x < 0.0f || candidate.y < 0.0f ||
-                candidate.x > static_cast<float>(board_w) ||
-                candidate.y > static_cast<float>(board_h)) {
+                candidate.x > static_cast<float>(geom.board_w) ||
+                candidate.y > static_cast<float>(geom.board_h)) {
                 continue;
             }
 
             cv::Point2f guess = ProjectPoint(H_board_to_img, candidate);
-            float expected_r  = EstimateRadiusPx(H_board_to_img, candidate, tag_r);
+            float expected_r  = EstimateRadiusPx(H_board_to_img, candidate, geom.tag_r);
             float search_r    = std::max(10.0f, expected_r * 2.5f);
             int tx0           = std::max(0, static_cast<int>(std::floor(guess.x - search_r)));
             int ty0           = std::max(0, static_cast<int>(std::floor(guess.y - search_r)));
@@ -586,7 +592,8 @@ cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoar
 
     if (!tag_circle.ok) {
         throw InputError(
-            "Failed to detect the tag fiducial hole (the small hole indicating board orientation). "
+            "Failed to detect the tag fiducial hole (the small hole indicating board "
+            "orientation). "
             "Ensure all four corners are fully visible and the photo matches the meta file");
     }
 
@@ -602,29 +609,34 @@ cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoar
     SaveDebugImage("05_holes.png", holes_vis);
 #endif
 
-    std::vector<cv::Point2f> ordered_main = OrderMainByTag(main_centers, tag_circle.center);
+    return OrderMainByTag(main_centers, tag_circle.center);
+}
 
-    std::vector<cv::Point2f> canonical_main_ordered = {
-        cv::Point2f(offset, offset),
-        cv::Point2f(static_cast<float>(board_w) - offset, offset),
-        cv::Point2f(static_cast<float>(board_w) - offset, static_cast<float>(board_h) - offset),
-        cv::Point2f(offset, static_cast<float>(board_h) - offset),
+static cv::Mat ExtractColorRegion(const cv::Mat& bgr, const BoardGeometry& geom,
+                                  const std::vector<cv::Point2f>& corners) {
+    std::vector<cv::Point2f> canonical = {
+        cv::Point2f(geom.offset, geom.offset),
+        cv::Point2f(static_cast<float>(geom.board_w) - geom.offset, geom.offset),
+        cv::Point2f(static_cast<float>(geom.board_w) - geom.offset,
+                    static_cast<float>(geom.board_h) - geom.offset),
+        cv::Point2f(geom.offset, static_cast<float>(geom.board_h) - geom.offset),
     };
 
-    H_img_to_board = cv::getPerspectiveTransform(ordered_main, canonical_main_ordered);
+    cv::Mat H = cv::getPerspectiveTransform(corners, canonical);
 
     cv::Mat board;
-    cv::warpPerspective(bgr, board, H_img_to_board, cv::Size(board_w, board_h), cv::INTER_LINEAR,
+    cv::warpPerspective(bgr, board, H, cv::Size(geom.board_w, geom.board_h), cv::INTER_LINEAR,
                         cv::BORDER_REPLICATE);
 
 #ifdef DEBUG_DIR
     SaveDebugImage("06_warped_board.png", board);
 #endif
 
-    if (margin < 0 || margin + color_w > board.cols || margin + color_h > board.rows) {
+    if (geom.margin < 0 || geom.margin + geom.color_w > board.cols ||
+        geom.margin + geom.color_h > board.rows) {
         throw InputError("Failed to extract color region: computed area exceeds image bounds");
     }
-    cv::Rect color_roi(margin, margin, color_w, color_h);
+    cv::Rect color_roi(geom.margin, geom.margin, geom.color_w, geom.color_h);
     cv::Mat color = board(color_roi).clone();
 
 #ifdef DEBUG_DIR
@@ -632,6 +644,69 @@ cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoar
 #endif
 
     return color;
+}
+
+static cv::Mat EnsureBgrInput(const cv::Mat& input) {
+    if (input.empty()) {
+        throw InputError("Input image is empty; please check the uploaded image");
+    }
+    cv::Mat bgr = detail::EnsureBgr(input);
+    if (bgr.empty()) {
+        throw InputError(
+            "Image format conversion failed; ensure the uploaded file is a valid RGB/BGR image");
+    }
+#ifdef DEBUG_DIR
+    SaveDebugImage("00_input.png", bgr);
+#endif
+    return bgr;
+}
+
+} // namespace
+
+cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta) {
+    cv::Mat bgr     = EnsureBgrInput(input);
+    BoardGeometry g = ComputeBoardGeometry(meta);
+    auto corners    = DetectFiducials(bgr, g);
+    return ExtractColorRegion(bgr, g, corners);
+}
+
+cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta,
+                                     const std::array<std::array<float, 2>, 4>& corners) {
+    cv::Mat bgr     = EnsureBgrInput(input);
+    BoardGeometry g = ComputeBoardGeometry(meta);
+    std::vector<cv::Point2f> pts;
+    pts.reserve(4);
+    for (const auto& c : corners) { pts.emplace_back(c[0], c[1]); }
+    return ExtractColorRegion(bgr, g, pts);
+}
+
+CalibrationLocateResult LocateCalibrationBoard(const cv::Mat& input,
+                                               const CalibrationBoardMeta& meta) {
+    cv::Mat bgr     = EnsureBgrInput(input);
+    BoardGeometry g = ComputeBoardGeometry(meta);
+    auto ordered    = DetectFiducials(bgr, g);
+
+    CalibrationLocateResult result;
+    for (size_t i = 0; i < 4; ++i) { result.corners[i] = {ordered[i].x, ordered[i].y}; }
+    result.image_width  = bgr.cols;
+    result.image_height = bgr.rows;
+    return result;
+}
+
+CalibrationLocateResult LocateCalibrationBoard(const std::vector<uint8_t>& image_buffer,
+                                               const CalibrationBoardMeta& meta) {
+    if (image_buffer.empty()) { throw InputError("Uploaded image data is empty"); }
+    cv::Mat input;
+    try {
+        input = detail::LoadImageIcc(image_buffer.data(), image_buffer.size());
+    } catch (const std::exception& e) {
+        throw IOError(std::string("Failed to decode uploaded image: ") + e.what());
+    }
+    if (input.empty()) {
+        throw IOError("Failed to decode uploaded image; ensure the file is a valid image format "
+                      "(JPEG/PNG, etc.)");
+    }
+    return LocateCalibrationBoard(input, meta);
 }
 
 cv::Mat LocateCalibrationColorRegion(const std::string& image_path,

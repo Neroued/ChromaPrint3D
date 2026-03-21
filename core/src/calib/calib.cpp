@@ -25,6 +25,8 @@ namespace ChromaPrint3D {
 cv::Mat LocateCalibrationColorRegion(const std::string& image_path,
                                      const CalibrationBoardMeta& meta);
 cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta);
+cv::Mat LocateCalibrationColorRegion(const cv::Mat& input, const CalibrationBoardMeta& meta,
+                                     const std::array<std::array<float, 2>, 4>& corners);
 
 using nlohmann::json;
 
@@ -867,6 +869,24 @@ ColorDB GenColorDBFromBuffer(const std::vector<uint8_t>& image_buffer,
                       "(JPEG/PNG, etc.)");
     }
     cv::Mat color_region = LocateCalibrationColorRegion(input, meta);
+    return BuildColorDBFromColorRegion(color_region, meta);
+}
+
+ColorDB GenColorDBFromBuffer(const std::vector<uint8_t>& image_buffer,
+                             const CalibrationBoardMeta& meta,
+                             const std::array<std::array<float, 2>, 4>& corners) {
+    if (image_buffer.empty()) { throw InputError("Uploaded image data is empty"); }
+    cv::Mat input;
+    try {
+        input = detail::LoadImageIcc(image_buffer.data(), image_buffer.size());
+    } catch (const std::exception& e) {
+        throw IOError(std::string("Failed to decode uploaded image: ") + e.what());
+    }
+    if (input.empty()) {
+        throw IOError("Failed to decode uploaded image; ensure the file is a valid image format "
+                      "(JPEG/PNG, etc.)");
+    }
+    cv::Mat color_region = LocateCalibrationColorRegion(input, meta, corners);
     return BuildColorDBFromColorRegion(color_region, meta);
 }
 

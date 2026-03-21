@@ -92,13 +92,16 @@ public:
     ServiceResult Generate8ColorBoard(const nlohmann::json& body);
     ServiceResult DownloadBoardModel(const std::string& board_id, TaskArtifact& out);
     ServiceResult DownloadBoardMeta(const std::string& board_id, TaskArtifact& out);
+    ServiceResult LocateBoard(const std::vector<uint8_t>& image, const std::string& meta_json);
     ServiceResult BuildColorDb(const std::string& owner, const std::vector<uint8_t>& image,
-                               const std::string& meta_json, const std::string& db_name);
+                               const std::string& meta_json, const std::string& db_name,
+                               const std::string& corners_json = "");
 
 private:
     static nlohmann::json ColorDbInfoToJson(const ChromaPrint3D::ColorDB& db,
                                             const std::string& material_type = "",
                                             const std::string& vendor        = "");
+    static nlohmann::json ColorDbBuildResultToJson(const ChromaPrint3D::ColorDB& db);
     static nlohmann::json TaskToJson(const TaskSnapshot& task);
     static const char* ConvertStageToString(ChromaPrint3D::ConvertStage stage);
 

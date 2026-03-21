@@ -170,6 +170,24 @@ export interface ColorDBInfo {
   vendor?: string
 }
 
+// ---- Calibration locate & build result ----
+
+export interface CalibrationLocateResult {
+  corners: [number, number][]
+  image_width: number
+  image_height: number
+}
+
+export interface ColorDBEntry {
+  lab: [number, number, number]
+  hex: string
+  recipe: number[]
+}
+
+export interface ColorDBBuildResult extends ColorDBInfo {
+  entries: ColorDBEntry[]
+}
+
 // ---- Calibration ----
 
 export interface GenerateBoardRequest {

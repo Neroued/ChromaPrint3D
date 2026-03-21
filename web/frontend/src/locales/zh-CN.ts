@@ -63,6 +63,7 @@ export default {
       calibrationTools: '校准工具',
       calibration: '四色及以下模式',
       calibration8color: '八色模式',
+      colordbBuild: '构建 ColorDB',
       colordbUpload: '上传 ColorDB',
     },
     convertEntry: {
@@ -255,6 +256,7 @@ export default {
     generateSuccess: '校准板生成成功',
     generateFailed: '生成失败: {error}',
     currentStep: '当前步骤：第 {step} 步 / 3',
+    goToColorDBBuild: '前往构建 ColorDB',
 
     fourColor: {
       title: '四色校准流程',
@@ -278,12 +280,11 @@ export default {
       exampleAlt: '四色校准板照片示例',
       exampleDesc: '示例为 Red/Yellow/Blue/White 四色校准板照片，请尽量保持均匀光照和清晰边界。',
       step3Title: '步骤 3：构建 ColorDB',
-      step3Tips: '上传照片和匹配的 Meta 文件后，系统会自动构建并添加到当前会话。',
-      step3BuildButton: '构建并添加 ColorDB',
+      step3GoHint:
+        '打印校准板并拍摄清晰照片后，切换到\u201c构建 ColorDB\u201d标签页上传照片与 Meta 文件，完成校准。',
       nextHint: {
         step1: '先确认颜色/材质并生成校准板。',
-        step2: '打印并拍照后，完成第 3 步（构建 ColorDB）。',
-        step3: 'ColorDB 已就绪，可切换到\u201c叠色模型生成\u201d页面开始使用。',
+        step2: '打印并拍照后，前往\u201c构建 ColorDB\u201d标签页完成校准。',
       },
     },
 
@@ -314,13 +315,12 @@ export default {
       keyPointText2:
         '板 1 足以得到较好效果；若追求更完整的色域覆盖，可继续打印板 2 并再构建一个 ColorDB。',
       step3Title: '步骤 3：构建 ColorDB',
-      step3Tips: '你可以为板 1 和板 2 各构建一个 ColorDB，后续在叠色模型生成里组合使用。',
-      step3BuildButton: '构建并添加 ColorDB',
+      step3GoHint:
+        '打印校准板并拍摄照片后，切换到\u201c构建 ColorDB\u201d标签页分别上传每张板的照片与 Meta 文件。',
       boardGenerateSuccess: '校准板 {index} 生成成功',
       nextHint: {
         step1: '建议先生成并打印校准板 1。',
-        step2: '上传与板号匹配的照片 + Meta 文件，构建一个或两个 ColorDB。',
-        step3: 'ColorDB 已就绪，可到\u201c叠色模型生成\u201d页面组合使用。',
+        step2: '打印并拍照后，前往\u201c构建 ColorDB\u201d标签页上传照片与 Meta 文件。',
       },
     },
   },
@@ -526,9 +526,18 @@ export default {
     presetFrom: '当前预设来自',
     openSource: '开源项目',
 
+    meta: {
+      grid: '网格',
+      channels: '通道数',
+      colorLayers: '色层数',
+      readFailed: 'Meta 文件读取失败',
+    },
+
     build: {
       defaultTitle: '构建 ColorDB',
       defaultButtonText: '构建 ColorDB',
+      standaloneTip:
+        '上传校准板照片和配套的 Meta JSON 文件，系统将自动定位并构建 ColorDB。可在「四色」或「八色」标签页生成校准板。',
       uploadPhoto: '上传校准板照片',
       selectImage: '选择图片',
       selectJson: '选择 JSON',
@@ -543,6 +552,7 @@ export default {
       successChannels: '通道数：{channels}',
       successEntries: '条目数：{entries}',
       downloadJson: '下载 ColorDB JSON',
+      buildAnother: '重新构建',
       autoAdded:
         '已自动添加到当前会话的可用数据库列表中，可在\u201c叠色模型生成\u201d页面直接使用。',
       failed: '构建失败',
@@ -550,6 +560,40 @@ export default {
         success: 'ColorDB \u201c{name}\u201d 构建成功，已自动添加到可用数据库',
         failed: '构建失败: {error}',
       },
+    },
+
+    locate: {
+      locateButton: '定位校准板',
+      success:
+        '校准板定位成功，请检查角点与采样点位置是否准确。1 号角点必须位于标签孔（小圆孔）旁，沿顺时针依次为 2、3、4。如不准确，可拖拽十字准线调整。',
+      failedTitle: '定位失败',
+      failed: '校准板定位失败: {error}',
+      backButton: '返回重新上传',
+      dragHint: '拖拽十字准线可手动校正角点位置。1 号点必须在标签孔旁，绿色小点为采样位置',
+      cornerTL: '① 左上（标签孔）',
+      cornerTR: '② 右上',
+      cornerBR: '③ 右下',
+      cornerBL: '④ 左下',
+      samplePoints: '采样点',
+      quadWarning:
+        '角点顺序异常：四边形出现交叉或翻转。请确保 1-2-3-4 按顺时针排列，1 号位于标签孔旁。',
+    },
+
+    result: {
+      title: 'ColorDB 结果总览',
+      name: '名称',
+      channels: '通道数',
+      entries: '配方数',
+      colorLayers: '色层数',
+      paletteLabel: '调色板',
+      hueRed: '红色系',
+      hueOrange: '橙色系',
+      hueYellow: '黄色系',
+      hueGreen: '绿色系',
+      hueCyan: '青色系',
+      hueBlue: '蓝色系',
+      huePurple: '紫色系',
+      hueNeutral: '中性色',
     },
 
     upload: {

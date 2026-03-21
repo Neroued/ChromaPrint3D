@@ -23,6 +23,7 @@ Thumbs.db
 dist/
 *.3mf
 *.jpg
+!web/frontend/public/examples/*.jpg
 *.png
 *.log
 *.svg

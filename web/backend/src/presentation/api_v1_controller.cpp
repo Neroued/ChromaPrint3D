@@ -439,6 +439,24 @@ void ApiV1Controller::DownloadBoardMeta(const drogon::HttpRequestPtr& /*req*/, C
     ReplyBinary(std::move(cb), out);
 }
 
+void ApiV1Controller::LocateBoard(const drogon::HttpRequestPtr& req, Callback&& cb) {
+    drogon::MultiPartParser parser;
+    if (parser.parse(req) != 0) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_multipart", "Invalid multipart form"));
+        return;
+    }
+    auto image = FindUploadFile(parser, "image");
+    auto meta  = FindUploadFile(parser, "meta");
+    if (!image || !meta) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_request", "Missing image/meta upload"));
+        return;
+    }
+    auto result = Facade().LocateBoard(ToBytes(*image), std::string(meta->fileContent()));
+    ReplyJson(std::move(cb), result);
+}
+
 void ApiV1Controller::BuildColorDb(const drogon::HttpRequestPtr& req, Callback&& cb) {
     drogon::MultiPartParser parser;
     if (parser.parse(req) != 0) {
@@ -459,10 +477,11 @@ void ApiV1Controller::BuildColorDb(const drogon::HttpRequestPtr& req, Callback&&
                   ServiceResult::Error(400, "invalid_request", "Missing required field: name"));
         return;
     }
-    bool created = false;
-    auto token   = Facade().EnsureSession(SessionToken(req), &created);
-    auto result =
-        Facade().BuildColorDb(token, ToBytes(*image), std::string(meta->fileContent()), name);
+    auto corners_json = parser.getOptionalParameter<std::string>("corners").value_or("");
+    bool created      = false;
+    auto token        = Facade().EnsureSession(SessionToken(req), &created);
+    auto result = Facade().BuildColorDb(token, ToBytes(*image), std::string(meta->fileContent()),
+                                        name, corners_json);
     ReplyJson(std::move(cb), result, created ? std::optional<std::string>(token) : std::nullopt);
 }
 

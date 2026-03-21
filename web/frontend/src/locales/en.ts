@@ -33,6 +33,7 @@ export default {
       calibrationTools: 'Calibration Tools',
       calibration: '4-Color & Below',
       calibration8color: '8-Color Mode',
+      colordbBuild: 'Build ColorDB',
       colordbUpload: 'Upload ColorDB',
     },
     convertEntry: {
@@ -223,6 +224,7 @@ export default {
     generateSuccess: 'Calibration board generated successfully',
     generateFailed: 'Generation failed: {error}',
     currentStep: 'Current step: Step {step} / 3',
+    goToColorDBBuild: 'Go to Build ColorDB',
 
     fourColor: {
       title: '4-Color Calibration',
@@ -251,13 +253,12 @@ export default {
       exampleDesc:
         'Example of Red/Yellow/Blue/White 4-color board. Ensure even lighting and clear boundaries.',
       step3Title: 'Step 3: Build ColorDB',
-      step3Tips:
-        'Upload a photo and matching Meta file. The system will automatically build and add to the session.',
-      step3BuildButton: 'Build & Add ColorDB',
+      step3GoHint:
+        'After printing the board and taking clear photos, switch to the "Build ColorDB" tab to upload photos and Meta files.',
       nextHint: {
         step1: 'First confirm colors/materials and generate the calibration board.',
-        step2: 'After printing and photographing, complete Step 3 (Build ColorDB).',
-        step3: 'ColorDB is ready. Switch to "Color Model Generation" to start using it.',
+        step2:
+          'After printing and photographing, go to the "Build ColorDB" tab to finish calibration.',
       },
     },
 
@@ -294,14 +295,13 @@ export default {
       keyPointText2:
         'Board 1 alone gives good results. For fuller gamut coverage, print Board 2 and build another ColorDB.',
       step3Title: 'Step 3: Build ColorDB',
-      step3Tips:
-        'You can build one ColorDB for each board and combine them in Color Model Generation.',
-      step3BuildButton: 'Build & Add ColorDB',
+      step3GoHint:
+        'After printing and photographing, switch to the "Build ColorDB" tab to upload photos and Meta for each board.',
       boardGenerateSuccess: 'Board {index} generated successfully',
       nextHint: {
         step1: 'Start by generating and printing Board 1.',
-        step2: 'Upload matching photos + Meta files to build one or two ColorDBs.',
-        step3: 'ColorDB is ready. Go to "Color Model Generation" to combine them.',
+        step2:
+          'After printing and photographing, go to the "Build ColorDB" tab to upload photos and Meta.',
       },
     },
   },
@@ -530,9 +530,18 @@ export default {
     presetFrom: 'Current preset from',
     openSource: 'open-source project',
 
+    meta: {
+      grid: 'Grid',
+      channels: 'Channels',
+      colorLayers: 'Color Layers',
+      readFailed: 'Failed to read meta file',
+    },
+
     build: {
       defaultTitle: 'Build ColorDB',
       defaultButtonText: 'Build ColorDB',
+      standaloneTip:
+        'Upload a calibration board photo and matching Meta JSON file. The system will automatically locate and build the ColorDB. Generate boards in the "4-Color" or "8-Color" tabs.',
       uploadPhoto: 'Upload Calibration Photo',
       selectImage: 'Select Image',
       selectJson: 'Select JSON',
@@ -547,6 +556,7 @@ export default {
       successChannels: 'Channels: {channels}',
       successEntries: 'Entries: {entries}',
       downloadJson: 'Download ColorDB JSON',
+      buildAnother: 'Build Another',
       autoAdded:
         'Automatically added to the session database list. You can use it in "Color Model Generation".',
       failed: 'Build Failed',
@@ -554,6 +564,41 @@ export default {
         success: 'ColorDB "{name}" built successfully and added to available databases',
         failed: 'Build failed: {error}',
       },
+    },
+
+    locate: {
+      locateButton: 'Locate Calibration Board',
+      success:
+        'Calibration board located. Verify that corners and sample points are correct. Corner 1 must be near the tag hole (small orientation hole); corners follow clockwise order 1-2-3-4. Drag the crosshairs to adjust.',
+      failedTitle: 'Location Failed',
+      failed: 'Calibration board location failed: {error}',
+      backButton: 'Back to Upload',
+      dragHint:
+        'Drag the crosshair handles to adjust corner positions. Corner 1 must be near the tag hole. Green dots indicate sample locations.',
+      cornerTL: '① Top-Left (Tag)',
+      cornerTR: '② Top-Right',
+      cornerBR: '③ Bottom-Right',
+      cornerBL: '④ Bottom-Left',
+      samplePoints: 'Sample Points',
+      quadWarning:
+        'Corner order anomaly: the quadrilateral is self-intersecting or flipped. Ensure corners 1-2-3-4 follow clockwise order with corner 1 near the tag hole.',
+    },
+
+    result: {
+      title: 'ColorDB Result Overview',
+      name: 'Name',
+      channels: 'Channels',
+      entries: 'Recipes',
+      colorLayers: 'Color Layers',
+      paletteLabel: 'Palette',
+      hueRed: 'Red',
+      hueOrange: 'Orange',
+      hueYellow: 'Yellow',
+      hueGreen: 'Green',
+      hueCyan: 'Cyan',
+      hueBlue: 'Blue',
+      huePurple: 'Purple',
+      hueNeutral: 'Neutral',
     },
 
     upload: {

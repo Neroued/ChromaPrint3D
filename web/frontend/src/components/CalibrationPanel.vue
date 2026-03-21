@@ -19,7 +19,6 @@ import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../composables/useBlobDownload'
 import { generateBoard, getBoardMetaPath, getBoardModelPath } from '../services/calibrationService'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
-import ColorDBBuildSection from './calibration/ColorDBBuildSection.vue'
 
 type EditablePaletteChannel = PaletteChannel & {
   id: number
@@ -41,7 +40,7 @@ const message = useMessage()
 const { downloadByUrl } = useBlobDownload((error) => message.error(error))
 
 const emit = defineEmits<{
-  (e: 'colordb-updated'): void
+  (e: 'go-colordb-build'): void
 }>()
 
 const nozzleSize = ref<NozzleSize>('n04')
@@ -49,7 +48,6 @@ const faceOrientation = ref<FaceOrientation>('faceup')
 
 const maxChannels = 4
 const minChannels = 2
-const hasReadyColorDB = ref(false)
 const boardId = ref<string | null>(null)
 const generating = ref(false)
 
@@ -61,15 +59,13 @@ const palette = ref<EditablePaletteChannel[]>([
 ])
 
 const currentStep = computed(() => {
-  if (hasReadyColorDB.value) return 3
   if (boardId.value) return 2
   return 1
 })
 
 const nextActionHint = computed(() => {
   if (!boardId.value) return t('calibration.fourColor.nextHint.step1')
-  if (!hasReadyColorDB.value) return t('calibration.fourColor.nextHint.step2')
-  return t('calibration.fourColor.nextHint.step3')
+  return t('calibration.fourColor.nextHint.step2')
 })
 
 function toPaletteRequest(paletteRows: EditablePaletteChannel[]): PaletteChannel[] {
@@ -126,17 +122,19 @@ async function handleGenerate() {
 
 async function download3mf() {
   if (!boardId.value) return
+  const ch = palette.value.length
   await downloadByUrl(
     getBoardModelPath(boardId.value),
-    `calibration-board-${boardId.value.slice(0, 8)}.3mf`,
+    `calibration-board-${ch}ch-${boardId.value.slice(0, 8)}.3mf`,
   )
 }
 
 async function downloadMeta() {
   if (!boardId.value) return
+  const ch = palette.value.length
   await downloadByUrl(
     getBoardMetaPath(boardId.value),
-    `calibration-board-${boardId.value.slice(0, 8)}.json`,
+    `calibration-board-${ch}ch-${boardId.value.slice(0, 8)}-meta.json`,
   )
 }
 
@@ -149,11 +147,6 @@ function handleResetCalibrationParams() {
     createChannel('Red', 'PLA Basic'),
     createChannel('Blue', 'PLA Basic'),
   ]
-}
-
-function handleColorDBUpdated() {
-  hasReadyColorDB.value = true
-  emit('colordb-updated')
 }
 </script>
 
@@ -211,9 +204,6 @@ function handleColorDBUpdated() {
             <NRadioButton value="n04">0.4mm</NRadioButton>
             <NRadioButton value="n02">0.2mm</NRadioButton>
           </NRadioGroup>
-        </div>
-
-        <div class="calibration-preset-row">
           <span class="calibration-preset-label">{{ t('calibration.faceDirection') }}</span>
           <NRadioGroup v-model:value="faceOrientation" size="small">
             <NRadioButton value="faceup">{{ t('calibration.faceUp') }}</NRadioButton>
@@ -287,11 +277,17 @@ function handleColorDBUpdated() {
       </NSpace>
     </NCard>
 
-    <ColorDBBuildSection
-      :title="t('calibration.fourColor.step3Title')"
-      :tips="t('calibration.fourColor.step3Tips')"
-      :build-button-text="t('calibration.fourColor.step3BuildButton')"
-      @colordb-updated="handleColorDBUpdated"
-    />
+    <NCard :title="t('calibration.fourColor.step3Title')" class="calibration-card">
+      <NSpace vertical :size="12">
+        <NAlert type="info" :bordered="false">
+          {{ t('calibration.fourColor.step3GoHint') }}
+        </NAlert>
+        <div class="calibration-actions">
+          <NButton type="primary" @click="emit('go-colordb-build')">
+            {{ t('calibration.goToColorDBBuild') }}
+          </NButton>
+        </div>
+      </NSpace>
+    </NCard>
   </NSpace>
 </template>

@@ -980,9 +980,37 @@ ServiceResult ServerFacade::DownloadBoardMeta(const std::string& board_id, TaskA
     return ServiceResult::Success(200, json::object());
 }
 
+ServiceResult ServerFacade::LocateBoard(const std::vector<uint8_t>& image,
+                                        const std::string& meta_json) {
+    auto valid = ValidateDecodedImage(image);
+    if (!valid.ok) return valid;
+
+    CalibrationBoardMeta meta;
+    try {
+        meta = CalibrationBoardMeta::FromJsonString(meta_json);
+    } catch (const std::exception& e) {
+        return ServiceResult::Error(400, "invalid_meta",
+                                    "Invalid meta JSON: " + std::string(e.what()));
+    }
+
+    try {
+        auto result      = LocateCalibrationBoard(image, meta);
+        json corners_arr = json::array();
+        for (const auto& c : result.corners) { corners_arr.push_back(json::array({c[0], c[1]})); }
+        json out            = json::object();
+        out["corners"]      = std::move(corners_arr);
+        out["image_width"]  = result.image_width;
+        out["image_height"] = result.image_height;
+        return ServiceResult::Success(200, std::move(out));
+    } catch (const std::exception& e) {
+        return ServiceResult::Error(422, "locate_failed", e.what());
+    }
+}
+
 ServiceResult ServerFacade::BuildColorDb(const std::string& owner,
                                          const std::vector<uint8_t>& image,
-                                         const std::string& meta_json, const std::string& db_name) {
+                                         const std::string& meta_json, const std::string& db_name,
+                                         const std::string& corners_json) {
     if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
     auto valid = ValidateDecodedImage(image);
     if (!valid.ok) return valid;
@@ -1002,14 +1030,38 @@ ServiceResult ServerFacade::BuildColorDb(const std::string& owner,
                                     "Invalid meta JSON: " + std::string(e.what()));
     }
 
+    std::optional<std::array<std::array<float, 2>, 4>> corners_opt;
+    if (!corners_json.empty()) {
+        try {
+            auto j = json::parse(corners_json);
+            if (!j.is_array() || j.size() != 4) {
+                return ServiceResult::Error(400, "invalid_corners",
+                                            "corners must be an array of 4 [x,y] pairs");
+            }
+            std::array<std::array<float, 2>, 4> pts;
+            for (size_t i = 0; i < 4; ++i) {
+                if (!j[i].is_array() || j[i].size() != 2) {
+                    return ServiceResult::Error(400, "invalid_corners",
+                                                "Each corner must be [x, y]");
+                }
+                pts[i] = {j[i][0].get<float>(), j[i][1].get<float>()};
+            }
+            corners_opt = pts;
+        } catch (const json::exception& e) {
+            return ServiceResult::Error(400, "invalid_corners",
+                                        "Failed to parse corners: " + std::string(e.what()));
+        }
+    }
+
     try {
-        auto db = GenColorDBFromBuffer(image, meta);
-        db.name = db_name;
+        ColorDB db = corners_opt ? GenColorDBFromBuffer(image, meta, *corners_opt)
+                                 : GenColorDBFromBuffer(image, meta);
+        db.name    = db_name;
         std::string err;
         if (!sessions_.PutSessionDb(owner, db, &err)) {
             return ServiceResult::Error(429, "session_limit", err);
         }
-        auto out      = ColorDbInfoToJson(db);
+        auto out      = ColorDbBuildResultToJson(db);
         out["source"] = "session";
         return ServiceResult::Success(200, std::move(out));
     } catch (const std::exception& e) {
@@ -1019,9 +1071,18 @@ ServiceResult ServerFacade::BuildColorDb(const std::string& owner,
 
 json ServerFacade::ColorDbInfoToJson(const ColorDB& db, const std::string& material_type,
                                      const std::string& vendor) {
-    json palette = json::array();
-    for (const auto& ch : db.palette) {
-        palette.push_back({{"color", ch.color}, {"material", ch.material}});
+    static const auto builtin_fil = FilamentConfig::BuiltinDefaults();
+    json palette                  = json::array();
+    for (size_t i = 0; i < db.palette.size(); ++i) {
+        const auto& ch = db.palette[i];
+        json entry     = {{"color", ch.color}, {"material", ch.material}};
+        if (!ch.hex_color.empty()) {
+            entry["hex_color"] = ch.hex_color;
+        } else {
+            auto resolved = builtin_fil.ResolveHexColor(ch.color, static_cast<int>(i));
+            if (!resolved.empty()) entry["hex_color"] = resolved;
+        }
+        palette.push_back(std::move(entry));
     }
     return {
         {"name", db.name},
@@ -1035,6 +1096,30 @@ json ServerFacade::ColorDbInfoToJson(const ColorDB& db, const std::string& mater
         {"vendor", vendor},
         {"palette", std::move(palette)},
     };
+}
+
+json ServerFacade::ColorDbBuildResultToJson(const ColorDB& db) {
+    auto out = ColorDbInfoToJson(db);
+
+    json entries = json::array();
+    for (const auto& entry : db.entries) {
+        ChromaPrint3D::Rgb rgb = entry.lab.ToRgb();
+        uint8_t r8 = 0, g8 = 0, b8 = 0;
+        rgb.ToRgb255(r8, g8, b8);
+        char hex_buf[8];
+        std::snprintf(hex_buf, sizeof(hex_buf), "#%02X%02X%02X", r8, g8, b8);
+
+        json recipe_arr = json::array();
+        for (uint8_t v : entry.recipe) { recipe_arr.push_back(static_cast<int>(v)); }
+
+        entries.push_back({
+            {"lab", {entry.lab.x, entry.lab.y, entry.lab.z}},
+            {"hex", std::string(hex_buf)},
+            {"recipe", std::move(recipe_arr)},
+        });
+    }
+    out["entries"] = std::move(entries);
+    return out;
 }
 
 json ServerFacade::TaskToJson(const TaskSnapshot& task) {
