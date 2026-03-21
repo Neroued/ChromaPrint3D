@@ -1,6 +1,6 @@
 {
-  "version": "1.2.7",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.7",
-  "changelog": "- 新增版本更新提醒，有新版本时自动通知\n- 矢量化处理性能优化",
-  "published_at": "2026-03-17"
+  "version": "1.2.8",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.8",
+  "changelog": "- 新增配方编辑器：支持查看和调整图像中的颜色配方，修改后自动提醒重新生成\n- 校准工具全面升级：上传照片后即可预览定位效果，支持手动微调角点位置\n- 校准结果按色系分组展示，配方一目了然\n- 修复校准配方颜色显示为灰色的问题\n- 自动配色分析更准确，首次使用即为最佳效果\n- 3MF 模型文件生成更稳定，避免导出损坏\n- 下载文件名自动标注通道数，更易识别和管理",
+  "published_at": "2026-03-21"
 }
