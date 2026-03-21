@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <string>
 #include <unordered_set>
 
@@ -23,11 +24,12 @@ std::string RecipeToKey(const std::vector<uint8_t>& recipe) {
 }
 
 float ComputeHueDiff(const Lab& a, const Lab& b) {
-    const float ha = std::atan2(a.b(), a.a());
-    const float hb = std::atan2(b.b(), b.a());
-    float diff     = std::abs(ha - hb);
-    if (diff > static_cast<float>(M_PI)) { diff = 2.0f * static_cast<float>(M_PI) - diff; }
-    return diff * (180.0f / static_cast<float>(M_PI));
+    const float ha      = std::atan2(a.b(), a.a());
+    const float hb      = std::atan2(b.b(), b.a());
+    constexpr float kPi = std::numbers::pi_v<float>;
+    float diff          = std::abs(ha - hb);
+    if (diff > kPi) { diff = 2.0f * kPi - diff; }
+    return diff * (180.0f / kPi);
 }
 
 } // namespace
