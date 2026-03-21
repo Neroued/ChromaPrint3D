@@ -1,22 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  NCard,
-  NButton,
-  NSpace,
-  NText,
-  NAlert,
-  NSwitch,
-  NTooltip,
-  useMessage,
-} from 'naive-ui'
-import type {
-  RecipeEditorSummary,
-  RecipeCandidate,
-  LabColor,
-  RecipeInfo,
-} from '../../types'
+import { NCard, NButton, NSpace, NText, NAlert, NSwitch, NTooltip, useMessage } from 'naive-ui'
+import type { RecipeEditorSummary, RecipeCandidate, LabColor, RecipeInfo } from '../../types'
 import {
   fetchRecipeEditorSummary,
   replaceRecipe,
@@ -277,8 +263,10 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
   replacing.value = true
   try {
     const regionIds = Array.from(selectedRegionIds.value)
-    const oldRecipeIndex = selectedRecipeIndex.value
-    const oldRecipe = { ...summary.value.unique_recipes[oldRecipeIndex] }
+    const oldRecipeIndex = selectedRecipeIndex.value!
+    const srcRecipe = summary.value.unique_recipes[oldRecipeIndex]
+    if (!srcRecipe) return
+    const oldRecipe: RecipeInfo = { ...srcRecipe }
 
     const newSummary = await replaceRecipe(
       props.taskId,

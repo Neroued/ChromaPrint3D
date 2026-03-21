@@ -213,10 +213,7 @@ function toggleLocale() {
                       <ParamPanel />
                     </NGridItem>
                   </NGrid>
-                  <RecipeEditorPanel
-                    v-if="recipeEditorTaskId"
-                    :task-id="recipeEditorTaskId"
-                  />
+                  <RecipeEditorPanel v-if="recipeEditorTaskId" :task-id="recipeEditorTaskId" />
                   <ResultPanel
                     v-if="
                       !recipeEditorTaskId ||

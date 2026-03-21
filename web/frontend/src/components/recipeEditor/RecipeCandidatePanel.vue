@@ -144,7 +144,6 @@ watch(
   { immediate: true, deep: true },
 )
 
-
 function handleSelect(candidate: RecipeCandidate) {
   emit('select', candidate)
 }

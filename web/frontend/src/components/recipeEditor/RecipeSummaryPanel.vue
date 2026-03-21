@@ -77,31 +77,31 @@ watch(
     <div class="recipe-summary-scroll-wrapper">
       <NScrollbar>
         <div ref="listRef" class="recipe-summary-list">
-        <div
-          v-for="row in recipeRows"
-          :key="row.index"
-          :data-recipe-index="row.index"
-          class="recipe-summary-item"
-          :class="{ 'recipe-summary-item--selected': selectedRecipeIndex === row.index }"
-          @click="handleClick(row.index)"
-        >
-          <div class="recipe-summary-item__color" :style="{ backgroundColor: row.recipe.hex }" />
-          <div class="recipe-summary-item__info">
-            <RecipeLayerBar :recipe="row.recipe.recipe" :palette="summary.palette" />
-            <span class="recipe-summary-item__meta">
-              {{ t('recipeEditor.summary.regions', { count: row.regionCount }) }}
-              · {{ row.areaPercent }}%
-            </span>
-          </div>
-          <NText
-            v-if="row.recipe.from_model"
-            depth="3"
-            class="recipe-summary-item__badge"
-            type="warning"
+          <div
+            v-for="row in recipeRows"
+            :key="row.index"
+            :data-recipe-index="row.index"
+            class="recipe-summary-item"
+            :class="{ 'recipe-summary-item--selected': selectedRecipeIndex === row.index }"
+            @click="handleClick(row.index)"
           >
-            M
-          </NText>
-        </div>
+            <div class="recipe-summary-item__color" :style="{ backgroundColor: row.recipe.hex }" />
+            <div class="recipe-summary-item__info">
+              <RecipeLayerBar :recipe="row.recipe.recipe" :palette="summary.palette" />
+              <span class="recipe-summary-item__meta">
+                {{ t('recipeEditor.summary.regions', { count: row.regionCount }) }}
+                · {{ row.areaPercent }}%
+              </span>
+            </div>
+            <NText
+              v-if="row.recipe.from_model"
+              depth="3"
+              class="recipe-summary-item__badge"
+              type="warning"
+            >
+              M
+            </NText>
+          </div>
         </div>
       </NScrollbar>
     </div>

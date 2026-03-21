@@ -31,7 +31,7 @@ function redraw() {
 
   for (let i = 0; i < regionIds.length; i++) {
     const rid = regionIds[i]
-    if (rid !== 0xffffffff && selected.has(rid)) continue
+    if (rid !== undefined && rid !== 0xffffffff && selected.has(rid)) continue
     data[i * 4 + 3] = MASK_ALPHA
   }
 
