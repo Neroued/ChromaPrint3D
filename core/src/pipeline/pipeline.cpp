@@ -274,6 +274,8 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     result.model_gate           = model_gate;
     result.input_width          = img.width;
     result.input_height         = img.height;
+    result.generate_preview     = request.generate_preview;
+    result.generate_source_mask = request.generate_source_mask;
 
     if (!request.preloaded_dbs.empty()) {
         result.dbs = std::move(db_span_storage);
@@ -297,11 +299,11 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
     result.input_height = mr.input_height;
 
     // === Generate preview and source mask ===
-    {
+    if (mr.generate_preview) {
         cv::Mat preview_bgra = mr.recipe_map.ToBgraImage();
         if (!preview_bgra.empty()) { result.preview_png = EncodePng(preview_bgra); }
     }
-    {
+    if (mr.generate_source_mask) {
         cv::Mat source_mask = mr.recipe_map.ToSourceMaskImage();
         if (!source_mask.empty()) { result.source_mask_png = EncodePng(source_mask); }
     }

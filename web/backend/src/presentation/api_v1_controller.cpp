@@ -226,6 +226,28 @@ void ApiV1Controller::SubmitConvertVector(const drogon::HttpRequestPtr& req, Cal
     ReplyJson(std::move(cb), result, created ? std::optional<std::string>(token) : std::nullopt);
 }
 
+void ApiV1Controller::SubmitConvertVectorMatchOnly(const drogon::HttpRequestPtr& req,
+                                                   Callback&& cb) {
+    drogon::MultiPartParser parser;
+    if (parser.parse(req) != 0) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_multipart", "Invalid multipart form"));
+        return;
+    }
+    auto svg = FindUploadFile(parser, "svg");
+    if (!svg) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_request", "Missing required field: svg"));
+        return;
+    }
+    auto params  = parser.getOptionalParameter<std::string>("params");
+    bool created = false;
+    auto token   = Facade().EnsureSession(SessionToken(req), &created);
+    auto result =
+        Facade().SubmitConvertVectorMatchOnly(token, ToBytes(*svg), svg->getFileName(), params);
+    ReplyJson(std::move(cb), result, created ? std::optional<std::string>(token) : std::nullopt);
+}
+
 void ApiV1Controller::AnalyzeVectorWidth(const drogon::HttpRequestPtr& req, Callback&& cb) {
     drogon::MultiPartParser parser;
     if (parser.parse(req) != 0) {

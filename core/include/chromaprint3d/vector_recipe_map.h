@@ -38,6 +38,11 @@ struct VectorRecipeMap {
                                  const ModelPackage* model_package = nullptr,
                                  const ModelGateConfig& model_gate = {},
                                  MatchStats* out_stats             = nullptr);
+
+    /// Replace the recipe for specified entries.
+    void ReplaceRecipeForEntries(const std::vector<int>& entry_indices,
+                                 const std::vector<uint8_t>& new_recipe,
+                                 const Lab& new_mapped_color, bool new_from_model);
 };
 
 } // namespace ChromaPrint3D

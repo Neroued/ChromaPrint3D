@@ -35,6 +35,8 @@ public:
                   "/api/v1/convert/raster/match-only", drogon::Post, drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::SubmitConvertVector, "/api/v1/convert/vector", drogon::Post,
                   drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::SubmitConvertVectorMatchOnly,
+                  "/api/v1/convert/vector/match-only", drogon::Post, drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::AnalyzeVectorWidth, "/api/v1/convert/vector/analyze-width",
                   drogon::Post, drogon::Options);
 
@@ -92,6 +94,7 @@ public:
     void SubmitConvertRaster(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitConvertRasterMatchOnly(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitConvertVector(const drogon::HttpRequestPtr& req, Callback&& cb);
+    void SubmitConvertVectorMatchOnly(const drogon::HttpRequestPtr& req, Callback&& cb);
     void AnalyzeVectorWidth(const drogon::HttpRequestPtr& req, Callback&& cb);
 
     void RecipeEditorSummary(const drogon::HttpRequestPtr& req, Callback&& cb,

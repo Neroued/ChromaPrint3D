@@ -172,4 +172,26 @@ std::vector<std::vector<uint8_t>> RenderVectorLayerPreviewPngs(const VectorProcR
     return out;
 }
 
+cv::Mat RenderVectorRegionIds(const VectorProcResult& result, const VectorRecipeMap& recipe_map,
+                              float pixels_per_mm) {
+    if (result.shapes.empty() || pixels_per_mm <= 0.0f) { return {}; }
+
+    int w = std::max(1, static_cast<int>(std::ceil(result.width_mm * pixels_per_mm)));
+    int h = std::max(1, static_cast<int>(std::ceil(result.height_mm * pixels_per_mm)));
+
+    constexpr int32_t kBackground = static_cast<int32_t>(0xFFFFFFFF);
+    cv::Mat ids(h, w, CV_32SC1, cv::Scalar(kBackground));
+
+    for (std::size_t ei = 0; ei < recipe_map.entries.size(); ++ei) {
+        const auto& entry          = recipe_map.entries[ei];
+        const VectorShape& shape   = result.shapes[static_cast<std::size_t>(entry.shape_idx)];
+        const cv::Scalar entry_val = cv::Scalar(static_cast<int32_t>(ei));
+        FillShapeOnImage(ids, shape, entry_val, 0.0f, 0.0f, pixels_per_mm);
+    }
+
+    if (result.y_flipped) { cv::flip(ids, ids, 0); }
+
+    return ids;
+}
+
 } // namespace ChromaPrint3D

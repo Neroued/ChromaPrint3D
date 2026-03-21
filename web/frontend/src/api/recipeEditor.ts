@@ -1,4 +1,10 @@
-import type { ConvertRasterParams, LabColor, RecipeCandidate, RecipeEditorSummary } from '../types'
+import type {
+  ConvertRasterParams,
+  ConvertVectorParams,
+  LabColor,
+  RecipeCandidate,
+  RecipeEditorSummary,
+} from '../types'
 import { request } from './base'
 
 export async function submitConvertRasterMatchOnly(
@@ -9,6 +15,19 @@ export async function submitConvertRasterMatchOnly(
   formData.append('image', file)
   formData.append('params', JSON.stringify(params))
   return request<{ task_id: string }>('/api/v1/convert/raster/match-only', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export async function submitConvertVectorMatchOnly(
+  file: File,
+  params: ConvertVectorParams,
+): Promise<{ task_id: string }> {
+  const formData = new FormData()
+  formData.append('svg', file)
+  formData.append('params', JSON.stringify(params))
+  return request<{ task_id: string }>('/api/v1/convert/vector/match-only', {
     method: 'POST',
     body: formData,
   })
@@ -65,5 +84,5 @@ export async function submitGenerateModel(taskId: string): Promise<{ task_id: st
 }
 
 export function getRegionMapPath(taskId: string): string {
-  return `/api/v1/tasks/${taskId}/artifacts/raster-region-map`
+  return `/api/v1/tasks/${taskId}/artifacts/region-map`
 }

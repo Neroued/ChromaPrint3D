@@ -53,7 +53,7 @@
 - `POST /api/v1/tasks/{id}/recipe-editor/replace`：替换指定区域的配方
 - `POST /api/v1/tasks/{id}/recipe-editor/generate`：异步生成 3MF 模型
 
-`raster-region-map` artifact 通过 `GET /api/v1/tasks/{id}/artifacts/raster-region-map` 下载。
+`region-map` artifact 通过 `GET /api/v1/tasks/{id}/artifacts/region-map` 下载。
 
 约束：仅支持 `dither=None` 的 Raster 流水线，唯一配方数 ≤128。
 

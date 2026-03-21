@@ -46,7 +46,9 @@ struct ConvertTaskPayload {
     std::string generate_error;
     std::optional<ChromaPrint3D::MatchRasterResult> raster_match_state;
     std::optional<ChromaPrint3D::RasterRegionMap> raster_region_map;
-    std::vector<uint8_t> raster_region_map_binary;
+    std::vector<uint8_t> region_map_binary;
+
+    std::optional<ChromaPrint3D::MatchVectorResult> vector_match_state;
 };
 
 struct MattingTaskPayload {
@@ -144,6 +146,9 @@ public:
 
     SubmitResult SubmitConvertRasterMatchOnly(const std::string& owner,
                                               ChromaPrint3D::ConvertRasterRequest req,
+                                              const std::string& input_name);
+    SubmitResult SubmitConvertVectorMatchOnly(const std::string& owner,
+                                              ChromaPrint3D::ConvertVectorRequest req,
                                               const std::string& input_name);
 
     /// Lightweight admission check before expensive decode/preprocess.

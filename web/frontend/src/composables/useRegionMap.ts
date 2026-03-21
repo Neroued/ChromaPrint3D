@@ -3,14 +3,14 @@ import { fetchBlobWithSession } from '../runtime/protectedRequest'
 import { getRegionMapPath } from '../api/recipeEditor'
 import { buildApiUrl } from '../runtime/env'
 
-export interface RasterRegionMapData {
+export interface RegionMapData {
   width: number
   height: number
   regionIds: Uint32Array
 }
 
-export function useRasterRegionMap() {
-  const regionMap = ref<RasterRegionMapData | null>(null) as Ref<RasterRegionMapData | null>
+export function useRegionMap() {
+  const regionMap = ref<RegionMapData | null>(null) as Ref<RegionMapData | null>
   const loading = ref(false)
   const error = ref<string | null>(null)
 

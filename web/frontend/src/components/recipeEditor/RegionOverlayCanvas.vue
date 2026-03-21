@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { RasterRegionMapData } from '../../composables/useRasterRegionMap'
+import type { RegionMapData } from '../../composables/useRegionMap'
 
 const props = defineProps<{
-  regionMap: RasterRegionMapData | null
+  regionMap: RegionMapData | null
   selectedRegionIds: Set<number>
   transform: string
 }>()

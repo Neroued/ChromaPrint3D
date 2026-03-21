@@ -8,6 +8,8 @@
 #include "model_package.h"
 #include "print_profile.h"
 #include "recipe_map.h"
+#include "vector_proc.h"
+#include "vector_recipe_map.h"
 
 #include <cstdint>
 #include <functional>
@@ -170,6 +172,9 @@ struct MatchRasterResult {
     int input_width  = 0;
     int input_height = 0;
 
+    bool generate_preview     = true;
+    bool generate_source_mask = true;
+
     std::size_t EstimateBytes() const;
 };
 
@@ -232,6 +237,41 @@ struct ConvertVectorRequest {
     NozzleSize nozzle_size           = NozzleSize::N04;
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
 };
+
+/// Intermediate result of the vector matching phase (stages 1-3).
+/// Holds all state needed for recipe editing and subsequent model generation.
+struct MatchVectorResult {
+    VectorRecipeMap recipe_map;
+    VectorProcResult proc_result;
+    PrintProfile profile;
+    MatchStats stats;
+
+    float layer_height_mm            = 0.0f;
+    int base_layers                  = 0;
+    bool custom_base_layers          = false;
+    bool double_sided                = false;
+    float transparent_layer_mm       = 0.0f;
+    NozzleSize nozzle_size           = NozzleSize::N04;
+    FaceOrientation face_orientation = FaceOrientation::FaceUp;
+    std::string preset_dir;
+
+    std::vector<ColorDB> dbs;
+    MatchConfig match_config;
+    ModelGateConfig model_gate;
+
+    bool generate_preview     = true;
+    bool generate_source_mask = true;
+
+    std::size_t EstimateBytes() const;
+};
+
+/// Vector matching phase: loads resources, preprocesses SVG, matches colors.
+MatchVectorResult MatchVector(const ConvertVectorRequest& request,
+                              ProgressCallback progress = nullptr);
+
+/// Generates a 3D model from a (possibly edited) MatchVectorResult.
+ConvertResult GenerateVectorModel(MatchVectorResult& match_result,
+                                  ProgressCallback progress = nullptr);
 
 /// Vector conversion: converts an SVG to a 3D model.
 ConvertResult ConvertVector(const ConvertVectorRequest& request,

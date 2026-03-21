@@ -51,8 +51,34 @@ constexpr float kLayerPreviewPixelsPerMm = 5.0f;
 
 } // namespace
 
-ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallback progress) {
-    spdlog::info("ConvertVector started: svg={}, dbs={}",
+std::size_t MatchVectorResult::EstimateBytes() const {
+    std::size_t bytes = sizeof(*this);
+
+    for (const auto& e : recipe_map.entries) {
+        bytes += sizeof(VectorRecipeMap::ShapeEntry) + e.recipe.capacity();
+    }
+
+    for (const auto& s : proc_result.shapes) {
+        for (const auto& c : s.contours) { bytes += c.capacity() * sizeof(Vec2f); }
+    }
+
+    for (const auto& ch : profile.palette) {
+        bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
+    }
+
+    for (const auto& db : dbs) {
+        for (const auto& entry : db.entries) { bytes += sizeof(Entry) + entry.recipe.capacity(); }
+        for (const auto& ch : db.palette) {
+            bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
+        }
+    }
+
+    bytes += preset_dir.capacity();
+    return bytes;
+}
+
+MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallback progress) {
+    spdlog::info("MatchVector started: svg={}, dbs={}",
                  request.svg_path.empty() ? "(buffer)" : request.svg_path,
                  request.preloaded_dbs.empty() ? request.db_paths.size()
                                                : request.preloaded_dbs.size());
@@ -80,15 +106,15 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
         db_span_storage.reserve(db_ptrs.size());
         for (const ColorDB* p : db_ptrs) { db_span_storage.push_back(*p); }
     }
-    const std::vector<ColorDB>& dbs_ref =
-        request.preloaded_dbs.empty() ? owned_dbs : db_span_storage;
+    std::vector<ColorDB> all_dbs =
+        request.preloaded_dbs.empty() ? std::move(owned_dbs) : std::move(db_span_storage);
 
     std::optional<FilamentConfig> fil_config;
     if (!request.preset_dir.empty()) {
         fil_config.emplace(FilamentConfig::LoadFromDir(request.preset_dir));
     }
 
-    PrintProfile profile     = PrintProfile::BuildFromColorDBs(dbs_ref, request.print_mode,
+    PrintProfile profile     = PrintProfile::BuildFromColorDBs(all_dbs, request.print_mode,
                                                            fil_config ? &*fil_config : nullptr);
     profile.nozzle_size      = request.nozzle_size;
     profile.face_orientation = request.face_orientation;
@@ -98,8 +124,8 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
         spdlog::info("Filtered profile palette to {} channel(s)", profile.NumChannels());
     }
 
-    std::optional<ModelPackage> owned_model_pack;
     const ModelPackage* model_pack_ptr = request.preloaded_model_pack;
+    std::optional<ModelPackage> owned_model_pack;
     if (!model_pack_ptr && !request.model_pack_path.empty()) {
         owned_model_pack.emplace(ModelPackage::LoadFromJson(request.model_pack_path));
         model_pack_ptr = &owned_model_pack.value();
@@ -151,29 +177,60 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
     }
 
     MatchStats match_stats;
-    VectorRecipeMap recipe_map = VectorRecipeMap::Match(vimg, dbs_ref, profile, match_cfg,
+    VectorRecipeMap recipe_map = VectorRecipeMap::Match(vimg, all_dbs, profile, match_cfg,
                                                         model_pack_ptr, model_gate, &match_stats);
 
     NotifyProgress(progress, ConvertStage::Matching, 1.0f);
-    spdlog::info("Stage: matching completed, {} entries, avg_de={:.2f}", recipe_map.entries.size(),
+    spdlog::info("MatchVector completed: {} entries, avg_de={:.2f}", recipe_map.entries.size(),
                  match_stats.avg_db_de);
+
+    MatchVectorResult mr;
+    mr.recipe_map           = std::move(recipe_map);
+    mr.proc_result          = std::move(vimg);
+    mr.profile              = std::move(profile);
+    mr.stats                = match_stats;
+    mr.layer_height_mm      = request.layer_height_mm;
+    mr.base_layers          = request.base_layers;
+    mr.custom_base_layers   = (request.base_layers >= 0);
+    mr.double_sided         = request.double_sided;
+    mr.transparent_layer_mm = request.transparent_layer_mm;
+    mr.nozzle_size          = request.nozzle_size;
+    mr.face_orientation     = request.face_orientation;
+    mr.preset_dir           = request.preset_dir;
+    mr.dbs                  = std::move(all_dbs);
+    mr.match_config         = match_cfg;
+    mr.model_gate           = model_gate;
+    mr.generate_preview     = request.generate_preview;
+    mr.generate_source_mask = request.generate_source_mask;
+    return mr;
+}
+
+ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progress) {
+    const auto& vimg       = mr.proc_result;
+    const auto& recipe_map = mr.recipe_map;
+    const auto& profile    = mr.profile;
+
+    std::optional<FilamentConfig> fil_config;
+    if (!mr.preset_dir.empty()) { fil_config.emplace(FilamentConfig::LoadFromDir(mr.preset_dir)); }
 
     // === 4. Build 3D model ===
     NotifyProgress(progress, ConvertStage::BuildingModel, 0.0f);
 
     const float resolved_layer_height =
-        (request.layer_height_mm > 0.0f)
-            ? request.layer_height_mm
+        (mr.layer_height_mm > 0.0f)
+            ? mr.layer_height_mm
             : (profile.layer_height_mm > 0.0f ? profile.layer_height_mm : 0.08f);
-    const ResolvedGeometryOptions geometry = ResolveGeometryOptions(request, profile);
 
-    const float transparent_mm = request.transparent_layer_mm;
+    const int resolved_base_layers = mr.custom_base_layers ? mr.base_layers : profile.base_layers;
+    if (resolved_base_layers < 0) { throw ConfigError("resolved base_layers must be >= 0"); }
+
+    const float transparent_mm = mr.transparent_layer_mm;
     const bool has_transparent = transparent_mm > 0.0f;
     if (has_transparent) {
-        if (request.face_orientation != FaceOrientation::FaceDown) {
+        if (mr.face_orientation != FaceOrientation::FaceDown) {
             throw InputError("transparent_layer_mm requires FaceDown orientation");
         }
-        if (geometry.double_sided) {
+        if (mr.double_sided) {
             throw InputError("transparent_layer_mm not supported with double_sided");
         }
         if (transparent_mm != 0.04f && transparent_mm != 0.08f) {
@@ -183,25 +240,18 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
 
     VectorMeshConfig mesh_cfg;
     mesh_cfg.layer_height_mm      = resolved_layer_height;
-    mesh_cfg.base_layers          = geometry.base_layers;
-    mesh_cfg.double_sided         = geometry.double_sided;
+    mesh_cfg.base_layers          = resolved_base_layers;
+    mesh_cfg.double_sided         = mr.double_sided;
     mesh_cfg.transparent_layer_mm = transparent_mm;
 
     {
         constexpr float kDefaultGap = 0.005f;
         float gap                   = kDefaultGap;
         const float max_gap         = 0.25f * mesh_cfg.layer_height_mm;
-        if (gap > max_gap) {
-            spdlog::warn("base_color_gap_mm {:.4f} clamped to {:.4f} (0.25*layer_height)", gap,
-                         max_gap);
-            gap = max_gap;
-        }
-        if (geometry.double_sided && geometry.base_layers > 0 &&
-            gap >= static_cast<float>(geometry.base_layers) * mesh_cfg.layer_height_mm) {
-            const float limit = static_cast<float>(geometry.base_layers) * mesh_cfg.layer_height_mm;
-            spdlog::warn("base_color_gap_mm {:.4f} clamped to {:.4f} (base thickness)", gap,
-                         limit * 0.5f);
-            gap = limit * 0.5f;
+        if (gap > max_gap) { gap = max_gap; }
+        if (mr.double_sided && resolved_base_layers > 0 &&
+            gap >= static_cast<float>(resolved_base_layers) * mesh_cfg.layer_height_mm) {
+            gap = static_cast<float>(resolved_base_layers) * mesh_cfg.layer_height_mm * 0.5f;
         }
         mesh_cfg.base_color_gap_mm = gap;
     }
@@ -214,14 +264,14 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
     NotifyProgress(progress, ConvertStage::Exporting, 0.0f);
 
     ConvertResult result;
-    result.stats              = match_stats;
+    result.stats              = mr.stats;
     result.physical_width_mm  = vimg.width_mm;
     result.physical_height_mm = vimg.height_mm;
 
-    if (request.generate_preview) {
+    if (mr.generate_preview) {
         result.preview_png = RenderVectorPreviewPng(vimg, recipe_map, profile.palette);
     }
-    if (request.generate_source_mask) {
+    if (mr.generate_source_mask) {
         result.source_mask_png = RenderVectorSourceMaskPng(vimg, recipe_map);
     }
 
@@ -241,26 +291,19 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
         RenderVectorLayerPreviewPngs(vimg, recipe_map, profile.palette, kLayerPreviewPixelsPerMm);
 
     PrintProfile export_profile = profile;
-    export_profile.base_layers  = geometry.base_layers;
+    export_profile.base_layers  = resolved_base_layers;
 
-    int base_ch          = geometry.base_layers > 0 ? profile.base_channel_idx : -1;
-    const bool file_only = !request.output_3mf_path.empty() && request.output_3mf_file_only;
-
-    auto write_buffer_to_file = [&](const std::vector<uint8_t>& buf) {
-        detail::WriteBufferToFileAtomically(request.output_3mf_path, buf);
-        spdlog::info("Wrote 3MF to {}", request.output_3mf_path);
-    };
+    int base_ch = resolved_base_layers > 0 ? profile.base_channel_idx : -1;
 
     if (has_transparent) {
         auto ns = BuildMeshNamesAndSlots(meshes.size(), profile.palette, base_ch,
-                                         geometry.base_layers, true);
+                                         resolved_base_layers, true);
 
-        std::vector<uint8_t> buffer;
-        if (!request.preset_dir.empty()) {
-            auto preset = SlicerPreset::FromProfile(request.preset_dir, export_profile,
-                                                    fil_config ? &*fil_config : nullptr,
-                                                    geometry.double_sided);
-            preset.custom_base_layers   = (request.base_layers >= 0);
+        if (!mr.preset_dir.empty()) {
+            auto preset =
+                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                                          fil_config ? &*fil_config : nullptr, mr.double_sided);
+            preset.custom_base_layers   = mr.custom_base_layers;
             preset.transparent_layer_mm = transparent_mm;
             FilamentSlot t_slot;
             t_slot.type        = "PLA";
@@ -269,80 +312,57 @@ ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallbac
             preset.filaments.push_back(std::move(t_slot));
 
             if (!preset.preset_json_path.empty()) {
-                buffer = Export3mfFromMeshes(meshes, profile.palette, ns.names, ns.slots, preset,
-                                             request.face_orientation, vimg.name);
-                spdlog::info("Vector pipeline (transparent): preset from {}",
-                             preset.preset_json_path);
+                result.model_3mf = Export3mfFromMeshes(meshes, profile.palette, ns.names, ns.slots,
+                                                       preset, mr.face_orientation, vimg.name);
             } else {
-                spdlog::warn("Vector pipeline (transparent): preset not found in {}",
-                             request.preset_dir);
-                buffer = Export3mfFromMeshes(meshes, profile.palette, ns.names,
-                                             request.face_orientation);
+                result.model_3mf =
+                    Export3mfFromMeshes(meshes, profile.palette, ns.names, mr.face_orientation);
             }
         } else {
-            buffer =
-                Export3mfFromMeshes(meshes, profile.palette, ns.names, request.face_orientation);
-        }
-
-        if (!request.output_3mf_path.empty()) { write_buffer_to_file(buffer); }
-        if (!file_only) { result.model_3mf = std::move(buffer); }
-    } else if (file_only) {
-        auto dir = std::filesystem::path(request.output_3mf_path).parent_path();
-        if (!dir.empty()) { std::filesystem::create_directories(dir); }
-
-        if (!request.preset_dir.empty()) {
-            auto preset = SlicerPreset::FromProfile(request.preset_dir, export_profile,
-                                                    fil_config ? &*fil_config : nullptr,
-                                                    geometry.double_sided);
-            preset.custom_base_layers = (request.base_layers >= 0);
-            if (!preset.preset_json_path.empty()) {
-                Export3mfFromMeshesToFile(request.output_3mf_path, meshes, profile.palette, base_ch,
-                                          geometry.base_layers, preset, request.face_orientation,
-                                          vimg.name);
-                spdlog::info("Vector pipeline: injected slicer preset from {}",
-                             preset.preset_json_path);
-            } else {
-                spdlog::warn("Vector pipeline: preset file not found in {}, exporting standard 3MF",
-                             request.preset_dir);
-                Export3mfFromMeshesToFile(request.output_3mf_path, meshes, profile.palette, base_ch,
-                                          geometry.base_layers, request.face_orientation);
-            }
-        } else {
-            Export3mfFromMeshesToFile(request.output_3mf_path, meshes, profile.palette, base_ch,
-                                      geometry.base_layers, request.face_orientation);
+            result.model_3mf =
+                Export3mfFromMeshes(meshes, profile.palette, ns.names, mr.face_orientation);
         }
     } else {
-        if (!request.preset_dir.empty()) {
-            auto preset = SlicerPreset::FromProfile(request.preset_dir, export_profile,
-                                                    fil_config ? &*fil_config : nullptr,
-                                                    geometry.double_sided);
-            preset.custom_base_layers = (request.base_layers >= 0);
+        if (!mr.preset_dir.empty()) {
+            auto preset =
+                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                                          fil_config ? &*fil_config : nullptr, mr.double_sided);
+            preset.custom_base_layers = mr.custom_base_layers;
             if (!preset.preset_json_path.empty()) {
                 result.model_3mf =
-                    Export3mfFromMeshes(meshes, profile.palette, base_ch, geometry.base_layers,
-                                        preset, request.face_orientation, vimg.name);
-                spdlog::info("Vector pipeline: injected slicer preset from {}",
-                             preset.preset_json_path);
+                    Export3mfFromMeshes(meshes, profile.palette, base_ch, resolved_base_layers,
+                                        preset, mr.face_orientation, vimg.name);
             } else {
-                spdlog::warn("Vector pipeline: preset file not found in {}, exporting standard 3MF",
-                             request.preset_dir);
-                result.model_3mf =
-                    Export3mfFromMeshes(meshes, profile.palette, base_ch, geometry.base_layers,
-                                        request.face_orientation);
+                result.model_3mf = Export3mfFromMeshes(meshes, profile.palette, base_ch,
+                                                       resolved_base_layers, mr.face_orientation);
             }
         } else {
             result.model_3mf = Export3mfFromMeshes(meshes, profile.palette, base_ch,
-                                                   geometry.base_layers, request.face_orientation);
+                                                   resolved_base_layers, mr.face_orientation);
         }
-
-        if (!request.output_3mf_path.empty()) { write_buffer_to_file(result.model_3mf); }
     }
 
     NotifyProgress(progress, ConvertStage::Exporting, 1.0f);
-    spdlog::info("ConvertVector completed: 3mf={} bytes, preview={} bytes, source_mask={} bytes, "
-                 "physical={:.1f}x{:.1f} mm",
+    spdlog::info("GenerateVectorModel completed: 3mf={} bytes, preview={} bytes, "
+                 "source_mask={} bytes, physical={:.1f}x{:.1f} mm",
                  result.model_3mf.size(), result.preview_png.size(), result.source_mask_png.size(),
                  result.physical_width_mm, result.physical_height_mm);
+
+    return result;
+}
+
+ConvertResult ConvertVector(const ConvertVectorRequest& request, ProgressCallback progress) {
+    auto match_result    = MatchVector(request, progress);
+    ConvertResult result = GenerateVectorModel(match_result, progress);
+
+    if (!request.output_3mf_path.empty() && !result.model_3mf.empty()) {
+        detail::WriteBufferToFileAtomically(request.output_3mf_path, result.model_3mf);
+        spdlog::info("Wrote 3MF to {}", request.output_3mf_path);
+        if (request.output_3mf_file_only) {
+            result.model_3mf.clear();
+            result.model_3mf.shrink_to_fit();
+        }
+    }
 
     return result;
 }

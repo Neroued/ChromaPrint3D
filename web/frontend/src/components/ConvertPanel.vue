@@ -139,7 +139,7 @@ async function handleConvert() {
 
 function submitMatchOnly() {
   const file = selectedFile.value!
-  return submitMatchOnlyTask(file, params.value)
+  return submitMatchOnlyTask(file, params.value, inputType.value)
 }
 
 const {
@@ -174,9 +174,7 @@ const matchProgressPercent = computed(() => {
 })
 
 const canMatchPreview = computed(() => {
-  return (
-    selectedFile.value !== null && !loading.value && !matchLoading.value && !isVectorInput.value
-  )
+  return selectedFile.value !== null && !loading.value && !matchLoading.value
 })
 
 async function handleMatchPreview() {
@@ -203,7 +201,6 @@ async function handleDownload3MF() {
     <NSpace vertical :size="12">
       <NSpace vertical :size="8">
         <NButton
-          v-if="!isVectorInput"
           block
           size="large"
           type="info"

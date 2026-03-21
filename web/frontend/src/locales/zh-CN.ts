@@ -677,6 +677,8 @@ export default {
     generateFailed: '模型生成失败',
     generateTimeout: '生成超时',
     generateSuccess: '模型生成完成，可以下载 3MF 文件',
+    staleWarning: '配方已修改，当前 3MF 文件不是最新的，请重新生成',
+    regenerate: '重新生成 3MF',
     download3mf: '下载 3MF',
     closeConfirmTitle: '关闭编辑器',
     closeConfirmContent: '你有未生成的配方修改，关闭后将丢失。确定关闭吗？',

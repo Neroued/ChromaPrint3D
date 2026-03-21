@@ -23,12 +23,12 @@ import {
   submitGenerateModel,
 } from '../../api/recipeEditor'
 import { fetchTaskStatus } from '../../api/tasks'
-import { useRasterRegionMap } from '../../composables/useRasterRegionMap'
+import { useRegionMap } from '../../composables/useRegionMap'
 import { usePanZoom } from '../../composables/usePanZoom'
 import { useAppStore } from '../../stores/app'
 import RecipeSummaryPanel from './RecipeSummaryPanel.vue'
 import RecipeCandidatePanel from './RecipeCandidatePanel.vue'
-import RasterRegionCanvas from './RasterRegionCanvas.vue'
+import RegionOverlayCanvas from './RegionOverlayCanvas.vue'
 import ZoomableImageViewport from '../common/ZoomableImageViewport.vue'
 import { fetchBlobWithSession } from '../../runtime/protectedRequest'
 import { getPreviewPath, getResultPath } from '../../api/tasks'
@@ -54,6 +54,7 @@ const replacing = ref(false)
 const generating = ref(false)
 const generateError = ref<string | null>(null)
 const generateDone = ref(false)
+const editedAfterGenerate = ref(false)
 const downloading3mf = ref(false)
 const previewBlobUrl = ref('')
 
@@ -86,7 +87,7 @@ const {
   getRegionAtPixel,
   getRegionIdsForRecipeIndex,
   clear: clearRegionMap,
-} = useRasterRegionMap()
+} = useRegionMap()
 
 const targetLab = computed<LabColor | null>(() => {
   if (selectedRecipeIndex.value === null || !summary.value) return null
@@ -298,6 +299,7 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
       selectedRecipeIndex.value = firstRegion.recipe_index
     }
 
+    if (generateDone.value) editedAfterGenerate.value = true
     message.success(t('recipeEditor.replaceSuccess'))
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
@@ -331,6 +333,7 @@ async function handleUndo() {
       selectedRegionIds.value = new Set()
     }
 
+    if (generateDone.value) editedAfterGenerate.value = true
     message.success(t('recipeEditor.replaceSuccess'))
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
@@ -347,6 +350,7 @@ async function handleGenerate() {
   generating.value = true
   generateError.value = null
   generateDone.value = false
+  editedAfterGenerate.value = false
   appStore.clearCompletedTask()
   try {
     await submitGenerateModel(props.taskId)
@@ -399,6 +403,7 @@ watch(
     selectedRecipeIndex.value = null
     undoStack.value = []
     generateDone.value = false
+    editedAfterGenerate.value = false
     clearRegionMap()
     panZoom.resetView()
     if (props.taskId) void loadSummary()
@@ -451,7 +456,7 @@ watch(
           :controller="panZoom"
         >
           <template #default="{ transform }">
-            <RasterRegionCanvas
+            <RegionOverlayCanvas
               :region-map="regionMap"
               :selected-region-ids="selectedRegionIds"
               :transform="transform"
@@ -509,8 +514,12 @@ watch(
       {{ t('recipeEditor.replacing') }}
     </NText>
 
-    <NAlert v-if="generateDone" type="success" style="margin-top: 8px">
+    <NAlert v-if="generateDone && !editedAfterGenerate" type="success" style="margin-top: 8px">
       {{ t('recipeEditor.generateSuccess') }}
+    </NAlert>
+
+    <NAlert v-if="editedAfterGenerate" type="warning" style="margin-top: 8px">
+      {{ t('recipeEditor.staleWarning') }}
     </NAlert>
 
     <NAlert
@@ -530,7 +539,13 @@ watch(
         :disabled="generating || !summary"
         @click="handleGenerate"
       >
-        {{ generating ? t('recipeEditor.generating') : t('recipeEditor.generate') }}
+        {{
+          generating
+            ? t('recipeEditor.generating')
+            : editedAfterGenerate
+              ? t('recipeEditor.regenerate')
+              : t('recipeEditor.generate')
+        }}
       </NButton>
       <NButton
         v-if="generateDone"

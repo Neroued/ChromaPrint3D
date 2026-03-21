@@ -224,4 +224,20 @@ VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span
     return map;
 }
 
+void VectorRecipeMap::ReplaceRecipeForEntries(const std::vector<int>& entry_indices,
+                                              const std::vector<uint8_t>& new_recipe,
+                                              const Lab& new_mapped_color, bool new_from_model) {
+    if (static_cast<int>(new_recipe.size()) != color_layers) {
+        throw InputError("new_recipe size does not match color_layers");
+    }
+
+    for (int idx : entry_indices) {
+        if (idx < 0 || static_cast<std::size_t>(idx) >= entries.size()) { continue; }
+        auto& entry         = entries[static_cast<std::size_t>(idx)];
+        entry.recipe        = new_recipe;
+        entry.matched_color = new_mapped_color;
+        entry.from_model    = new_from_model;
+    }
+}
+
 } // namespace ChromaPrint3D

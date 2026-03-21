@@ -53,4 +53,11 @@ std::vector<std::vector<uint8_t>> RenderVectorLayerPreviewPngs(const VectorProcR
                                                                const std::vector<Channel>& palette,
                                                                float pixels_per_mm = 5.0f);
 
+/// Render a region-id map for vector shapes (CV_32SC1).
+/// Each pixel is filled with the entry index of the shape that covers it,
+/// or 0xFFFFFFFF for background / non-solid shapes.
+/// The output has the same resolution as the preview PNG.
+cv::Mat RenderVectorRegionIds(const VectorProcResult& result, const VectorRecipeMap& recipe_map,
+                              float pixels_per_mm = 5.0f);
+
 } // namespace ChromaPrint3D

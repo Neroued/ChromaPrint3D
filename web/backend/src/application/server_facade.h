@@ -68,6 +68,10 @@ public:
                                                const std::vector<uint8_t>& image,
                                                const std::string& image_name,
                                                const std::optional<std::string>& params_json);
+    ServiceResult SubmitConvertVectorMatchOnly(const std::string& owner,
+                                               const std::vector<uint8_t>& svg,
+                                               const std::string& svg_name,
+                                               const std::optional<std::string>& params_json);
 
     ServiceResult RecipeEditorSummary(const std::string& owner, const std::string& task_id) const;
     ServiceResult RecipeEditorAlternatives(const std::string& owner, const std::string& task_id,

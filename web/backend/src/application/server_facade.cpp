@@ -576,6 +576,32 @@ ServiceResult ServerFacade::SubmitConvertRasterMatchOnly(
     return ServiceResult::Success(202, {{"task_id", submit.task_id}, {"kind", "convert"}});
 }
 
+ServiceResult ServerFacade::SubmitConvertVectorMatchOnly(
+    const std::string& owner, const std::vector<uint8_t>& svg, const std::string& svg_name,
+    const std::optional<std::string>& params_json) {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+    auto accept = tasks_.CanAccept(owner);
+    if (!accept.ok) {
+        return ServiceResult::Error(accept.status_code, "queue_rejected", accept.message);
+    }
+
+    json params;
+    auto parsed = ParseJsonObject(params_json, params);
+    if (!parsed.ok) return parsed;
+    auto session = sessions_.Snapshot(owner);
+
+    ConvertVectorRequest req;
+    auto built = BuildVectorRequest(params, svg, svg_name, session, req);
+    if (!built.ok) return built;
+
+    auto submit =
+        tasks_.SubmitConvertVectorMatchOnly(owner, std::move(req), StripExtension(svg_name));
+    if (!submit.ok) {
+        return ServiceResult::Error(submit.status_code, "submit_failed", submit.message);
+    }
+    return ServiceResult::Success(202, {{"task_id", submit.task_id}, {"kind", "convert"}});
+}
+
 ServiceResult ServerFacade::RecipeEditorSummary(const std::string& owner,
                                                 const std::string& task_id) const {
     if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
@@ -1024,7 +1050,7 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
                 {"has_3mf", !cp->result.model_3mf.empty() || cp->has_3mf_on_disk},
                 {"has_preview", !cp->result.preview_png.empty()},
                 {"has_source_mask", !cp->result.source_mask_png.empty()},
-                {"has_region_map", !cp->raster_region_map_binary.empty()},
+                {"has_region_map", !cp->region_map_binary.empty()},
                 {"layer_previews", LayerPreviewsToJson(cp->result.layer_previews)},
             };
         } else {

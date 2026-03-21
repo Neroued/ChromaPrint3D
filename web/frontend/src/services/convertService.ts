@@ -1,5 +1,5 @@
 import { submitConvertRaster, submitConvertVector } from '../api/convert'
-import { submitConvertRasterMatchOnly } from '../api/recipeEditor'
+import { submitConvertRasterMatchOnly, submitConvertVectorMatchOnly } from '../api/recipeEditor'
 import { fetchTaskStatus } from '../api/tasks'
 import { buildRasterParams, buildVectorParams } from '../domain/params/convertParamBuilders'
 import type { ConvertAnyParams, InputType, TaskStatus } from '../types'
@@ -18,7 +18,11 @@ export async function submitConvertTask(
 export async function submitMatchOnlyTask(
   file: File,
   params: ConvertAnyParams,
+  inputType: InputType = 'raster',
 ): Promise<{ task_id: string }> {
+  if (inputType === 'vector') {
+    return submitConvertVectorMatchOnly(file, buildVectorParams(params))
+  }
   return submitConvertRasterMatchOnly(file, buildRasterParams(params))
 }
 

@@ -682,6 +682,8 @@ export default {
     generateFailed: 'Model generation failed',
     generateTimeout: 'Generation timed out',
     generateSuccess: 'Model generated successfully. You can download the 3MF file.',
+    staleWarning: 'Recipes have been modified. The current 3MF is outdated — please regenerate.',
+    regenerate: 'Regenerate 3MF',
     download3mf: 'Download 3MF',
     closeConfirmTitle: 'Close Editor',
     closeConfirmContent: 'You have unsaved recipe changes that will be lost. Close anyway?',
