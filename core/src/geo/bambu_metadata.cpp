@@ -97,14 +97,19 @@ std::vector<std::string> ReadFilamentColours(const std::string& preset_json_path
     if (preset_json_path.empty()) return result;
 
     std::ifstream ifs(preset_json_path);
-    if (!ifs.is_open()) return result;
+    if (!ifs.is_open()) {
+        spdlog::warn("ReadFilamentColours: cannot open {}", preset_json_path);
+        return result;
+    }
 
     try {
         auto j = nlohmann::json::parse(ifs);
         if (j.contains("filament_colour") && j["filament_colour"].is_array()) {
             for (const auto& c : j["filament_colour"]) { result.push_back(c.get<std::string>()); }
         }
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::warn("ReadFilamentColours: parse error for {}: {}", preset_json_path, e.what());
+    }
     return result;
 }
 

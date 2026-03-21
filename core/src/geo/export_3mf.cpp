@@ -58,8 +58,15 @@ std::vector<Mesh> BuildMeshes(const ModelIR& model_ir, const BuildMeshConfig& cf
 #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < n; ++i) {
         const VoxelGrid& grid = model_ir.voxel_grids[static_cast<std::size_t>(i)];
-        if (grid.width <= 0 || grid.height <= 0 || grid.num_layers <= 0) { continue; }
-        if (grid.ooc.empty()) { continue; }
+        if (grid.width <= 0 || grid.height <= 0 || grid.num_layers <= 0) {
+            spdlog::warn("BuildMeshes: grid {} skipped (dimensions {}x{}x{})", i, grid.width,
+                         grid.height, grid.num_layers);
+            continue;
+        }
+        if (grid.ooc.empty()) {
+            spdlog::warn("BuildMeshes: grid {} skipped (empty voxel data)", i);
+            continue;
+        }
 
         BuildMeshConfig per_grid = cfg;
         if (apply_gap) {
@@ -223,8 +230,14 @@ BuildWriterObjects(const std::vector<Mesh>& meshes,
                    const std::function<std::string(std::size_t)>& color_fn) {
     std::vector<detail::ThreeMfInputObject> objects;
     objects.reserve(meshes.size());
+    std::size_t skipped = 0;
     for (std::size_t i = 0; i < meshes.size(); ++i) {
-        if (meshes[i].vertices.empty() || meshes[i].indices.empty()) { continue; }
+        if (meshes[i].vertices.empty() || meshes[i].indices.empty()) {
+            spdlog::warn("BuildWriterObjects: mesh {} ('{}') skipped (vertices={}, indices={})", i,
+                         name_fn(i), meshes[i].vertices.size(), meshes[i].indices.size());
+            ++skipped;
+            continue;
+        }
         detail::ThreeMfInputObject object;
         object.name              = name_fn(i);
         object.display_color_hex = color_fn(i);
@@ -232,6 +245,8 @@ BuildWriterObjects(const std::vector<Mesh>& meshes,
         object.transform         = detail::ThreeMfTransform::Identity();
         objects.push_back(std::move(object));
     }
+    spdlog::info("BuildWriterObjects: {} mesh(es) in, {} object(s) out, {} skipped", meshes.size(),
+                 objects.size(), skipped);
     return objects;
 }
 
@@ -248,8 +263,15 @@ BuildWriterObjectsAndSlots(const std::vector<Mesh>& meshes,
     WriterObjectsAndSlots result;
     result.objects.reserve(meshes.size());
     result.slots.reserve(meshes.size());
+    std::size_t skipped = 0;
     for (std::size_t i = 0; i < meshes.size(); ++i) {
-        if (meshes[i].vertices.empty() || meshes[i].indices.empty()) { continue; }
+        if (meshes[i].vertices.empty() || meshes[i].indices.empty()) {
+            spdlog::warn("BuildWriterObjectsAndSlots: mesh {} ('{}') skipped (vertices={}, "
+                         "indices={})",
+                         i, name_fn(i), meshes[i].vertices.size(), meshes[i].indices.size());
+            ++skipped;
+            continue;
+        }
         detail::ThreeMfInputObject object;
         object.name              = name_fn(i);
         object.display_color_hex = color_fn(i);
@@ -258,11 +280,22 @@ BuildWriterObjectsAndSlots(const std::vector<Mesh>& meshes,
         result.objects.push_back(std::move(object));
         result.slots.push_back(slot_fn(i));
     }
+    spdlog::info("BuildWriterObjectsAndSlots: {} mesh(es) in, {} object(s) out, {} skipped",
+                 meshes.size(), result.objects.size(), skipped);
     return result;
 }
 
-void EnsureNonEmptyGeometry(const std::vector<detail::ThreeMfInputObject>& objects) {
-    if (objects.empty()) { throw InputError("No geometry to export"); }
+void EnsureNonEmptyGeometry(const std::vector<detail::ThreeMfInputObject>& objects,
+                            std::size_t total_input_meshes = 0) {
+    if (objects.empty()) {
+        std::string msg = "No geometry to export";
+        if (total_input_meshes > 0) {
+            msg += " (all " + std::to_string(total_input_meshes) +
+                   " input mesh(es) were empty or filtered)";
+        }
+        spdlog::error("EnsureNonEmptyGeometry: {}", msg);
+        throw InputError(msg);
+    }
 }
 
 detail::ThreeMfWriter BuildWriter(const SlicerPreset* preset, std::vector<int> slots,
@@ -317,7 +350,7 @@ void Export3mf(const std::string& path, const ModelIR& model_ir, const BuildMesh
             }
             return {};
         });
-    EnsureNonEmptyGeometry(objects);
+    EnsureNonEmptyGeometry(objects, meshes.size());
 
     detail::ThreeMfWriter writer(DefaultWriterOptions());
     writer.WriteToFile(path, objects);
@@ -342,7 +375,7 @@ std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshC
             }
             return {};
         });
-    EnsureNonEmptyGeometry(objects);
+    EnsureNonEmptyGeometry(objects, meshes.size());
 
     detail::ThreeMfWriter writer(DefaultWriterOptions());
     std::vector<uint8_t> buffer = writer.WriteToBuffer(objects);
@@ -372,7 +405,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
             }
             return {};
         });
-    EnsureNonEmptyGeometry(objects);
+    EnsureNonEmptyGeometry(objects, mutable_meshes.size());
 
     detail::ThreeMfWriter writer(DefaultWriterOptions());
     std::vector<uint8_t> buffer = writer.WriteToBuffer(objects);
@@ -397,7 +430,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
             if (i < palette.size()) return palette[i].hex_color;
             return {};
         });
-    EnsureNonEmptyGeometry(objects);
+    EnsureNonEmptyGeometry(objects, mutable_meshes.size());
 
     detail::ThreeMfWriter writer(DefaultWriterOptions());
     std::vector<uint8_t> buffer = writer.WriteToBuffer(objects);
@@ -434,7 +467,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
             if (base_layers > 0 && base_channel_idx >= 0) return base_channel_idx + 1;
             return static_cast<int>(i) + 1;
         });
-    EnsureNonEmptyGeometry(result.objects);
+    EnsureNonEmptyGeometry(result.objects, mutable_meshes.size());
 
     std::vector<uint8_t> buffer =
         WriteObjectsToBuffer(result.objects, &preset, std::move(result.slots), model_name);
@@ -467,7 +500,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
             return {};
         },
         [&](std::size_t i) -> int { return slots[i]; });
-    EnsureNonEmptyGeometry(result.objects);
+    EnsureNonEmptyGeometry(result.objects, mutable_meshes.size());
 
     std::vector<uint8_t> buffer =
         WriteObjectsToBuffer(result.objects, &preset, std::move(result.slots), model_name);
@@ -503,7 +536,7 @@ std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshC
             if (has_base && base_channel_idx >= 0) return base_channel_idx + 1;
             return static_cast<int>(i) + 1;
         });
-    EnsureNonEmptyGeometry(result.objects);
+    EnsureNonEmptyGeometry(result.objects, meshes.size());
 
     std::vector<uint8_t> buffer =
         WriteObjectsToBuffer(result.objects, &preset, std::move(result.slots), model_ir.name);
@@ -533,7 +566,7 @@ void Export3mfToFile(const std::string& path, const ModelIR& model_ir, const Bui
             }
             return {};
         });
-    EnsureNonEmptyGeometry(objects);
+    EnsureNonEmptyGeometry(objects, meshes.size());
     WriteObjectsToFile(path, objects);
     spdlog::info("Export3mfToFile: written {} object(s) to {}", objects.size(), path);
 }
@@ -565,7 +598,7 @@ void Export3mfToFile(const std::string& path, const ModelIR& model_ir, const Bui
             if (has_base && base_channel_idx >= 0) return base_channel_idx + 1;
             return static_cast<int>(i) + 1;
         });
-    EnsureNonEmptyGeometry(result.objects);
+    EnsureNonEmptyGeometry(result.objects, meshes.size());
     WriteObjectsToFile(path, result.objects, &preset, std::move(result.slots), model_ir.name);
     spdlog::info("Export3mfToFile (with preset): written {} object(s) to {}", result.objects.size(),
                  path);
@@ -593,7 +626,7 @@ void Export3mfFromMeshesToFile(const std::string& path, const std::vector<Mesh>&
             }
             return {};
         });
-    EnsureNonEmptyGeometry(objects);
+    EnsureNonEmptyGeometry(objects, mutable_meshes.size());
     WriteObjectsToFile(path, objects);
     spdlog::info("Export3mfFromMeshesToFile: written {} object(s) to {}", objects.size(), path);
 }
@@ -627,7 +660,7 @@ void Export3mfFromMeshesToFile(const std::string& path, const std::vector<Mesh>&
             if (base_layers > 0 && base_channel_idx >= 0) return base_channel_idx + 1;
             return static_cast<int>(i) + 1;
         });
-    EnsureNonEmptyGeometry(result.objects);
+    EnsureNonEmptyGeometry(result.objects, mutable_meshes.size());
     WriteObjectsToFile(path, result.objects, &preset, std::move(result.slots), model_name);
     spdlog::info("Export3mfFromMeshesToFile (with preset): written {} object(s) to {}",
                  result.objects.size(), path);

@@ -185,7 +185,11 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     const int width  = voxel_grid.width;
     const int height = voxel_grid.height;
     const int layers = voxel_grid.num_layers;
-    if (width <= 0 || height <= 0 || layers <= 0) { return mesh; }
+    if (width <= 0 || height <= 0 || layers <= 0) {
+        spdlog::debug("Mesh::Build: returning empty mesh (dimensions {}x{}x{})", width, height,
+                      layers);
+        return mesh;
+    }
     if (cfg.pixel_mm <= 0.0f || cfg.layer_height_mm <= 0.0f) {
         throw InputError("BuildMeshConfig values must be positive");
     }
@@ -342,8 +346,13 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         }
     }
 
-    spdlog::debug("Mesh::Build: ch={}, vertices={}, triangles={}", voxel_grid.channel_idx,
-                  mesh.vertices.size(), mesh.indices.size());
+    if (mesh.vertices.empty() || mesh.indices.empty()) {
+        spdlog::warn("Mesh::Build: ch={} produced empty mesh (vertices={}, triangles={})",
+                     voxel_grid.channel_idx, mesh.vertices.size(), mesh.indices.size());
+    } else {
+        spdlog::debug("Mesh::Build: ch={}, vertices={}, triangles={}", voxel_grid.channel_idx,
+                      mesh.vertices.size(), mesh.indices.size());
+    }
     return mesh;
 }
 

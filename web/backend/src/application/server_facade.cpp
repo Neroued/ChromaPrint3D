@@ -935,7 +935,26 @@ ServiceResult ServerFacade::DownloadBoardModel(const std::string& board_id, Task
     constexpr const char* kModelContentType =
         "application/vnd.ms-package.3dmanufacturing-3dmodel+xml";
     if (board->has_file_backed_model()) {
-        out = TaskArtifact{{}, board->model_3mf_path, kModelContentType, std::move(filename)};
+        const auto& fpath = board->model_3mf_path;
+        std::error_code ec;
+        bool exists      = std::filesystem::exists(fpath, ec);
+        auto actual_size = exists ? std::filesystem::file_size(fpath, ec) : 0ULL;
+        spdlog::info("DownloadBoardModel: board={}, path={}, exists={}, actual_size={}, "
+                     "expected_size={}",
+                     board_id, fpath.string(), exists, actual_size, board->expected_file_size);
+        if (!exists) {
+            spdlog::error("DownloadBoardModel: file missing for board {}: {}", board_id,
+                          fpath.string());
+            return ServiceResult::Error(404, "not_found", "Board model file missing from disk");
+        }
+        if (board->expected_file_size > 0 && actual_size != board->expected_file_size) {
+            spdlog::error("DownloadBoardModel: file size mismatch for board {}: expected={}, "
+                          "actual={}",
+                          board_id, board->expected_file_size, actual_size);
+            return ServiceResult::Error(500, "corrupt_file",
+                                        "Board model file is incomplete or corrupt");
+        }
+        out = TaskArtifact{{}, fpath, kModelContentType, std::move(filename)};
         return ServiceResult::Success(200, json::object());
     }
     if (board->model_3mf.empty()) {

@@ -124,7 +124,7 @@ export function useParamPanelState() {
   type ClusterMode = 'off' | 'auto' | 'manual'
   const clusterMode = ref<ClusterMode>('auto')
 
-  const targetDimensionUpperBound = 2000
+  const targetDimensionUpperBound = 512
   const clusterCountUpperBound = 256
   const simpleLabelWidth = 112
   const inlineLabelWidth = 96

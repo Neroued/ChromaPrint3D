@@ -127,13 +127,23 @@ public:
         document.mesh_resources.clear();
         document.build_items.clear();
 
-        std::size_t dropped_degenerate = 0;
+        std::size_t dropped_degenerate  = 0;
+        std::size_t meshes_dropped_full = 0;
         for (std::size_t i = 0; i < objects.size(); ++i) {
             const auto& in = objects[i];
-            if (!in.mesh) { continue; }
+            if (!in.mesh) {
+                spdlog::warn("CoreModelExtension: object {} ('{}') has null mesh pointer", i,
+                             in.name);
+                continue;
+            }
             const Mesh& mesh               = *in.mesh;
             const std::size_t vertex_count = mesh.vertices.size();
-            if (vertex_count == 0 || mesh.indices.empty()) { continue; }
+            if (vertex_count == 0 || mesh.indices.empty()) {
+                spdlog::warn("CoreModelExtension: object {} ('{}') skipped (vertices={}, "
+                             "triangles={})",
+                             i, in.name, vertex_count, mesh.indices.size());
+                continue;
+            }
             if (vertex_count > static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
                 throw InputError("Mesh vertex count exceeds 3MF uint32 limit");
             }
@@ -172,7 +182,13 @@ public:
             }
             mesh_resource.valid_triangle_count = valid_count;
 
-            if (valid_count == 0) { continue; }
+            if (valid_count == 0) {
+                spdlog::warn("CoreModelExtension: object {} ('{}') dropped, all {} triangle(s) "
+                             "degenerate",
+                             i, in.name, mesh.indices.size());
+                ++meshes_dropped_full;
+                continue;
+            }
 
             if (document.base_material_group_id.has_value() && i < document.base_materials.size()) {
                 mesh_resource.object_property = ThreeMfObjectProperty{
@@ -187,9 +203,10 @@ public:
             });
         }
 
-        if (dropped_degenerate > 0) {
-            spdlog::warn("3MF export dropped {} degenerate triangle(s)", dropped_degenerate);
-        }
+        spdlog::info("CoreModelExtension: {} object(s) in, {} mesh(es) accepted, {} dropped "
+                     "(fully degenerate), {} degenerate triangle(s) filtered",
+                     objects.size(), document.mesh_resources.size(), meshes_dropped_full,
+                     dropped_degenerate);
     }
 };
 

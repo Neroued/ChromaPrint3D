@@ -866,13 +866,37 @@ SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const st
             if (!gen_result.model_3mf.empty()) {
                 auto spill_path = temp_dir_ / (id + "_gen.3mf");
                 pending_3mf     = PendingArtifactFile(spill_path);
-                std::ofstream ofs(spill_path, std::ios::binary);
+                spdlog::info("GenerateModel: writing 3MF for task {}, {} bytes to {}", id,
+                             gen_result.model_3mf.size(), spill_path.string());
+
+                std::ofstream ofs(spill_path, std::ios::binary | std::ios::trunc);
+                if (!ofs.is_open()) {
+                    throw std::runtime_error("Cannot open 3MF spill file: " + spill_path.string());
+                }
                 ofs.write(reinterpret_cast<const char*>(gen_result.model_3mf.data()),
                           static_cast<std::streamsize>(gen_result.model_3mf.size()));
+                if (!ofs.good()) {
+                    throw std::runtime_error("Failed to write 3MF spill file: " +
+                                             spill_path.string());
+                }
                 ofs.close();
-                spilled_3mf = pending_3mf.Commit(gen_result.model_3mf.size());
+                if (ofs.fail()) {
+                    throw std::runtime_error("Failed to flush/close 3MF spill file: " +
+                                             spill_path.string());
+                }
+
+                auto actual_size = std::filesystem::file_size(spill_path);
+                if (actual_size != gen_result.model_3mf.size()) {
+                    spdlog::error("GenerateModel: 3MF file size mismatch for task {}: expected={}, "
+                                  "actual={}",
+                                  id, gen_result.model_3mf.size(), actual_size);
+                    throw std::runtime_error("3MF file size mismatch after write");
+                }
+
+                spilled_3mf = pending_3mf.Commit(actual_size);
                 gen_result.model_3mf.clear();
                 gen_result.model_3mf.shrink_to_fit();
+                spdlog::info("GenerateModel: 3MF written for task {}, {} bytes", id, actual_size);
             }
 
             UpdateTaskRecord(id, [&](TaskRecord& rec) {
@@ -984,7 +1008,30 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
                 (cp->input_name.empty() ? id.substr(0, 8) : cp->input_name) + ".3mf";
             const std::string ct = "application/vnd.ms-package.3dmanufacturing-3dmodel+xml";
             if (rec.spilled_3mf.has_file()) {
-                return TaskArtifact{{}, rec.spilled_3mf.path(), ct, std::move(fname)};
+                const auto& fpath  = rec.spilled_3mf.path();
+                auto expected_size = rec.spilled_3mf.file_size();
+                std::error_code ec;
+                bool exists      = std::filesystem::exists(fpath, ec);
+                auto actual_size = exists ? std::filesystem::file_size(fpath, ec) : 0ULL;
+                spdlog::info("LoadArtifact: serving file-based 3MF for task {}: path={}, "
+                             "exists={}, actual_size={}, expected_size={}",
+                             id, fpath.string(), exists, actual_size, expected_size);
+                if (!exists) {
+                    spdlog::error("LoadArtifact: spilled 3MF file missing for task {}: {}", id,
+                                  fpath.string());
+                    status_code = 404;
+                    message     = "3MF file missing from disk";
+                    return std::nullopt;
+                }
+                if (expected_size > 0 && actual_size != expected_size) {
+                    spdlog::error("LoadArtifact: 3MF file size mismatch for task {}: "
+                                  "expected={}, actual={}",
+                                  id, expected_size, actual_size);
+                    status_code = 500;
+                    message     = "3MF file is incomplete or corrupt";
+                    return std::nullopt;
+                }
+                return TaskArtifact{{}, fpath, ct, std::move(fname)};
             }
             if (cp->result.model_3mf.empty()) {
                 status_code = 404;

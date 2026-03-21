@@ -2,6 +2,8 @@
 
 #include "chromaprint3d/error.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -163,6 +165,20 @@ ThreeMfWriter::WriteToBuffer(const std::vector<ThreeMfInputObject>& objects) con
     std::vector<uint8_t> zip_bytes;
     StreamingZipWriter zip(zip_bytes, options_);
     WriteAllEntries(zip, part_set, document);
+
+    constexpr std::size_t kMinZipSize = 22;
+    if (zip_bytes.size() < kMinZipSize) {
+        spdlog::error("WriteToBuffer: generated buffer too small ({} bytes), expected >= {}",
+                      zip_bytes.size(), kMinZipSize);
+        throw IOError("Generated 3MF buffer is too small (" + std::to_string(zip_bytes.size()) +
+                      " bytes), likely corrupt");
+    }
+    if (zip_bytes.size() >= 4 && !(zip_bytes[0] == 0x50 && zip_bytes[1] == 0x4B &&
+                                   zip_bytes[2] == 0x03 && zip_bytes[3] == 0x04)) {
+        spdlog::error("WriteToBuffer: generated buffer missing ZIP magic bytes (PK\\x03\\x04)");
+        throw IOError("Generated 3MF buffer has invalid ZIP header, likely corrupt");
+    }
+
     return zip_bytes;
 }
 
@@ -170,11 +186,15 @@ void WriteFileAtomically(const std::filesystem::path& final_path,
                          const std::function<void(const std::filesystem::path&)>& writer) {
     if (final_path.empty()) { throw InputError("output path is empty"); }
 
+    spdlog::debug("WriteFileAtomically: target={}", final_path.string());
+
     const auto dir = final_path.parent_path();
     if (!dir.empty()) {
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         if (ec) {
+            spdlog::error("WriteFileAtomically: failed to create directory {}: {}", dir.string(),
+                          ec.message());
             throw IOError("Failed to create output directory " + dir.string() + ": " +
                           ec.message());
         }
@@ -187,15 +207,48 @@ void WriteFileAtomically(const std::filesystem::path& final_path,
 
 void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
                                  const std::vector<uint8_t>& bytes) {
+    spdlog::info("WriteBufferToFileAtomically: path={}, bytes={}", final_path.string(),
+                 bytes.size());
+
     WriteFileAtomically(final_path, [&](const std::filesystem::path& temp_path) {
         std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
         if (!out.is_open()) {
+            spdlog::error("WriteBufferToFileAtomically: cannot open temp file {}",
+                          temp_path.string());
             throw IOError("Cannot open file for writing: " + temp_path.string());
         }
         out.write(reinterpret_cast<const char*>(bytes.data()),
                   static_cast<std::streamsize>(bytes.size()));
-        if (!out.good()) { throw IOError("Cannot write to " + final_path.string()); }
+        if (!out.good()) {
+            spdlog::error("WriteBufferToFileAtomically: write failed for {}", final_path.string());
+            throw IOError("Cannot write to " + final_path.string());
+        }
+        out.close();
+        if (out.fail()) {
+            spdlog::error("WriteBufferToFileAtomically: close/flush failed for {}",
+                          temp_path.string());
+            throw IOError("Failed to flush/close output file: " + temp_path.string());
+        }
+
+        std::error_code ec;
+        auto actual_size = std::filesystem::file_size(temp_path, ec);
+        if (ec) {
+            spdlog::error("WriteBufferToFileAtomically: cannot stat temp file {}: {}",
+                          temp_path.string(), ec.message());
+            throw IOError("Cannot verify temp file size: " + temp_path.string() + ": " +
+                          ec.message());
+        }
+        if (actual_size != bytes.size()) {
+            spdlog::error(
+                "WriteBufferToFileAtomically: size mismatch for {}: expected={}, actual={}",
+                temp_path.string(), bytes.size(), actual_size);
+            throw IOError("File size mismatch after write: expected " +
+                          std::to_string(bytes.size()) + " but got " + std::to_string(actual_size));
+        }
     });
+
+    spdlog::info("WriteBufferToFileAtomically: written {} bytes to {}", bytes.size(),
+                 final_path.string());
 }
 
 void ThreeMfWriter::WriteToFile(const std::string& path,

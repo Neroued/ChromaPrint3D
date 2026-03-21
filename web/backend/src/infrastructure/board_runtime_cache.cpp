@@ -3,6 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <filesystem>
 #include <fstream>
 #include <system_error>
 
@@ -15,24 +16,47 @@ std::optional<SpillableArtifact> WriteBoardModelFile(const std::filesystem::path
     if (temp_dir.empty() || model_3mf.empty()) return std::nullopt;
 
     auto file_path = temp_dir / (board_id + "_calibration_board.3mf");
+    spdlog::info("WriteBoardModelFile: board={}, path={}, bytes={}", board_id, file_path.string(),
+                 model_3mf.size());
     {
         std::ofstream out(file_path, std::ios::binary | std::ios::trunc);
-        if (!out) {
-            spdlog::warn("BoardRuntimeCache: cannot open temp file for board {}: {}", board_id,
-                         file_path.string());
+        if (!out.is_open()) {
+            spdlog::error("WriteBoardModelFile: cannot open temp file for board {}: {}", board_id,
+                          file_path.string());
             return std::nullopt;
         }
         out.write(reinterpret_cast<const char*>(model_3mf.data()),
                   static_cast<std::streamsize>(model_3mf.size()));
-        if (!out) {
+        if (!out.good()) {
             std::error_code ec;
             std::filesystem::remove(file_path, ec);
-            spdlog::warn("BoardRuntimeCache: failed writing board model {} to {}", board_id,
-                         file_path.string());
+            spdlog::error("WriteBoardModelFile: write failed for board {} to {}", board_id,
+                          file_path.string());
+            return std::nullopt;
+        }
+        out.close();
+        if (out.fail()) {
+            std::error_code ec;
+            std::filesystem::remove(file_path, ec);
+            spdlog::error("WriteBoardModelFile: close/flush failed for board {} at {}", board_id,
+                          file_path.string());
             return std::nullopt;
         }
     }
-    return SpillableArtifact::FromFile(std::move(file_path), model_3mf.size());
+
+    std::error_code ec;
+    auto actual_size = std::filesystem::file_size(file_path, ec);
+    if (ec || actual_size != model_3mf.size()) {
+        spdlog::error("WriteBoardModelFile: size mismatch for board {}: expected={}, actual={}, "
+                      "ec={}",
+                      board_id, model_3mf.size(), actual_size, ec.message());
+        std::filesystem::remove(file_path, ec);
+        return std::nullopt;
+    }
+
+    spdlog::info("WriteBoardModelFile: board {} written {} bytes to {}", board_id, actual_size,
+                 file_path.string());
+    return SpillableArtifact::FromFile(std::move(file_path), actual_size);
 }
 
 } // namespace
@@ -99,7 +123,8 @@ std::optional<BoardSnapshot> BoardRuntimeCache::FindBoard(const std::string& id)
 
     BoardSnapshot snapshot;
     if (it->second.spilled_3mf.has_file()) {
-        snapshot.model_3mf_path = it->second.spilled_3mf.path();
+        snapshot.model_3mf_path     = it->second.spilled_3mf.path();
+        snapshot.expected_file_size = it->second.spilled_3mf.file_size();
     } else {
         snapshot.model_3mf = it->second.model_3mf_fallback;
     }

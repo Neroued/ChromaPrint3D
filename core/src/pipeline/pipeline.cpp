@@ -502,6 +502,7 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
 
     if (!request.output_3mf_path.empty() && !result.model_3mf.empty()) {
         detail::WriteBufferToFileAtomically(request.output_3mf_path, result.model_3mf);
+        spdlog::info("Wrote 3MF to {}", request.output_3mf_path);
         if (request.output_3mf_file_only) {
             result.model_3mf.clear();
             result.model_3mf.shrink_to_fit();
@@ -509,9 +510,11 @@ ConvertResult ConvertRaster(const ConvertRasterRequest& request, ProgressCallbac
     }
     if (!request.preview_path.empty() && !result.preview_png.empty()) {
         detail::WriteBufferToFileAtomically(request.preview_path, result.preview_png);
+        spdlog::info("Wrote preview to {}", request.preview_path);
     }
     if (!request.source_mask_path.empty() && !result.source_mask_png.empty()) {
         detail::WriteBufferToFileAtomically(request.source_mask_path, result.source_mask_png);
+        spdlog::info("Wrote source mask to {}", request.source_mask_path);
     }
 
     return result;

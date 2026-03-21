@@ -17,6 +17,7 @@ namespace chromaprint3d::backend {
 struct BoardSnapshot {
     std::vector<uint8_t> model_3mf;
     std::filesystem::path model_3mf_path;
+    std::size_t expected_file_size = 0;
     ChromaPrint3D::CalibrationBoardMeta meta;
 
     bool has_file_backed_model() const { return !model_3mf_path.empty(); }
