@@ -36,11 +36,13 @@ import VectorizePanel from './components/VectorizePanel.vue'
 import ColorDBBuildSection from './components/calibration/ColorDBBuildSection.vue'
 import ColorDBUploadSection from './components/calibration/ColorDBUploadSection.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
+import WhatsNewModal from './components/WhatsNewModal.vue'
 import CheckUpdateLink from './components/CheckUpdateLink.vue'
 import { darkThemeOverrides, lightThemeOverrides } from './theme'
 import { useAppStore } from './stores/app'
 import { useAppLifecycle } from './composables/feature/useAppLifecycle'
 import { useUpdateChecker } from './composables/feature/useUpdateChecker'
+import { useWhatsNew } from './composables/feature/useWhatsNew'
 import { isElectronRuntime } from './runtime/platform'
 import {
   getSiteIcpNumber,
@@ -103,6 +105,9 @@ useAppLifecycle()
 const { initOnce: initUpdateChecker } = useUpdateChecker()
 initUpdateChecker()
 
+const { initOnce: initWhatsNew, show: showWhatsNew } = useWhatsNew()
+initWhatsNew()
+
 function handleColorDBUpdated() {
   appStore.refreshColorDBs()
 }
@@ -137,7 +142,12 @@ function toggleLocale() {
           <div class="app-shell__header-inner">
             <NSpace align="center" :size="12">
               <NText strong class="app-shell__brand-title">ChromaPrint3D</NText>
-              <NText v-if="serverVersion" depth="3" class="app-shell__version">
+              <NText
+                v-if="serverVersion"
+                depth="3"
+                class="app-shell__version app-shell__version--clickable"
+                @click="showWhatsNew"
+              >
                 v{{ serverVersion }}
               </NText>
             </NSpace>
@@ -169,6 +179,7 @@ function toggleLocale() {
         <NLayoutContent class="app-shell__content">
           <div class="app-shell__content-inner">
             <UpdateBanner />
+            <WhatsNewModal />
             <div class="app-shell__announce">
               <div class="app-shell__announce-inner">
                 <span class="app-shell__announce-text">

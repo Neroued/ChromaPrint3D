@@ -93,6 +93,10 @@ export default {
       upToDate: '已是最新版本',
       checkFailed: '无法检查更新，请稍后重试',
     },
+    whatsNew: {
+      title: 'v{version} 版本亮点',
+      gotIt: '知道了',
+    },
   },
 
   convert: {

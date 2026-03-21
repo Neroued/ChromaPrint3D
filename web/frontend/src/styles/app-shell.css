@@ -48,6 +48,17 @@
   font-size: 12px;
 }
 
+.app-shell__version--clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 4px;
+  transition: background-color 0.2s;
+}
+
+.app-shell__version--clickable:hover {
+  background-color: rgba(128, 128, 128, 0.12);
+}
+
 .app-shell__header-status {
   justify-content: flex-end;
   flex-wrap: wrap;

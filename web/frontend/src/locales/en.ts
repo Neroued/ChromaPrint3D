@@ -63,6 +63,10 @@ export default {
       upToDate: 'You are up to date',
       checkFailed: 'Unable to check for updates, please try again later',
     },
+    whatsNew: {
+      title: "What's New in v{version}",
+      gotIt: 'Got it',
+    },
   },
 
   convert: {
