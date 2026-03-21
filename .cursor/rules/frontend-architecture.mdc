@@ -1,5 +1,5 @@
 ---
-description: Enforce frontend layering and API access boundaries
+description: 前端分层边界与组件职责约束
 globs: web/frontend/src/**/*.{ts,vue}
 alwaysApply: false
 ---
@@ -21,13 +21,15 @@ alwaysApply: false
 
 ## 快速检查
 
-- 组件层是否只做“渲染 + 事件绑定 + 调用 service/composable”？
+- 组件层是否只做"渲染 + 事件绑定 + 调用 service/composable"？
 - 相同逻辑是否已经在 `composables` 或 `services` 存在？
 - 新增 API 是否按业务域拆分，而不是继续堆在单文件中？
 
-## 前端最小验证（必须与 CI 一致）
+## 格式化
 
-验证命令及顺序与 `.github/workflows/ci.yml` 的 `frontend` job 完全对齐：
+前端文件格式化由 `.cursor/hooks/format-frontend.sh` 自动执行（afterFileEdit hook），无需手动运行。
+
+提交前如需全量检查，可运行：
 
 ```bash
 cd web/frontend
@@ -36,7 +38,3 @@ npm run lint           # vue-tsc -b --pretty false && eslint
 npm run test           # vitest run --coverage
 npm run build          # vue-tsc -b && vite build
 ```
-
-- **禁止**使用 `vue-tsc --noEmit` 替代 `npm run typecheck`（CI 使用 `vue-tsc -b`，更严格）。
-- 格式检查必须通过 `npm run format:check`（即 `prettier --check .`，全量检查）。
-- 若格式不通过，执行 `npm run format`（即 `prettier --write .`）修复后再提交。

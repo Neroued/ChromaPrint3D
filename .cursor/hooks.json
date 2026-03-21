@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/format-cpp.sh"
+      },
+      {
+        "command": ".cursor/hooks/format-frontend.sh"
+      },
+      {
+        "type": "prompt",
+        "prompt": "You are checking a code edit for hardcoded UI text in a Vue/TypeScript frontend file.\n\nRules:\n1. If file_path is NOT under 'web/frontend/src/', return ok.\n2. If file_path is under 'web/frontend/src/locales/', return ok.\n3. If the file extension is not .vue or .ts, return ok.\n4. Examine ONLY the 'new_string' fields in the edits array. Look for user-visible strings (button labels, placeholders, error messages, titles, tooltips, confirm/alert text) that are hardcoded in Chinese or English instead of using t('key') or i18n.global.t('key').\n5. Ignore: code comments, console.log/warn/error, variable/function names, type definitions, import paths, CSS class names, HTML tag names, emit event names, prop names.\n6. If you find hardcoded UI text, return not ok with a reason listing the offending strings.\n\nHook input:\n$ARGUMENTS",
+        "timeout": 15
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/block-dangerous.sh",
+        "timeout": 5
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": ".cursor/hooks/protect-secrets.sh",
+        "timeout": 5
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/check-docs-sync.sh",
+        "timeout": 15,
+        "loop_limit": 2
+      }
+    ]
+  }
+}

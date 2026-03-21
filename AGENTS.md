@@ -40,14 +40,23 @@
 - [docs/agents/modeling/README.md](docs/agents/modeling/README.md)
 - 任务手册：[docs/agents/tasks/](docs/agents/tasks/)
 
+## Hooks（自动化执行）
+
+以下行为由 `.cursor/hooks.json` 配置的 hooks 自动执行，无需手动操作：
+
+- C++ 文件编辑后自动运行 `clang-format`（afterFileEdit hook）
+- 前端文件编辑后自动运行 `prettier`（afterFileEdit hook）
+- 前端文件编辑后自动检测 i18n 硬编码 UI 文本（afterFileEdit prompt hook）
+- 危险 Shell 命令拦截：`rm -rf /`、`force push master` 等（beforeShellExecution hook）
+- 敏感文件保护：`.env`、私钥、凭据文件等（beforeReadFile hook）
+- Agent 结束时检查文档是否同步（stop hook）
+
 ## 全局协作规则（必须遵守）
 
-- C++ 变更后仅格式化本次修改文件：[.cursor/rules/cpp-formatting.mdc](.cursor/rules/cpp-formatting.mdc)
+- C++ 编码规范（格式化、跨平台、代码结构与工具函数复用）：[.cursor/rules/cpp-coding-standards.mdc](.cursor/rules/cpp-coding-standards.mdc)
 - 涉及 API/参数/构建/用户行为变化时同步文档：[.cursor/rules/sync-docs.mdc](.cursor/rules/sync-docs.mdc)
-- 禁止重复工具函数，优先复用并保持 `.cpp` 结构清晰：[.cursor/rules/code-structure-and-utility-reuse.mdc](.cursor/rules/code-structure-and-utility-reuse.mdc)
-- C++ 跨平台约束（路径、随机数、宏判断、CI 脚本等）：[.cursor/rules/cross-platform-cpp.mdc](.cursor/rules/cross-platform-cpp.mdc)
 - 前后端联动大型修改必须执行端到端闭环检查：[.cursor/rules/end-to-end-change-checklist.mdc](.cursor/rules/end-to-end-change-checklist.mdc)
-- 前端验证必须与 CI 一致（`npm run format:check` / `lint` / `test` / `build`）：[.cursor/rules/frontend-layer-boundary.mdc](.cursor/rules/frontend-layer-boundary.mdc)
+- 前端分层边界与组件职责约束：[.cursor/rules/frontend-architecture.mdc](.cursor/rules/frontend-architecture.mdc)
 - 前端 i18n 国际化规范（禁止硬编码文案、翻译 key 同步、locale 格式化）：[.cursor/rules/frontend-i18n.mdc](.cursor/rules/frontend-i18n.mdc)
 - Git 提交流程强制规范（禁止直提 `master`，必须分支 + PR）：[.cursor/rules/git-branch-pr-policy.mdc](.cursor/rules/git-branch-pr-policy.mdc)
 
@@ -60,7 +69,8 @@
 
 ## 提交前检查清单
 
-- C++ 文件是否执行 `clang-format -i <modified-files>`
+- C++ 格式化已由 hook 自动执行，无需手动检查
+- 前端格式化已由 hook 自动执行；提交前可运行 `cd web/frontend && npm run format:check && npm run lint && npm run test && npm run build` 做全量验证
 - 是否完成最小验证（构建、测试或功能性检查）
 - 是否更新受影响的文档入口（[README.md](README.md)、[docs/development.md](docs/development.md)、[docs/deployment.md](docs/deployment.md)、[docs/agents/](docs/agents/)）
 - 是否避免引入重复工具函数或可复用逻辑分叉

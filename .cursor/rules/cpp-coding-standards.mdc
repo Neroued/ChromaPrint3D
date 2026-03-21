@@ -1,12 +1,25 @@
 ---
-description: C++ 跨平台编译规范，禁止使用 POSIX/Windows 单平台 API，确保代码在 Linux / macOS / Windows 三平台均可编译运行。
-globs: **/*.cpp,**/*.h,**/*.hpp,**/*.cc,**/*.cxx,**/CMakeLists.txt,**/*.cmake
+description: C++ 编码规范：格式化、跨平台、代码结构与工具函数复用
+globs: "**/*.{cpp,h,hpp,cc,cxx},**/CMakeLists.txt,**/*.cmake"
 alwaysApply: false
 ---
 
-# C++ 跨平台编译规范
+# C++ 编码规范
 
-## 文件系统路径
+## 格式化
+
+格式化由 `.cursor/hooks/format-cpp.sh` 自动执行（afterFileEdit hook），无需手动运行。
+
+项目格式化风格（`.clang-format` 配置）：
+- 基于 LLVM 风格
+- 缩进：4 空格
+- 列宽限制：100
+
+## 跨平台
+
+确保代码在 Linux / macOS / Windows 三平台均可编译运行。
+
+### 文件系统路径
 
 禁止硬编码 POSIX 路径，一律使用 `std::filesystem`（C++17）：
 
@@ -20,7 +33,7 @@ std::filesystem::create_directories(dir);
 .setUploadPath(dir.string());
 ```
 
-## 随机数 / ID 生成
+### 随机数 / ID 生成
 
 禁止直接读取 `/dev/urandom`，使用 `std::random_device`：
 
@@ -35,7 +48,7 @@ return detail::RandomHex(16);
 
 `std::random_device` 在 MSVC 下调用 `BCryptGenRandom`，在 GCC/Clang 下读取 `/dev/urandom`，行为等价且可移植。
 
-## CMake 外部库链接
+### CMake 外部库链接
 
 禁止硬编码 Linux 特有的库名：
 
@@ -48,7 +61,7 @@ target_link_libraries(foo uuid)  # libuuid 在 Windows 不存在
 set(UUID_LIBRARIES "" CACHE STRING "uuid library target" FORCE)
 ```
 
-## 平台宏判断
+### 平台宏判断
 
 需要平台差异时，使用标准宏而非猜测：
 
@@ -62,7 +75,7 @@ set(UUID_LIBRARIES "" CACHE STRING "uuid library target" FORCE)
 #endif
 ```
 
-## CI 脚本
+### CI 脚本
 
 GitHub Actions 中禁止在跨平台 job 里直接调用 bash 脚本，使用 Python 替代：
 
@@ -74,9 +87,26 @@ run: ./scripts/download_models.sh
 run: python3 scripts/download_models.py
 ```
 
-## 变更检查
+## 代码结构
 
-每次新增系统调用或文件操作时，必须确认：
+### 工具函数复用
+
+- 禁止重复编写语义相同的工具函数（包括轻微改名/改参数的复制版本）。
+- 新增工具函数前，先检索项目内是否已有可复用实现。
+- 若工具函数会被多个模块复用，应提取为公共函数（头文件声明 + 单一实现）。
+- 若仅当前文件使用，应保留为该 `.cpp` 的局部实现（匿名命名空间），避免不必要暴露。
+
+### `.cpp` 文件组织
+
+- 避免在 `.cpp` 内做非必要前向声明；优先通过合理的函数定义顺序解决依赖。
+- 仅在无法通过顺序重排解决（如互递归）时才允许前向声明，并在附近写明原因。
+- 实现文件应按"工具函数 → 核心流程 → 对外接口"组织，减少跳转与重复。
+
+### 变更检查
+
+每次新增或修改代码时，必须确认：
 - 是否依赖 POSIX 路径格式（`/` 开头的绝对路径）？
 - 是否调用了 POSIX-only API（`fork`、`dlopen`、`mmap` 等）？
 - 是否可用 `std::filesystem` / `std::random_device` / 标准库替代？
+- 新增的工具函数是文件内私有函数，还是应升级为公共函数？
+- 若发现已有重复实现，优先合并并删除重复代码，再继续功能开发。

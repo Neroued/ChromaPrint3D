@@ -1,6 +1,6 @@
 ---
-description: 前后端联动大型修改必须进行端到端闭环检查
-alwaysApply: true
+description: 前后端联动大型修改必须进行端到端闭环检查（涉及 API/缓存/文件/下载链路时由 Agent 主动引用）
+alwaysApply: false
 ---
 
 # 联动变更闭环检查

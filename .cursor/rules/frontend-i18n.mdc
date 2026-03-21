@@ -62,8 +62,10 @@ function getOptions(t: (key: string) => string) {
 
 ## 变更检查
 
+硬编码 UI 文本由 `.cursor/hooks.json` 中的 prompt hook 自动检测（afterFileEdit 事件），编辑前端文件后会即时提示遗漏的 `t()` 调用。
+
 - 新增或修改用户可见文案后，确认 `zh-CN.ts` 和 `en.ts` 的 key 已同步。
-- 可用以下命令扫描遗漏的硬编码中文（排除 locales 目录和测试文件）：
+- 如需手动全量扫描硬编码中文（排除 locales 目录和测试文件）：
 
 ```bash
 cd web/frontend/src
