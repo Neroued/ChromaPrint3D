@@ -537,13 +537,13 @@ void ApiV1Controller::ReplyBinary(Callback&& cb, const TaskArtifact& artifact,
 
     if (artifact.is_file_based()) {
         spdlog::debug("ReplyBinary: serving file artifact: path={}, filename={}, content_type={}",
-                     artifact.file_path.string(), artifact.filename, artifact.content_type);
+                      artifact.file_path.string(), artifact.filename, artifact.content_type);
         resp =
             drogon::HttpResponse::newFileResponse(artifact.file_path.string(), artifact.filename);
         resp->setContentTypeString(artifact.content_type);
     } else {
         spdlog::debug("ReplyBinary: serving buffer artifact: size={}, filename={}, content_type={}",
-                     artifact.bytes.size(), artifact.filename, artifact.content_type);
+                      artifact.bytes.size(), artifact.filename, artifact.content_type);
         resp = drogon::HttpResponse::newHttpResponse();
         resp->setStatusCode(drogon::k200OK);
         resp->setBody(std::string(reinterpret_cast<const char*>(artifact.bytes.data()),
