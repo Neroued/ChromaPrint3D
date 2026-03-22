@@ -49,6 +49,8 @@ struct ConvertTaskPayload {
     std::vector<uint8_t> region_map_binary;
 
     std::optional<ChromaPrint3D::MatchVectorResult> vector_match_state;
+
+    ChromaPrint3D::RecipeSearchCache recipe_search_cache;
 };
 
 struct MattingTaskPayload {

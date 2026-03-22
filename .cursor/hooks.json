@@ -30,7 +30,7 @@
       {
         "command": ".cursor/hooks/check-docs-sync.sh",
         "timeout": 15,
-        "loop_limit": 2
+        "loop_limit": 1
       }
     ]
   }

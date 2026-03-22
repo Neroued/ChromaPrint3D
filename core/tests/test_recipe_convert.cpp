@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "chromaprint3d/print_profile.h"
+#include "chromaprint3d/recipe_alternatives.h"
 #include "match/detail/recipe_convert.h"
 #include "match/detail/match_utils.h"
 
@@ -96,4 +97,76 @@ TEST(RecipeConvert, PrepareDBsBasic) {
     auto prepared            = PrepareDBs(dbs, profile);
     EXPECT_EQ(prepared.size(), 1u);
     EXPECT_EQ(prepared[0].source_to_target_channel.size(), 2u);
+}
+
+TEST(RecipeConvert, PrepareDBsSkipsFullyIncompatibleDB) {
+    PrintProfile profile = MakeTestProfile();
+
+    ColorDB incompatible;
+    incompatible.name             = "all_unmapped";
+    incompatible.max_color_layers = 5;
+    incompatible.base_layers      = 3;
+    incompatible.base_channel_idx = 0;
+    incompatible.layer_height_mm  = 0.08f;
+    incompatible.line_width_mm    = 0.42f;
+    incompatible.layer_order      = LayerOrder::Top2Bottom;
+    incompatible.palette          = {Channel{"Green", "PLA"}, Channel{"Blue", "PLA"}};
+
+    Entry e;
+    e.lab    = Lab(40.0f, -20.0f, 15.0f);
+    e.recipe = {0, 0, 1, 1, 0};
+    incompatible.entries.push_back(e);
+
+    ColorDB compatible = MakeTestDB();
+
+    std::vector<ColorDB> dbs = {incompatible, compatible};
+    auto prepared            = PrepareDBs(dbs, profile);
+    EXPECT_EQ(prepared.size(), 1u);
+    EXPECT_EQ(prepared[0].db->name, "test");
+}
+
+TEST(RecipeConvert, PrepareDBsAllIncompatibleReturnsEmpty) {
+    PrintProfile profile = MakeTestProfile();
+
+    ColorDB incompatible;
+    incompatible.name             = "all_unmapped";
+    incompatible.max_color_layers = 5;
+    incompatible.base_layers      = 3;
+    incompatible.base_channel_idx = 0;
+    incompatible.layer_height_mm  = 0.08f;
+    incompatible.line_width_mm    = 0.42f;
+    incompatible.layer_order      = LayerOrder::Top2Bottom;
+    incompatible.palette          = {Channel{"Green", "PLA"}, Channel{"Blue", "PLA"}};
+
+    Entry e;
+    e.lab    = Lab(40.0f, -20.0f, 15.0f);
+    e.recipe = {0, 0, 1, 1, 0};
+    incompatible.entries.push_back(e);
+
+    std::vector<ColorDB> dbs = {incompatible};
+    auto prepared            = PrepareDBs(dbs, profile);
+    EXPECT_TRUE(prepared.empty());
+}
+
+TEST(RecipeConvert, FindAlternativesCachedMatchesUncached) {
+    PrintProfile profile     = MakeTestProfile();
+    ColorDB db               = MakeTestDB();
+    std::vector<ColorDB> dbs = {db};
+
+    MatchConfig cfg;
+    cfg.color_space  = ColorSpace::Lab;
+    cfg.k_candidates = 5;
+
+    Lab target(50.0f, 10.0f, -5.0f);
+
+    auto uncached = FindAlternativeRecipes(target, dbs, profile, cfg, 5);
+    auto cache    = RecipeSearchCache::Build(dbs, profile, cfg);
+    ASSERT_TRUE(cache.IsValid());
+    auto cached = FindAlternativeRecipes(target, cache, 5);
+
+    ASSERT_EQ(uncached.size(), cached.size());
+    for (std::size_t i = 0; i < uncached.size(); ++i) {
+        EXPECT_EQ(uncached[i].recipe, cached[i].recipe);
+        EXPECT_FLOAT_EQ(uncached[i].delta_e76, cached[i].delta_e76);
+    }
 }

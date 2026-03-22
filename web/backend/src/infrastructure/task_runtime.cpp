@@ -661,16 +661,20 @@ TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string
     const bool is_vector = cp->vector_match_state.has_value();
     if (!is_raster && !is_vector) return std::nullopt;
 
-    const auto& dbs = is_raster ? cp->raster_match_state->dbs : cp->vector_match_state->dbs;
-    const auto& profile =
-        is_raster ? cp->raster_match_state->profile : cp->vector_match_state->profile;
-    const auto& match_config =
-        is_raster ? cp->raster_match_state->match_config : cp->vector_match_state->match_config;
-    const auto& model_gate_c =
-        is_raster ? cp->raster_match_state->model_gate : cp->vector_match_state->model_gate;
+    if (!cp->recipe_search_cache.IsValid()) {
+        const auto& dbs = is_raster ? cp->raster_match_state->dbs : cp->vector_match_state->dbs;
+        const auto& profile =
+            is_raster ? cp->raster_match_state->profile : cp->vector_match_state->profile;
+        const auto& match_config =
+            is_raster ? cp->raster_match_state->match_config : cp->vector_match_state->match_config;
+        const auto& model_gate_c =
+            is_raster ? cp->raster_match_state->model_gate : cp->vector_match_state->model_gate;
+        cp->recipe_search_cache = ChromaPrint3D::RecipeSearchCache::Build(
+            dbs, profile, match_config, model_pack, model_gate_c);
+    }
 
-    auto candidates = ChromaPrint3D::FindAlternativeRecipes(
-        target_lab, dbs, profile, match_config, max_candidates, offset, model_pack, model_gate_c);
+    auto candidates = ChromaPrint3D::FindAlternativeRecipes(target_lab, cp->recipe_search_cache,
+                                                            max_candidates, offset);
 
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& c : candidates) {

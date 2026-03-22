@@ -141,8 +141,10 @@ std::vector<PreparedDB> PrepareDBs(std::span<const ColorDB> dbs, const PrintProf
                              db.entries.size(), fdb->entries.size());
                 item.filtered_db = std::move(fdb);
             } else {
-                spdlog::warn("PrepareDBs: '{}' has 0 compatible entries after channel filtering",
-                             db.name);
+                spdlog::debug(
+                    "PrepareDBs: skipping '{}' — 0 compatible entries after channel filtering",
+                    db.name);
+                continue;
             }
         }
 
@@ -154,7 +156,11 @@ std::vector<PreparedDB> PrepareDBs(std::span<const ColorDB> dbs, const PrintProf
 
         prepared.push_back(std::move(item));
     }
-    if (prepared.empty()) { throw ConfigError("No usable ColorDB after preparation"); }
+    if (prepared.empty()) {
+        spdlog::warn("PrepareDBs: all {} DB(s) filtered out — no compatible entries for the "
+                     "current profile (model fallback may still be available)",
+                     dbs.size());
+    }
     return prepared;
 }
 

@@ -10,6 +10,7 @@
 #include "recipe_map.h"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -24,9 +25,40 @@ struct RecipeCandidate {
     bool from_model      = false;
 };
 
+/// Pre-computed search state for repeated alternative-recipe queries.
+/// Build once per (dbs, profile, model) combination and reuse across calls.
+/// Copyable via shared_ptr (the cached state is read-only after construction).
+///
+/// **Lifetime requirement**: the `ColorDB` objects referenced by the `dbs` span
+/// passed to Build() must outlive this cache.  Internally the cache holds raw
+/// pointers into those objects for fully-compatible DBs (where no per-entry
+/// filtering is needed).  Destroying, moving, or reallocating the source
+/// container while the cache is alive causes undefined behaviour.
+class RecipeSearchCache {
+public:
+    RecipeSearchCache() = default;
+
+    [[nodiscard]] static RecipeSearchCache
+    Build(std::span<const ColorDB> dbs, const PrintProfile& profile, const MatchConfig& match_cfg,
+          const ModelPackage* model_package = nullptr, const ModelGateConfig& model_gate = {});
+
+    bool IsValid() const;
+
+private:
+    struct Impl;
+    std::shared_ptr<const Impl> impl_;
+    friend std::vector<RecipeCandidate> FindAlternativeRecipes(const Lab&, const RecipeSearchCache&,
+                                                               int, int);
+};
+
 std::vector<RecipeCandidate> FindAlternativeRecipes(
     const Lab& target_color, std::span<const ColorDB> dbs, const PrintProfile& profile,
     const MatchConfig& match_cfg, int max_candidates, int offset = 0,
     const ModelPackage* model_package = nullptr, const ModelGateConfig& model_gate = {});
+
+/// Overload using pre-built cache for repeated queries (avoids re-preparing DBs each call).
+std::vector<RecipeCandidate> FindAlternativeRecipes(const Lab& target_color,
+                                                    const RecipeSearchCache& cache,
+                                                    int max_candidates, int offset = 0);
 
 } // namespace ChromaPrint3D
