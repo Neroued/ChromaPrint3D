@@ -744,8 +744,13 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             return false;
         }
 
-        rmap                  = ChromaPrint3D::RasterRegionMap::Build(mstate.recipe_map);
-        cp->region_map_binary = rmap.SerializeRegionIds();
+        for (int rid : target_region_ids) {
+            if (rid < 0 || static_cast<std::size_t>(rid) >= rmap.regions.size()) continue;
+            auto& info        = rmap.regions[static_cast<std::size_t>(rid)];
+            info.recipe       = new_recipe;
+            info.mapped_color = new_mapped_color;
+            info.from_model   = new_from_model;
+        }
 
         cv::Mat preview_bgra = mstate.recipe_map.ToBgraImage();
         if (!preview_bgra.empty()) {
@@ -766,14 +771,6 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             message     = e.what();
             return false;
         }
-
-        cv::Mat region_ids_mat =
-            ChromaPrint3D::RenderVectorRegionIds(vstate.proc_result, vstate.recipe_map);
-        const std::size_t total = static_cast<std::size_t>(region_ids_mat.rows) *
-                                  static_cast<std::size_t>(region_ids_mat.cols);
-        cp->region_map_binary.resize(total * sizeof(uint32_t));
-        std::memcpy(cp->region_map_binary.data(), region_ids_mat.data,
-                    cp->region_map_binary.size());
 
         cp->result.preview_png = ChromaPrint3D::RenderVectorPreviewPng(
             vstate.proc_result, vstate.recipe_map, vstate.profile.palette);

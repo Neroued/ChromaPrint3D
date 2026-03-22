@@ -279,7 +279,6 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
     undoStack.value.push({ regionIds, oldRecipe, oldRecipeIndex })
 
     summary.value = newSummary
-    await loadRegionMap(props.taskId, newSummary.width, newSummary.height)
     await loadPreview()
 
     const firstRegion = newSummary.regions.find((r) => regionIds.includes(r.region_id))
@@ -309,7 +308,6 @@ async function handleUndo() {
       entry.oldRecipe.from_model,
     )
     summary.value = newSummary
-    await loadRegionMap(props.taskId, newSummary.width, newSummary.height)
     await loadPreview()
 
     const firstRegion = newSummary.regions.find((r) => entry.regionIds.includes(r.region_id))
