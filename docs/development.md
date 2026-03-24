@@ -21,13 +21,17 @@
 
 ```text
 ChromaPrint3D/
+├── 3dparty/               # 第三方子模块（spdlog、Clipper2、lunasvg、neroued_vectorizer）
 ├── core/                  # C++ 核心库（颜色匹配、图像处理、3MF 导出）
 ├── infer/                 # 深度学习推理封装（ONNX Runtime 后端）
 ├── apps/                  # CLI 工具
 ├── web/
 │   ├── frontend/          # Vue 3 前端
-│   └── backend/           # C++ Drogon HTTP 服务
+│   ├── backend/           # C++ Drogon HTTP 服务
+│   └── electron/          # Electron 桌面壳
 ├── modeling/              # Python 建模管线
+├── scripts/               # 发布、部署、CI 打包、模型下载/上传脚本
+├── tools/                 # 辅助工具（npy_to_colordb.py 等）
 ├── data/                  # 运行时数据（db/model_pack/models 等）
 └── docs/                  # 文档
 ```

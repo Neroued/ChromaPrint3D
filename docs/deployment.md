@@ -94,8 +94,6 @@ cd ~/chromaprint3d-deploy
 
 ```yaml
 # ~/chromaprint3d-deploy/docker-compose.yml
-version: "3.8"
-
 services:
   chromaprint3d:
     # API-only 镜像（不含前端），跨域部署专用
@@ -153,7 +151,7 @@ services:
     memswap_limit: 4g
     pids_limit: 512
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/v1/health"]
       interval: 10s
       timeout: 3s
       retries: 3
