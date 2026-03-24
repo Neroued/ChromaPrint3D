@@ -7,3 +7,6 @@
 [submodule "3dparty/neroued_vectorizer"]
 	path = 3dparty/neroued_vectorizer
 	url = https://github.com/Neroued/neroued_vectorizer.git
+[submodule "3dparty/lunasvg"]
+	path = 3dparty/lunasvg
+	url = https://github.com/Neroued/lunasvg.git

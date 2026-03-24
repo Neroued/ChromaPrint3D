@@ -7,7 +7,13 @@
 #include <clipper2/clipper.h>
 #include <spdlog/spdlog.h>
 
+#include <lunasvg.h>
+#include "svgelement.h"
+#include "svggeometryelement.h"
+#include "svgpaintelement.h"
+
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -24,9 +30,6 @@
 #        include <omp.h>
 #    endif
 #endif
-
-#define NANOSVG_IMPLEMENTATION
-#include <nanosvg/nanosvg.h>
 
 namespace ChromaPrint3D {
 
@@ -104,75 +107,120 @@ static std::vector<Contour> NormalizeContours(const std::vector<Contour>& contou
     return normalized;
 }
 
-static Rgb NsvgColorToRgb(unsigned int color) {
-    float r = static_cast<float>((color >> 0) & 0xFF) / 255.0f;
-    float g = static_cast<float>((color >> 8) & 0xFF) / 255.0f;
-    float b = static_cast<float>((color >> 16) & 0xFF) / 255.0f;
+static Rgb LunaSvgColorToRgb(const lunasvg::Color& color) {
+    float r = color.redF();
+    float g = color.greenF();
+    float b = color.blueF();
     return Rgb{SrgbToLinear(r), SrgbToLinear(g), SrgbToLinear(b)};
 }
 
-static GradientInfo ExtractGradient(const NSVGgradient* grad, const NSVGshape* shape) {
+static GradientInfo ExtractGradientFromPaintElement(const lunasvg::SVGPaintElement* paintElem,
+                                                    const lunasvg::SVGGeometryElement* geoElem,
+                                                    FillType& out_fill_type) {
     GradientInfo info;
-    if (!grad) { return info; }
-    info.stops.reserve(static_cast<size_t>(grad->nstops));
-    for (int i = 0; i < grad->nstops; ++i) {
-        info.stops.push_back({grad->stops[i].offset, NsvgColorToRgb(grad->stops[i].color)});
+    out_fill_type = FillType::Solid;
+    if (!paintElem) return info;
+
+    auto eid = paintElem->id();
+    lunasvg::LengthContext lengthCtx(paintElem);
+
+    if (eid == lunasvg::ElementID::LinearGradient) {
+        auto* lg      = static_cast<const lunasvg::SVGLinearGradientElement*>(paintElem);
+        out_fill_type = FillType::LinearGradient;
+        info.x1       = lengthCtx.valueForLength(lg->x1());
+        info.y1       = lengthCtx.valueForLength(lg->y1());
+        info.x2       = lengthCtx.valueForLength(lg->x2());
+        info.y2       = lengthCtx.valueForLength(lg->y2());
+    } else if (eid == lunasvg::ElementID::RadialGradient) {
+        auto* rg      = static_cast<const lunasvg::SVGRadialGradientElement*>(paintElem);
+        out_fill_type = FillType::RadialGradient;
+        info.x1       = lengthCtx.valueForLength(rg->cx());
+        info.y1       = lengthCtx.valueForLength(rg->cy());
+        info.r        = lengthCtx.valueForLength(rg->r());
+        info.x2       = lengthCtx.valueForLength(rg->fx());
+        info.y2       = lengthCtx.valueForLength(rg->fy());
+    } else {
+        return info;
     }
 
-    float bounds_cx = (shape->bounds[0] + shape->bounds[2]) * 0.5f;
-    float bounds_cy = (shape->bounds[1] + shape->bounds[3]) * 0.5f;
-    float bounds_w  = shape->bounds[2] - shape->bounds[0];
-    float bounds_h  = shape->bounds[3] - shape->bounds[1];
+    for (const auto& child : paintElem->children()) {
+        auto* childElem = lunasvg::toSVGElement(child);
+        if (childElem && childElem->id() == lunasvg::ElementID::Stop) {
+            auto* stopElem = static_cast<const lunasvg::SVGStopElement*>(childElem);
+            auto gstop     = stopElem->gradientStop(1.0f);
+            GradientStop s;
+            s.offset = gstop.offset;
+            s.color  = Rgb{SrgbToLinear(gstop.color.r), SrgbToLinear(gstop.color.g),
+                          SrgbToLinear(gstop.color.b)};
+            info.stops.push_back(s);
+        }
+    }
 
-    info.x1 = bounds_cx;
-    info.y1 = bounds_cy;
-    info.x2 = bounds_cx + bounds_w * 0.5f;
-    info.y2 = bounds_cy;
-    info.r  = std::max(bounds_w, bounds_h) * 0.5f;
     return info;
 }
 
-static VectorShape ConvertShape(const NSVGshape* nshape, float tolerance) {
+static VectorShape ConvertGeometryElement(const lunasvg::SVGGeometryElement* geo, float tolerance) {
     VectorShape vs;
 
-    if (nshape->fill.type == NSVG_PAINT_COLOR) {
-        vs.fill_type  = FillType::Solid;
-        vs.fill_color = NsvgColorToRgb(nshape->fill.color);
-    } else if (nshape->fill.type == NSVG_PAINT_LINEAR_GRADIENT) {
-        vs.fill_type = FillType::LinearGradient;
-        vs.gradient  = ExtractGradient(nshape->fill.gradient, nshape);
-    } else if (nshape->fill.type == NSVG_PAINT_RADIAL_GRADIENT) {
-        vs.fill_type = FillType::RadialGradient;
-        vs.gradient  = ExtractGradient(nshape->fill.gradient, nshape);
+    const auto& paint = geo->fillPaintServer();
+    if (!paint.isRenderable()) return vs;
+
+    if (paint.element()) {
+        FillType ft  = FillType::Solid;
+        vs.gradient  = ExtractGradientFromPaintElement(paint.element(), geo, ft);
+        vs.fill_type = ft;
+        if (ft == FillType::Solid) return vs;
     } else {
-        return vs;
+        const auto& color = paint.color();
+        if (color.alpha() == 0) return vs;
+        vs.fill_type  = FillType::Solid;
+        vs.fill_color = LunaSvgColorToRgb(color);
     }
 
-    vs.opacity = nshape->opacity;
-    vs.svg_fill_rule =
-        (nshape->fillRule == NSVG_FILLRULE_EVENODD) ? SvgFillRule::EvenOdd : SvgFillRule::NonZero;
+    vs.opacity       = geo->opacity() * paint.opacity();
+    vs.svg_fill_rule = (geo->fill_rule() == lunasvg::FillRule::EvenOdd) ? SvgFillRule::EvenOdd
+                                                                        : SvgFillRule::NonZero;
 
-    for (const NSVGpath* path = nshape->paths; path != nullptr; path = path->next) {
-        if (path->npts < 4) { continue; }
+    const auto& path = geo->path();
+    lunasvg::PathIterator it(path);
+    std::array<lunasvg::Point, 3> pts;
 
-        Contour contour;
-        contour.push_back({path->pts[0], path->pts[1]});
+    Contour current_contour;
 
-        for (int i = 0; i < path->npts - 1; i += 3) {
-            const float* p = &path->pts[i * 2];
-            Vec2f p0{p[0], p[1]};
-            Vec2f p1{p[2], p[3]};
-            Vec2f p2{p[4], p[5]};
-            Vec2f p3{p[6], p[7]};
-            detail::FlattenCubicBezier(p0, p1, p2, p3, tolerance, contour);
+    while (!it.isDone()) {
+        auto cmd = it.currentSegment(pts);
+        switch (cmd) {
+        case lunasvg::PathCommand::MoveTo:
+            if (current_contour.size() >= 3) { vs.contours.push_back(std::move(current_contour)); }
+            current_contour.clear();
+            current_contour.push_back({pts[0].x, pts[0].y});
+            break;
+        case lunasvg::PathCommand::LineTo:
+            current_contour.push_back({pts[0].x, pts[0].y});
+            break;
+        case lunasvg::PathCommand::CubicTo: {
+            if (current_contour.empty()) { current_contour.push_back({0.0f, 0.0f}); }
+            Vec2f p0 = current_contour.back();
+            Vec2f p1{pts[0].x, pts[0].y};
+            Vec2f p2{pts[1].x, pts[1].y};
+            Vec2f p3{pts[2].x, pts[2].y};
+            detail::FlattenCubicBezier(p0, p1, p2, p3, tolerance, current_contour);
+            break;
         }
-
-        if (path->closed && contour.size() >= 3) {
-            if (contour.front() == contour.back()) { contour.pop_back(); }
+        case lunasvg::PathCommand::Close:
+            if (current_contour.size() >= 3) {
+                if (current_contour.front() == current_contour.back()) {
+                    current_contour.pop_back();
+                }
+            }
+            if (current_contour.size() >= 3) { vs.contours.push_back(std::move(current_contour)); }
+            current_contour.clear();
+            break;
         }
-
-        if (contour.size() >= 3) { vs.contours.push_back(std::move(contour)); }
+        it.next();
     }
+
+    if (current_contour.size() >= 3) { vs.contours.push_back(std::move(current_contour)); }
 
     vs.contours = NormalizeContours(vs.contours, tolerance, ToClipperFillRule(vs.svg_fill_rule));
     return vs;
@@ -183,39 +231,17 @@ static std::string PathStem(const std::string& path) {
     return std::filesystem::path(path).stem().string();
 }
 
-/// Compute the bounding box of all visible shapes from NanoSVG.
-/// After nsvg__scaleToViewbox, shape bounds are in the output unit (mm).
-static void ComputeShapeBounds(const NSVGimage* image, float& out_w, float& out_h) {
-    float max_x = 0.0f;
-    float max_y = 0.0f;
-    for (const NSVGshape* s = image->shapes; s != nullptr; s = s->next) {
-        if (!(s->flags & NSVG_FLAGS_VISIBLE)) { continue; }
-        if (s->fill.type == NSVG_PAINT_NONE) { continue; }
-        max_x = std::max(max_x, s->bounds[2]);
-        max_y = std::max(max_y, s->bounds[3]);
-    }
-    out_w = max_x;
-    out_h = max_y;
-}
-
-/// Common processing logic shared by Run() and RunFromBuffer().
-static VectorProcResult ProcessParsedSvg(NSVGimage* image, const VectorProcConfig& config,
+static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorProcConfig& config,
                                          const std::string& result_name) {
-    // NanoSVG's image->width/height are in pixels (pre-unit-conversion), but path
-    // coordinates are already in the output unit (mm) after nsvg__scaleToViewbox.
-    // Compute actual physical dimensions from the shape bounding boxes.
-    float svg_w = 0.0f;
-    float svg_h = 0.0f;
-    ComputeShapeBounds(image, svg_w, svg_h);
+    doc.updateLayout();
 
-    if (svg_w <= 0.0f || svg_h <= 0.0f) {
-        nsvgDelete(image);
-        throw InputError("SVG has no visible content");
-    }
+    float svg_w = doc.width();
+    float svg_h = doc.height();
 
-    spdlog::info("VectorProc: SVG content bounds {:.2f} x {:.2f} mm", svg_w, svg_h);
+    if (svg_w <= 0.0f || svg_h <= 0.0f) { throw InputError("SVG has no visible content"); }
 
-    // Compute scale to fit target dimensions (allows both up-scaling and down-scaling).
+    spdlog::info("VectorProc: SVG dimensions {:.2f} x {:.2f} px", svg_w, svg_h);
+
     float scale = 1.0f;
     if (config.target_width_mm > 0.0f || config.target_height_mm > 0.0f) {
         float sw = (config.target_width_mm > 0.0f) ? config.target_width_mm / svg_w
@@ -232,24 +258,26 @@ static VectorProcResult ProcessParsedSvg(NSVGimage* image, const VectorProcConfi
 
     spdlog::info("VectorProc: scale={:.4f}, output {:.2f} x {:.2f} mm", scale, final_w, final_h);
 
-    // Collect visible shapes for parallel processing
-    std::vector<const NSVGshape*> nshapes;
-    for (const NSVGshape* nshape = image->shapes; nshape != nullptr; nshape = nshape->next) {
-        if (!(nshape->flags & NSVG_FLAGS_VISIBLE)) { continue; }
-        if (nshape->fill.type == NSVG_PAINT_NONE) { continue; }
-        nshapes.push_back(nshape);
-    }
+    auto* root = doc.documentElement().svgElement(true);
 
-    std::vector<VectorShape> converted(nshapes.size());
+    std::vector<const lunasvg::SVGGeometryElement*> geo_elements;
+    root->transverse([&](lunasvg::SVGElement* elem) {
+        if (!elem->isGeometryElement()) return;
+        auto* geo = static_cast<lunasvg::SVGGeometryElement*>(elem);
+        if (!geo->isRenderable()) return;
+        geo_elements.push_back(geo);
+    });
+
+    std::vector<VectorShape> converted(geo_elements.size());
     const bool do_flip               = config.flip_y;
-    const std::ptrdiff_t shape_count = static_cast<std::ptrdiff_t>(nshapes.size());
+    const std::ptrdiff_t shape_count = static_cast<std::ptrdiff_t>(geo_elements.size());
 
 #if defined(_OPENMP)
 #    pragma omp parallel for schedule(dynamic)
 #endif
     for (std::ptrdiff_t i = 0; i < shape_count; ++i) {
         const size_t idx = static_cast<size_t>(i);
-        VectorShape vs   = ConvertShape(nshapes[idx], tol);
+        VectorShape vs   = ConvertGeometryElement(geo_elements[idx], tol);
 
         if (scale != 1.0f) {
             for (Contour& c : vs.contours) {
@@ -266,8 +294,6 @@ static VectorProcResult ProcessParsedSvg(NSVGimage* image, const VectorProcConfi
         }
         converted[idx] = std::move(vs);
     }
-
-    nsvgDelete(image);
 
     VectorImage vimg;
     vimg.width_mm  = final_w;
@@ -304,21 +330,21 @@ VectorProc::VectorProc(const VectorProcConfig& config) : config_(config) {}
 VectorProcResult VectorProc::Run(const std::string& svg_path) const {
     spdlog::info("VectorProc: loading SVG from file: {}", svg_path);
 
-    NSVGimage* image = nsvgParseFromFile(svg_path.c_str(), "mm", 96.0f);
-    if (!image) { throw IOError("Failed to parse SVG: " + svg_path); }
+    auto doc = lunasvg::Document::loadFromFile(svg_path);
+    if (!doc) { throw IOError("Failed to parse SVG: " + svg_path); }
 
-    return ProcessParsedSvg(image, config_, PathStem(svg_path));
+    return ProcessParsedSvg(*doc, config_, PathStem(svg_path));
 }
 
 VectorProcResult VectorProc::RunFromBuffer(const std::vector<uint8_t>& buffer,
                                            const std::string& name) const {
     if (buffer.empty()) { throw InputError("VectorProc::RunFromBuffer: buffer is empty"); }
 
-    std::string data(buffer.begin(), buffer.end());
-    NSVGimage* image = nsvgParse(data.data(), "mm", 96.0f);
-    if (!image) { throw IOError("VectorProc: failed to parse SVG from buffer"); }
+    auto doc = lunasvg::Document::loadFromData(reinterpret_cast<const char*>(buffer.data()),
+                                               buffer.size());
+    if (!doc) { throw IOError("VectorProc: failed to parse SVG from buffer"); }
 
-    return ProcessParsedSvg(image, config_, name);
+    return ProcessParsedSvg(*doc, config_, name);
 }
 
 } // namespace ChromaPrint3D

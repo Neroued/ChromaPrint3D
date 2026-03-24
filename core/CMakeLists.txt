@@ -31,6 +31,9 @@ target_include_directories(chromaprint3d SYSTEM PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/3dparty>)
 target_include_directories(chromaprint3d SYSTEM PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/3dparty/clipper2/CPP/Clipper2Lib/include>)
+target_include_directories(chromaprint3d SYSTEM PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/3dparty/lunasvg/source>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/3dparty/lunasvg/plutovg/include>)
 
 # ── Sources ──────────────────────────────────────────────────────────────────
 
@@ -88,6 +91,7 @@ endif()
 target_link_libraries(chromaprint3d PUBLIC opencv_core opencv_imgproc opencv_imgcodecs)
 target_link_libraries(chromaprint3d PUBLIC Clipper2)
 target_link_libraries(chromaprint3d PUBLIC spdlog::spdlog_header_only)
+target_link_libraries(chromaprint3d PUBLIC lunasvg::lunasvg)
 
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)

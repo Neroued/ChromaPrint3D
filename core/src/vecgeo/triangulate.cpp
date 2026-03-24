@@ -154,13 +154,14 @@ TriangulatedRegion TriangulateMergedPaths(const Clipper2Lib::Paths64& paths) {
         if (polygon.empty()) continue;
 
         std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
-        if (indices.empty()) continue;
 
         size_t base = result.vertices.size();
         result.vertices.reserve(base + total_pts);
         for (const auto& ring : polygon) {
             for (const Vec2f& p : ring) result.vertices.push_back(p);
         }
+
+        if (indices.empty()) continue;
 
         result.triangles.reserve(result.triangles.size() + indices.size() / 3);
         for (size_t i = 0; i + 2 < indices.size(); i += 3) {

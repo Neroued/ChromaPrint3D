@@ -34,6 +34,8 @@ set(CLIPPER2_EXAMPLES OFF CACHE BOOL "Disable Clipper2 examples" FORCE)
 set(CLIPPER2_TESTS OFF CACHE BOOL "Disable Clipper2 tests" FORCE)
 set(CLIPPER2_USINGZ "OFF" CACHE STRING "Disable Clipper2Z" FORCE)
 add_subdirectory(3dparty/clipper2/CPP)
+
+add_subdirectory(3dparty/lunasvg)
 if(TARGET Clipper2)
     if(MSVC)
         target_compile_options(Clipper2 PRIVATE /W0)

@@ -21,7 +21,7 @@ enum class FillType : uint8_t {
     RadialGradient,
 };
 
-/// SVG fill rule (mirrors nanosvg's NSVGfillRule).
+/// SVG fill rule.
 enum class SvgFillRule : uint8_t {
     NonZero = 0,
     EvenOdd = 1,
