@@ -14,11 +14,15 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <numeric>
 #include <string>
 
 #if defined(_OPENMP)
@@ -36,6 +40,37 @@ namespace ChromaPrint3D {
 namespace {
 
 constexpr double kClipperScale = 100000.0;
+
+struct NormalizeContoursStats {
+    std::atomic<int64_t> convert_us{0};
+    std::atomic<int64_t> union_us{0};
+    std::atomic<int64_t> simplify_us{0};
+    std::atomic<int64_t> filter_us{0};
+    std::atomic<int64_t> sort_us{0};
+    std::atomic<int64_t> calls{0};
+
+    void Reset() {
+        convert_us  = 0;
+        union_us    = 0;
+        simplify_us = 0;
+        filter_us   = 0;
+        sort_us     = 0;
+        calls       = 0;
+    }
+
+    void Log(const char* label) const {
+        int64_t n = calls.load(std::memory_order_relaxed);
+        if (n == 0) return;
+        spdlog::info("[perf] NormalizeContours ({}): {} calls, "
+                     "convert={:.1f} ms, union={:.1f} ms, simplify={:.1f} ms, "
+                     "filter={:.1f} ms, sort={:.1f} ms",
+                     label, n, convert_us.load() / 1000.0, union_us.load() / 1000.0,
+                     simplify_us.load() / 1000.0, filter_us.load() / 1000.0,
+                     sort_us.load() / 1000.0);
+    }
+};
+
+static NormalizeContoursStats g_normalize_stats;
 
 static Clipper2Lib::Path64 ContourToPath(const Contour& contour) {
     Clipper2Lib::Path64 path;
@@ -58,14 +93,6 @@ static Contour PathToContour(const Clipper2Lib::Path64& path) {
     return contour;
 }
 
-static bool IsDegenerateContour(const Contour& contour, float min_area_mm2) {
-    if (contour.size() < 3) return true;
-    Clipper2Lib::Path64 path = ContourToPath(contour);
-    if (path.size() < 3) return true;
-    double area_mm2 = std::abs(Clipper2Lib::Area(path)) / (kClipperScale * kClipperScale);
-    return area_mm2 < min_area_mm2;
-}
-
 static Clipper2Lib::FillRule ToClipperFillRule(SvgFillRule rule) {
     return (rule == SvgFillRule::EvenOdd) ? Clipper2Lib::FillRule::EvenOdd
                                           : Clipper2Lib::FillRule::NonZero;
@@ -77,7 +104,11 @@ static std::vector<Contour> NormalizeContours(const std::vector<Contour>& contou
     if (contours.empty()) return normalized;
 
     double simplify_eps = std::max(100.0, static_cast<double>(tolerance_mm) * kClipperScale * 0.4);
-    float min_area_mm2  = std::max(1e-5f, tolerance_mm * tolerance_mm * 0.01f);
+    double min_area_scaled =
+        std::max(1e-5, static_cast<double>(tolerance_mm) * tolerance_mm * 0.01) * kClipperScale *
+        kClipperScale;
+
+    auto t0 = std::chrono::steady_clock::now();
 
     Clipper2Lib::Paths64 all_paths;
     all_paths.reserve(contours.size());
@@ -87,22 +118,51 @@ static std::vector<Contour> NormalizeContours(const std::vector<Contour>& contou
     }
     if (all_paths.empty()) return normalized;
 
+    auto t1 = std::chrono::steady_clock::now();
+
     Clipper2Lib::Paths64 cleaned = Clipper2Lib::Union(all_paths, fill_rule);
     if (cleaned.empty()) return normalized;
+
+    auto t2 = std::chrono::steady_clock::now();
+
     cleaned = Clipper2Lib::SimplifyPaths(cleaned, simplify_eps, true);
 
+    auto t3 = std::chrono::steady_clock::now();
+
+    std::vector<double> areas;
+    areas.reserve(cleaned.size());
     for (auto& cpath : cleaned) {
         if (cpath.size() < 3) continue;
-        Contour out = PathToContour(cpath);
-        if (IsDegenerateContour(out, min_area_mm2)) continue;
-        normalized.push_back(std::move(out));
+        double a = std::abs(Clipper2Lib::Area(cpath));
+        if (a < min_area_scaled) continue;
+        areas.push_back(a);
+        normalized.push_back(PathToContour(cpath));
     }
 
-    std::sort(normalized.begin(), normalized.end(), [](const Contour& a, const Contour& b) {
-        Clipper2Lib::Path64 pa = ContourToPath(a);
-        Clipper2Lib::Path64 pb = ContourToPath(b);
-        return std::abs(Clipper2Lib::Area(pa)) > std::abs(Clipper2Lib::Area(pb));
-    });
+    auto t4 = std::chrono::steady_clock::now();
+
+    std::vector<size_t> order(normalized.size());
+    std::iota(order.begin(), order.end(), size_t{0});
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return areas[a] > areas[b]; });
+    std::vector<Contour> sorted;
+    sorted.reserve(normalized.size());
+    for (size_t k : order) { sorted.push_back(std::move(normalized[k])); }
+    normalized = std::move(sorted);
+
+    auto t5 = std::chrono::steady_clock::now();
+
+    using Us = std::chrono::microseconds;
+    g_normalize_stats.convert_us.fetch_add(std::chrono::duration_cast<Us>(t1 - t0).count(),
+                                           std::memory_order_relaxed);
+    g_normalize_stats.union_us.fetch_add(std::chrono::duration_cast<Us>(t2 - t1).count(),
+                                         std::memory_order_relaxed);
+    g_normalize_stats.simplify_us.fetch_add(std::chrono::duration_cast<Us>(t3 - t2).count(),
+                                            std::memory_order_relaxed);
+    g_normalize_stats.filter_us.fetch_add(std::chrono::duration_cast<Us>(t4 - t3).count(),
+                                          std::memory_order_relaxed);
+    g_normalize_stats.sort_us.fetch_add(std::chrono::duration_cast<Us>(t5 - t4).count(),
+                                        std::memory_order_relaxed);
+    g_normalize_stats.calls.fetch_add(1, std::memory_order_relaxed);
 
     return normalized;
 }
@@ -231,8 +291,18 @@ static std::string PathStem(const std::string& path) {
     return std::filesystem::path(path).stem().string();
 }
 
+static double ElapsedMs(std::chrono::steady_clock::time_point start) {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration<double, std::milli>(now - start).count();
+}
+
 static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorProcConfig& config,
                                          const std::string& result_name) {
+    auto t_total = std::chrono::steady_clock::now();
+    auto t0      = t_total;
+
+    g_normalize_stats.Reset();
+
     doc.updateLayout();
 
     float svg_w = doc.width();
@@ -256,7 +326,8 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
     float final_w = svg_w * scale;
     float final_h = svg_h * scale;
 
-    spdlog::info("VectorProc: scale={:.4f}, output {:.2f} x {:.2f} mm", scale, final_w, final_h);
+    spdlog::info("VectorProc: scale={:.4f}, output {:.2f} x {:.2f} mm, tol={:.4f}", scale, final_w,
+                 final_h, tol);
 
     auto* root = doc.documentElement().svgElement(true);
 
@@ -267,6 +338,12 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
         if (!geo->isRenderable()) return;
         geo_elements.push_back(geo);
     });
+
+    spdlog::info(
+        "[perf] VectorProc phase 1 (parse+layout+traverse): {:.1f} ms, {} geometry elements",
+        ElapsedMs(t0), geo_elements.size());
+
+    auto t1 = std::chrono::steady_clock::now();
 
     std::vector<VectorShape> converted(geo_elements.size());
     const bool do_flip               = config.flip_y;
@@ -296,21 +373,54 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
     }
 
     VectorImage vimg;
-    vimg.width_mm  = final_w;
-    vimg.height_mm = final_h;
+    vimg.width_mm         = final_w;
+    vimg.height_mm        = final_h;
+    size_t total_contours = 0;
+    size_t total_vertices = 0;
     for (auto& vs : converted) {
-        if (!vs.contours.empty()) { vimg.shapes.push_back(std::move(vs)); }
+        if (!vs.contours.empty()) {
+            for (const auto& c : vs.contours) {
+                ++total_contours;
+                total_vertices += c.size();
+            }
+            vimg.shapes.push_back(std::move(vs));
+        }
     }
 
-    spdlog::info("VectorProc: extracted {} shapes", vimg.shapes.size());
+    spdlog::info("[perf] VectorProc phase 2 (ConvertGeometryElement): {:.1f} ms, {} shapes, "
+                 "{} contours, {} vertices",
+                 ElapsedMs(t1), vimg.shapes.size(), total_contours, total_vertices);
+    g_normalize_stats.Log("phase2 per-shape");
+    g_normalize_stats.Reset();
+
+    auto t2 = std::chrono::steady_clock::now();
 
     std::vector<VectorShape> clipped = detail::ClipOcclusion(vimg.shapes);
-    for (auto& vs : clipped) {
-        vs.contours = NormalizeContours(vs.contours, tol, ToClipperFillRule(vs.svg_fill_rule));
+
+    spdlog::info("[perf] VectorProc phase 3 (ClipOcclusion): {:.1f} ms, {} -> {} shapes",
+                 ElapsedMs(t2), vimg.shapes.size(), clipped.size());
+
+    auto t3 = std::chrono::steady_clock::now();
+
+    {
+        const std::ptrdiff_t clipped_count = static_cast<std::ptrdiff_t>(clipped.size());
+#if defined(_OPENMP)
+#    pragma omp parallel for schedule(dynamic)
+#endif
+        for (std::ptrdiff_t ci = 0; ci < clipped_count; ++ci) {
+            auto& vs    = clipped[static_cast<size_t>(ci)];
+            vs.contours = NormalizeContours(vs.contours, tol, ToClipperFillRule(vs.svg_fill_rule));
+        }
     }
     clipped.erase(std::remove_if(clipped.begin(), clipped.end(),
                                  [](const VectorShape& vs) { return vs.contours.empty(); }),
                   clipped.end());
+
+    spdlog::info("[perf] VectorProc phase 4 (post-occlusion normalize+filter): {:.1f} ms, "
+                 "{} final shapes",
+                 ElapsedMs(t3), clipped.size());
+    g_normalize_stats.Log("phase4 post-occlusion");
+    g_normalize_stats.Reset();
 
     VectorProcResult result;
     result.name      = result_name;
@@ -318,8 +428,9 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
     result.height_mm = final_h;
     result.y_flipped = config.flip_y;
     result.shapes    = std::move(clipped);
-    spdlog::info("VectorProc: output {} clipped shapes, {:.2f} x {:.2f} mm", result.shapes.size(),
-                 result.width_mm, result.height_mm);
+
+    spdlog::info("[perf] VectorProc total: {:.1f} ms, output {} shapes, {:.2f} x {:.2f} mm",
+                 ElapsedMs(t_total), result.shapes.size(), result.width_mm, result.height_mm);
     return result;
 }
 
