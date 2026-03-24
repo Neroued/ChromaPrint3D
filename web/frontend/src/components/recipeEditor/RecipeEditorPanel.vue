@@ -87,6 +87,15 @@ const targetHex = computed<string | null>(() => {
   return recipe?.hex ?? null
 })
 
+const regionLookup = computed(() => {
+  const map = new Map<number, number>()
+  if (!summary.value) return map
+  for (const reg of summary.value.regions) {
+    map.set(reg.region_id, reg.recipe_index)
+  }
+  return map
+})
+
 // ── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadSummary() {
@@ -164,9 +173,9 @@ function handlePreviewMouseMove(event: MouseEvent) {
   let recipeLabel: string | null = null
   let recipeHex: string | null = null
   if (rid !== null && rid !== 0xffffffff) {
-    const reg = summary.value.regions.find((r) => r.region_id === rid)
-    if (reg) {
-      const recipe = summary.value.unique_recipes[reg.recipe_index]
+    const recipeIdx = regionLookup.value.get(rid)
+    if (recipeIdx !== undefined) {
+      const recipe = summary.value.unique_recipes[recipeIdx]
       if (recipe) {
         recipeLabel = recipe.recipe.join('-')
         recipeHex = recipe.hex
@@ -208,14 +217,17 @@ function handleViewportClick(event: MouseEvent) {
   if (regionId === null || regionId === 0xffffffff) return
 
   if (globalMode.value) {
-    const region = summary.value.regions.find((r) => r.region_id === regionId)
-    if (region) {
-      selectRecipeByIndex(region.recipe_index)
+    const recipeIdx = regionLookup.value.get(regionId)
+    if (recipeIdx !== undefined) {
+      if (recipeIdx === selectedRecipeIndex.value) {
+        clearSelection()
+      } else {
+        selectRecipeByIndex(recipeIdx)
+      }
     }
   } else {
-    const clickedRegion = summary.value.regions.find((r) => r.region_id === regionId)
-    if (!clickedRegion) return
-    const clickedRecipeIdx = clickedRegion.recipe_index
+    const clickedRecipeIdx = regionLookup.value.get(regionId)
+    if (clickedRecipeIdx === undefined) return
 
     if (selectedRecipeIndex.value !== null && clickedRecipeIdx !== selectedRecipeIndex.value) {
       selectedRegionIds.value = new Set([regionId])
@@ -281,7 +293,8 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
     summary.value = newSummary
     await loadPreview()
 
-    const firstRegion = newSummary.regions.find((r) => regionIds.includes(r.region_id))
+    const selectedSet = selectedRegionIds.value
+    const firstRegion = newSummary.regions.find((r) => selectedSet.has(r.region_id))
     if (firstRegion !== undefined) {
       selectedRecipeIndex.value = firstRegion.recipe_index
     }
@@ -310,7 +323,8 @@ async function handleUndo() {
     summary.value = newSummary
     await loadPreview()
 
-    const firstRegion = newSummary.regions.find((r) => entry.regionIds.includes(r.region_id))
+    const undoSet = new Set(entry.regionIds)
+    const firstRegion = newSummary.regions.find((r) => undoSet.has(r.region_id))
     if (firstRegion !== undefined) {
       selectedRecipeIndex.value = firstRegion.recipe_index
       selectedRegionIds.value = new Set(entry.regionIds)

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NCard, NText, NScrollbar } from 'naive-ui'
+import { NCard, NText, NVirtualList } from 'naive-ui'
+import type { VirtualListInst } from 'naive-ui'
 import type { RecipeEditorSummary, RecipeInfo } from '../../types'
 import RecipeLayerBar from './RecipeLayerBar.vue'
 
@@ -29,20 +30,42 @@ interface RecipeRow {
 const recipeRows = computed<RecipeRow[]>(() => {
   const s = props.summary
   const total = totalPixels.value
-  const rows = s.unique_recipes.map((recipe, idx) => {
-    let regionCount = 0
-    let pixelCount = 0
-    for (const reg of s.regions) {
-      if (reg.recipe_index === idx) {
-        regionCount++
-        pixelCount += reg.pixel_count
-      }
+
+  const agg = new Map<number, { regionCount: number; pixelCount: number }>()
+  for (const reg of s.regions) {
+    const entry = agg.get(reg.recipe_index)
+    if (entry) {
+      entry.regionCount++
+      entry.pixelCount += reg.pixel_count
+    } else {
+      agg.set(reg.recipe_index, { regionCount: 1, pixelCount: reg.pixel_count })
     }
-    const pct = total > 0 ? ((pixelCount / total) * 100).toFixed(1) : '0.0'
-    return { index: idx, recipe, regionCount, pixelCount, areaPercent: pct }
+  }
+
+  const rows = s.unique_recipes.map((recipe, idx) => {
+    const a = agg.get(idx) ?? { regionCount: 0, pixelCount: 0 }
+    const pct = total > 0 ? ((a.pixelCount / total) * 100).toFixed(1) : '0.0'
+    return { index: idx, recipe, ...a, areaPercent: pct }
   })
   rows.sort((a, b) => b.pixelCount - a.pixelCount)
   return rows
+})
+
+interface PairedRow {
+  key: number
+  left: RecipeRow
+  right: RecipeRow | null
+}
+
+const pairedRows = computed<PairedRow[]>(() => {
+  const pairs: PairedRow[] = []
+  const rows = recipeRows.value
+  for (let i = 0; i < rows.length; i += 2) {
+    const left = rows[i]
+    if (!left) continue
+    pairs.push({ key: i, left, right: rows[i + 1] ?? null })
+  }
+  return pairs
 })
 
 const statsText = computed(() => {
@@ -51,7 +74,7 @@ const statsText = computed(() => {
   return t('recipeEditor.summary.stats', { recipes: rc, regions: rg })
 })
 
-const listRef = ref<HTMLElement | null>(null)
+const virtualListRef = ref<VirtualListInst | null>(null)
 
 function handleClick(index: number) {
   emit('selectRecipe', index)
@@ -60,11 +83,11 @@ function handleClick(index: number) {
 watch(
   () => props.selectedRecipeIndex,
   (idx) => {
-    if (idx === null || !listRef.value) return
-    void nextTick(() => {
-      const el = listRef.value?.querySelector(`[data-recipe-index="${idx}"]`)
-      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    })
+    if (idx === null) return
+    const sortedPos = recipeRows.value.findIndex((r) => r.index === idx)
+    if (sortedPos >= 0) {
+      virtualListRef.value?.scrollTo({ index: Math.floor(sortedPos / 2) })
+    }
   },
 )
 </script>
@@ -75,35 +98,71 @@ watch(
       <NText depth="3" style="font-size: 12px">{{ statsText }}</NText>
     </template>
     <div class="recipe-summary-scroll-wrapper">
-      <NScrollbar>
-        <div ref="listRef" class="recipe-summary-list">
-          <div
-            v-for="row in recipeRows"
-            :key="row.index"
-            :data-recipe-index="row.index"
-            class="recipe-summary-item"
-            :class="{ 'recipe-summary-item--selected': selectedRecipeIndex === row.index }"
-            @click="handleClick(row.index)"
-          >
-            <div class="recipe-summary-item__color" :style="{ backgroundColor: row.recipe.hex }" />
-            <div class="recipe-summary-item__info">
-              <RecipeLayerBar :recipe="row.recipe.recipe" :palette="summary.palette" />
-              <span class="recipe-summary-item__meta">
-                {{ t('recipeEditor.summary.regions', { count: row.regionCount }) }}
-                · {{ row.areaPercent }}%
-              </span>
-            </div>
-            <NText
-              v-if="row.recipe.from_model"
-              depth="3"
-              class="recipe-summary-item__badge"
-              type="warning"
+      <NVirtualList
+        ref="virtualListRef"
+        :items="pairedRows"
+        :item-size="38"
+        item-resizable
+        class="recipe-summary-vlist"
+      >
+        <template #default="{ item }: { item: PairedRow }">
+          <div class="recipe-summary-row">
+            <div
+              class="recipe-summary-item"
+              :class="{ 'recipe-summary-item--selected': selectedRecipeIndex === item.left.index }"
+              @click="handleClick(item.left.index)"
             >
-              M
-            </NText>
+              <div
+                class="recipe-summary-item__color"
+                :style="{ backgroundColor: item.left.recipe.hex }"
+              />
+              <div class="recipe-summary-item__info">
+                <RecipeLayerBar :recipe="item.left.recipe.recipe" :palette="summary.palette" />
+                <span class="recipe-summary-item__meta">
+                  {{ t('recipeEditor.summary.regions', { count: item.left.regionCount }) }}
+                  · {{ item.left.areaPercent }}%
+                </span>
+              </div>
+              <NText
+                v-if="item.left.recipe.from_model"
+                depth="3"
+                class="recipe-summary-item__badge"
+                type="warning"
+              >
+                M
+              </NText>
+            </div>
+            <div
+              v-if="item.right"
+              class="recipe-summary-item"
+              :class="{
+                'recipe-summary-item--selected': selectedRecipeIndex === item.right.index,
+              }"
+              @click="handleClick(item.right.index)"
+            >
+              <div
+                class="recipe-summary-item__color"
+                :style="{ backgroundColor: item.right.recipe.hex }"
+              />
+              <div class="recipe-summary-item__info">
+                <RecipeLayerBar :recipe="item.right.recipe.recipe" :palette="summary.palette" />
+                <span class="recipe-summary-item__meta">
+                  {{ t('recipeEditor.summary.regions', { count: item.right.regionCount }) }}
+                  · {{ item.right.areaPercent }}%
+                </span>
+              </div>
+              <NText
+                v-if="item.right.recipe.from_model"
+                depth="3"
+                class="recipe-summary-item__badge"
+                type="warning"
+              >
+                M
+              </NText>
+            </div>
           </div>
-        </div>
-      </NScrollbar>
+        </template>
+      </NVirtualList>
     </div>
   </NCard>
 </template>
@@ -130,7 +189,11 @@ watch(
   overflow: hidden;
 }
 
-.recipe-summary-list {
+.recipe-summary-vlist {
+  height: 100%;
+}
+
+.recipe-summary-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px;

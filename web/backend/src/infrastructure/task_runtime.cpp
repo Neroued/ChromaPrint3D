@@ -23,6 +23,8 @@
 
 namespace {
 
+constexpr int kMaxUniqueRecipes = 2048;
+
 std::string LabToHex(const ChromaPrint3D::Lab& lab) {
     auto rgb   = lab.ToRgb();
     uint8_t r8 = 0, g8 = 0, b8 = 0;
@@ -293,7 +295,6 @@ SubmitResult TaskRuntime::SubmitConvertRasterMatchOnly(const std::string& owner,
                 unique_recipes.insert(std::move(key));
             }
 
-            constexpr int kMaxUniqueRecipes = 128;
             if (static_cast<int>(unique_recipes.size()) > kMaxUniqueRecipes) {
                 throw std::runtime_error(
                     "Too many unique recipes: " + std::to_string(unique_recipes.size()) + ", max " +
@@ -367,7 +368,6 @@ SubmitResult TaskRuntime::SubmitConvertVectorMatchOnly(const std::string& owner,
                 unique_recipes.insert(std::move(key));
             }
 
-            constexpr int kMaxUniqueRecipes = 128;
             if (static_cast<int>(unique_recipes.size()) > kMaxUniqueRecipes) {
                 throw std::runtime_error(
                     "Too many unique recipes: " + std::to_string(unique_recipes.size()) + ", max " +
