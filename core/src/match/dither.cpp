@@ -43,7 +43,7 @@ void MatchWithBlueNoiseDither(RecipeMap& result, const cv::Mat& target, const cv
     const int H         = result.height;
     const bool has_mask = !mask.empty();
 
-    spdlog::info("MatchWithBlueNoiseDither: {}x{}, strength={:.2f}", W, H, strength);
+    spdlog::debug("MatchWithBlueNoiseDither: {}x{}, strength={:.2f}", W, H, strength);
 
     int local_total      = 0;
     int local_db_only    = 0;
@@ -117,7 +117,7 @@ void MatchWithFloydSteinberg(RecipeMap& result, const cv::Mat& target, const cv:
     const int H         = result.height;
     const bool has_mask = !mask.empty();
 
-    spdlog::info("MatchWithFloydSteinberg: {}x{}, strength={:.2f}", W, H, strength);
+    spdlog::debug("MatchWithFloydSteinberg: {}x{}, strength={:.2f}", W, H, strength);
 
     // Two-row rolling error buffer: current row and next row.
     const std::size_t row_size = static_cast<std::size_t>(W);

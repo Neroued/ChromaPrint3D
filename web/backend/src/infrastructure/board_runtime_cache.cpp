@@ -16,8 +16,8 @@ std::optional<SpillableArtifact> WriteBoardModelFile(const std::filesystem::path
     if (temp_dir.empty() || model_3mf.empty()) return std::nullopt;
 
     auto file_path = temp_dir / (board_id + "_calibration_board.3mf");
-    spdlog::info("WriteBoardModelFile: board={}, path={}, bytes={}", board_id, file_path.string(),
-                 model_3mf.size());
+    spdlog::debug("WriteBoardModelFile: board={}, path={}, bytes={}", board_id, file_path.string(),
+                  model_3mf.size());
     {
         std::ofstream out(file_path, std::ios::binary | std::ios::trunc);
         if (!out.is_open()) {

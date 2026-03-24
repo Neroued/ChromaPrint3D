@@ -144,9 +144,9 @@ MattingOutput ThresholdMattingProvider::Run(const cv::Mat& bgr, MattingTimingInf
     double post_ms = ms(t3 - t2);
     double tot_ms  = ms(t3 - t0);
 
-    spdlog::info("ThresholdMatting: preprocess={:.1f}ms, threshold={:.1f}ms, morphology={:.1f}ms, "
-                 "total={:.1f}ms",
-                 pre_ms, inf_ms, post_ms, tot_ms);
+    spdlog::debug("ThresholdMatting: preprocess={:.1f}ms, threshold={:.1f}ms, morphology={:.1f}ms, "
+                  "total={:.1f}ms",
+                  pre_ms, inf_ms, post_ms, tot_ms);
 
     if (timing) {
         timing->preprocess_ms  = pre_ms;
@@ -161,7 +161,7 @@ MattingOutput ThresholdMattingProvider::Run(const cv::Mat& bgr, MattingTimingInf
 // ── MattingRegistry ─────────────────────────────────────────────────────────
 
 void MattingRegistry::Register(std::string key, MattingProviderPtr provider) {
-    spdlog::info("MattingRegistry: registered provider '{}'", key);
+    spdlog::debug("MattingRegistry: registered provider '{}'", key);
     providers_[std::move(key)] = std::move(provider);
 }
 

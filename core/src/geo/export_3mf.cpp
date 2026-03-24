@@ -99,8 +99,8 @@ std::vector<Mesh> BuildMeshes(const ModelIR& model_ir, const BuildMeshConfig& cf
         total_verts += mesh.vertices.size();
         total_tris += mesh.indices.size();
     }
-    spdlog::info("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts,
-                 total_tris);
+    spdlog::debug("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts,
+                  total_tris);
     return meshes;
 }
 
@@ -145,8 +145,8 @@ Mesh BuildTransparentLayerFromModelIR(const ModelIR& model_ir, float pixel_mm,
     }
     for (auto& v : mesh.vertices) { v.z += total_z; }
 
-    spdlog::info("BuildTransparentLayerFromModelIR: verts={}, tris={}, z=[{}, {}]",
-                 mesh.vertices.size(), mesh.indices.size(), total_z, total_z + thickness_mm);
+    spdlog::debug("BuildTransparentLayerFromModelIR: verts={}, tris={}, z=[{}, {}]",
+                  mesh.vertices.size(), mesh.indices.size(), total_z, total_z + thickness_mm);
     return mesh;
 }
 
@@ -245,8 +245,8 @@ BuildWriterObjects(const std::vector<Mesh>& meshes,
         object.transform         = detail::ThreeMfTransform::Identity();
         objects.push_back(std::move(object));
     }
-    spdlog::info("BuildWriterObjects: {} mesh(es) in, {} object(s) out, {} skipped", meshes.size(),
-                 objects.size(), skipped);
+    spdlog::debug("BuildWriterObjects: {} mesh(es) in, {} object(s) out, {} skipped", meshes.size(),
+                  objects.size(), skipped);
     return objects;
 }
 
@@ -280,8 +280,8 @@ BuildWriterObjectsAndSlots(const std::vector<Mesh>& meshes,
         result.objects.push_back(std::move(object));
         result.slots.push_back(slot_fn(i));
     }
-    spdlog::info("BuildWriterObjectsAndSlots: {} mesh(es) in, {} object(s) out, {} skipped",
-                 meshes.size(), result.objects.size(), skipped);
+    spdlog::debug("BuildWriterObjectsAndSlots: {} mesh(es) in, {} object(s) out, {} skipped",
+                  meshes.size(), result.objects.size(), skipped);
     return result;
 }
 
@@ -335,7 +335,7 @@ void Export3mf(const std::string& path, const ModelIR& model_ir) {
 
 void Export3mf(const std::string& path, const ModelIR& model_ir, const BuildMeshConfig& cfg) {
     if (path.empty()) { throw InputError("Export3mf path is empty"); }
-    spdlog::info("Export3mf: exporting to file {}, {} grid(s)", path, model_ir.voxel_grids.size());
+    spdlog::debug("Export3mf: exporting to file {}, {} grid(s)", path, model_ir.voxel_grids.size());
 
     std::vector<Mesh> meshes = BuildMeshes(model_ir, cfg);
     auto objects             = BuildWriterObjects(
@@ -359,7 +359,7 @@ void Export3mf(const std::string& path, const ModelIR& model_ir, const BuildMesh
 
 std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshConfig& cfg,
                                        FaceOrientation face_orientation) {
-    spdlog::info("Export3mfToBuffer: exporting {} grid(s) to memory", model_ir.voxel_grids.size());
+    spdlog::debug("Export3mfToBuffer: exporting {} grid(s) to memory", model_ir.voxel_grids.size());
     std::vector<Mesh> meshes = BuildMeshes(model_ir, cfg);
     OrientMeshesInPlace(meshes, face_orientation);
 
@@ -388,7 +388,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
                                          const std::vector<Channel>& palette, int base_channel_idx,
                                          int base_layers, FaceOrientation face_orientation) {
     if (meshes.empty()) { throw InputError("meshes vector is empty"); }
-    spdlog::info("Export3mfFromMeshes: exporting {} mesh(es) to memory", meshes.size());
+    spdlog::debug("Export3mfFromMeshes: exporting {} mesh(es) to memory", meshes.size());
     std::vector<Mesh> mutable_meshes(meshes.begin(), meshes.end());
     OrientMeshesInPlace(mutable_meshes, face_orientation);
 
@@ -420,7 +420,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
                                          FaceOrientation face_orientation) {
     if (meshes.empty()) { throw InputError("meshes vector is empty"); }
     if (names.size() != meshes.size()) { throw InputError("names size must match meshes size"); }
-    spdlog::info("Export3mfFromMeshes (explicit names): exporting {} mesh(es)", meshes.size());
+    spdlog::debug("Export3mfFromMeshes (explicit names): exporting {} mesh(es)", meshes.size());
     std::vector<Mesh> mutable_meshes(meshes.begin(), meshes.end());
     OrientMeshesInPlace(mutable_meshes, face_orientation);
 
@@ -445,7 +445,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
                                          FaceOrientation face_orientation,
                                          const std::string& model_name) {
     if (meshes.empty()) { throw InputError("meshes vector is empty"); }
-    spdlog::info("Export3mfFromMeshes (with preset): exporting {} mesh(es)", meshes.size());
+    spdlog::debug("Export3mfFromMeshes (with preset): exporting {} mesh(es)", meshes.size());
     std::vector<Mesh> mutable_meshes(meshes.begin(), meshes.end());
     OrientMeshesInPlace(mutable_meshes, face_orientation);
 
@@ -486,7 +486,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
     if (names.size() != meshes.size() || slots.size() != meshes.size()) {
         throw InputError("names/slots size must match meshes size");
     }
-    spdlog::info("Export3mfFromMeshes (explicit slots): exporting {} mesh(es)", meshes.size());
+    spdlog::debug("Export3mfFromMeshes (explicit slots): exporting {} mesh(es)", meshes.size());
     std::vector<Mesh> mutable_meshes(meshes.begin(), meshes.end());
     OrientMeshesInPlace(mutable_meshes, face_orientation);
 
@@ -512,8 +512,8 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
 std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshConfig& cfg,
                                        const SlicerPreset& preset,
                                        FaceOrientation face_orientation) {
-    spdlog::info("Export3mfToBuffer (with preset): exporting {} grid(s)",
-                 model_ir.voxel_grids.size());
+    spdlog::debug("Export3mfToBuffer (with preset): exporting {} grid(s)",
+                  model_ir.voxel_grids.size());
     std::vector<Mesh> meshes = BuildMeshes(model_ir, cfg);
     OrientMeshesInPlace(meshes, face_orientation);
 
@@ -550,7 +550,7 @@ std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshC
 void Export3mfToFile(const std::string& path, const ModelIR& model_ir, const BuildMeshConfig& cfg,
                      FaceOrientation face_orientation) {
     if (path.empty()) { throw InputError("Export3mfToFile path is empty"); }
-    spdlog::info("Export3mfToFile: exporting {} grid(s) to {}", model_ir.voxel_grids.size(), path);
+    spdlog::debug("Export3mfToFile: exporting {} grid(s) to {}", model_ir.voxel_grids.size(), path);
     std::vector<Mesh> meshes = BuildMeshes(model_ir, cfg);
     OrientMeshesInPlace(meshes, face_orientation);
 
@@ -574,8 +574,8 @@ void Export3mfToFile(const std::string& path, const ModelIR& model_ir, const Bui
 void Export3mfToFile(const std::string& path, const ModelIR& model_ir, const BuildMeshConfig& cfg,
                      const SlicerPreset& preset, FaceOrientation face_orientation) {
     if (path.empty()) { throw InputError("Export3mfToFile path is empty"); }
-    spdlog::info("Export3mfToFile (with preset): exporting {} grid(s) to {}",
-                 model_ir.voxel_grids.size(), path);
+    spdlog::debug("Export3mfToFile (with preset): exporting {} grid(s) to {}",
+                  model_ir.voxel_grids.size(), path);
     std::vector<Mesh> meshes = BuildMeshes(model_ir, cfg);
     OrientMeshesInPlace(meshes, face_orientation);
 
@@ -609,7 +609,7 @@ void Export3mfFromMeshesToFile(const std::string& path, const std::vector<Mesh>&
                                int base_layers, FaceOrientation face_orientation) {
     if (path.empty()) { throw InputError("Export3mfFromMeshesToFile path is empty"); }
     if (meshes.empty()) { throw InputError("meshes vector is empty"); }
-    spdlog::info("Export3mfFromMeshesToFile: exporting {} mesh(es) to {}", meshes.size(), path);
+    spdlog::debug("Export3mfFromMeshesToFile: exporting {} mesh(es) to {}", meshes.size(), path);
     std::vector<Mesh> mutable_meshes(meshes.begin(), meshes.end());
     OrientMeshesInPlace(mutable_meshes, face_orientation);
 
@@ -637,8 +637,8 @@ void Export3mfFromMeshesToFile(const std::string& path, const std::vector<Mesh>&
                                FaceOrientation face_orientation, const std::string& model_name) {
     if (path.empty()) { throw InputError("Export3mfFromMeshesToFile path is empty"); }
     if (meshes.empty()) { throw InputError("meshes vector is empty"); }
-    spdlog::info("Export3mfFromMeshesToFile (with preset): exporting {} mesh(es) to {}",
-                 meshes.size(), path);
+    spdlog::debug("Export3mfFromMeshesToFile (with preset): exporting {} mesh(es) to {}",
+                  meshes.size(), path);
     std::vector<Mesh> mutable_meshes(meshes.begin(), meshes.end());
     OrientMeshesInPlace(mutable_meshes, face_orientation);
 

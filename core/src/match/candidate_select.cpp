@@ -3,7 +3,7 @@
 #include "detail/recipe_convert.h"
 #include "chromaprint3d/error.h"
 
-#include <spdlog/spdlog.h>
+
 
 #include <algorithm>
 #include <cmath>

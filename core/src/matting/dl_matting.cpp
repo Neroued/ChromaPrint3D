@@ -83,9 +83,9 @@ public:
         double post_ms = ms(t3 - t2);
         double tot_ms  = ms(t3 - t0);
 
-        spdlog::info("DLMatting '{}': preprocess={:.1f}ms, inference={:.1f}ms, "
-                     "postprocess={:.1f}ms, total={:.1f}ms",
-                     name_, pre_ms, inf_ms, post_ms, tot_ms);
+        spdlog::debug("DLMatting '{}': preprocess={:.1f}ms, inference={:.1f}ms, "
+                      "postprocess={:.1f}ms, total={:.1f}ms",
+                      name_, pre_ms, inf_ms, post_ms, tot_ms);
 
         if (timing) {
             timing->preprocess_ms  = pre_ms;

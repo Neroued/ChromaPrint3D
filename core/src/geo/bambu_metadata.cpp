@@ -376,8 +376,8 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     // hard-checks this value to enable different_settings_to_system handling.
     if (!j.contains("name")) { j["name"] = "project_settings"; }
 
-    spdlog::info("BuildProjectSettings: loaded preset {} ({} filament overrides)",
-                 preset.preset_json_path, preset.filaments.size());
+    spdlog::debug("BuildProjectSettings: loaded preset {} ({} filament overrides)",
+                  preset.preset_json_path, preset.filaments.size());
     return j.dump(4);
 }
 
@@ -408,7 +408,7 @@ std::string BuildEmbeddedProcessPreset(const SlicerPreset& preset) {
                              : "0.08mm High Quality @BBL P2S";
     j["inherits"]      = parent;
 
-    spdlog::info("BuildEmbeddedProcessPreset: name={}, inherits={}", id_buf, parent);
+    spdlog::debug("BuildEmbeddedProcessPreset: name={}, inherits={}", id_buf, parent);
     return j.dump(4);
 }
 
@@ -461,8 +461,8 @@ std::string BuildLayerConfigRanges(const SlicerPreset& preset) {
                   "</objects>\n",
                   dmin, dmax, dlh);
 
-    spdlog::info("BuildLayerConfigRanges: base=[{},{}]@{}mm, face={}, double_sided={}", dmin, dmax,
-                 dlh, FaceOrientationTag(preset.face), preset.double_sided);
+    spdlog::debug("BuildLayerConfigRanges: base=[{},{}]@{}mm, face={}, double_sided={}", dmin, dmax,
+                  dlh, FaceOrientationTag(preset.face), preset.double_sided);
     return buf;
 }
 

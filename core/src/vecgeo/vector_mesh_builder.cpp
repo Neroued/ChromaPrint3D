@@ -439,8 +439,8 @@ std::vector<Mesh> BuildVectorMeshes(const std::vector<VectorShape>& shapes,
         total_verts += m.vertices.size();
         total_tris += m.indices.size();
     }
-    spdlog::info("BuildVectorMeshes: {} meshes, total vertices={}, triangles={}", meshes.size(),
-                 total_verts, total_tris);
+    spdlog::debug("BuildVectorMeshes: {} meshes, total vertices={}, triangles={}", meshes.size(),
+                  total_verts, total_tris);
 
     return meshes;
 }

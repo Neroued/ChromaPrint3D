@@ -203,10 +203,10 @@ public:
             });
         }
 
-        spdlog::info("CoreModelExtension: {} object(s) in, {} mesh(es) accepted, {} dropped "
-                     "(fully degenerate), {} degenerate triangle(s) filtered",
-                     objects.size(), document.mesh_resources.size(), meshes_dropped_full,
-                     dropped_degenerate);
+        spdlog::debug("CoreModelExtension: {} object(s) in, {} mesh(es) accepted, {} dropped "
+                      "(fully degenerate), {} degenerate triangle(s) filtered",
+                      objects.size(), document.mesh_resources.size(), meshes_dropped_full,
+                      dropped_degenerate);
     }
 };
 
@@ -414,7 +414,7 @@ public:
         document.content_type_defaults.push_back(
             OpcContentTypeDefault{.extension = "json", .content_type = "application/json"});
 
-        spdlog::info(
+        spdlog::debug(
             "Bambu assembly extension: {} parts, assembly_id={}, {} filaments, {} metadata files",
             group.objects.size(), assembly_id, preset_.filaments.size(), metadata_targets.size());
     }

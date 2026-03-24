@@ -486,13 +486,14 @@ SubmitResult TaskRuntime::SubmitVectorize(const std::string& owner,
             using Clock                   = std::chrono::steady_clock;
             auto t0                       = Clock::now();
             const std::size_t input_bytes = buf.size();
-            spdlog::info(
-                "Vectorize task core start: task_id={}, image_bytes={}, num_colors={}, "
+            spdlog::info("Vectorize task core start: task_id={}, image_bytes={}", id, input_bytes);
+            spdlog::debug(
+                "Vectorize task core config: task_id={}, num_colors={}, "
                 "min_region_area={}, curve_fit_error={:.3f}, corner_angle_threshold={:.1f}, "
                 "smoothing_spatial={:.1f}, smoothing_color={:.1f}, upscale_short_edge={}, "
                 "max_working_pixels={}, slic_region_size={}, svg_enable_stroke={}, "
                 "svg_stroke_width={:.2f}",
-                id, input_bytes, config.num_colors, config.min_region_area, config.curve_fit_error,
+                id, config.num_colors, config.min_region_area, config.curve_fit_error,
                 config.corner_angle_threshold, config.smoothing_spatial, config.smoothing_color,
                 config.upscale_short_edge, config.max_working_pixels, config.slic_region_size,
                 config.svg_enable_stroke, config.svg_stroke_width);
@@ -867,8 +868,8 @@ SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const st
             if (!gen_result.model_3mf.empty()) {
                 auto spill_path = temp_dir_ / (id + "_gen.3mf");
                 pending_3mf     = PendingArtifactFile(spill_path);
-                spdlog::info("GenerateModel: writing 3MF for task {}, {} bytes to {}", id,
-                             gen_result.model_3mf.size(), spill_path.string());
+                spdlog::debug("GenerateModel: writing 3MF for task {}, {} bytes to {}", id,
+                              gen_result.model_3mf.size(), spill_path.string());
 
                 std::ofstream ofs(spill_path, std::ios::binary | std::ios::trunc);
                 if (!ofs.is_open()) {
@@ -1014,9 +1015,9 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
                 std::error_code ec;
                 bool exists      = std::filesystem::exists(fpath, ec);
                 auto actual_size = exists ? std::filesystem::file_size(fpath, ec) : 0ULL;
-                spdlog::info("LoadArtifact: serving file-based 3MF for task {}: path={}, "
-                             "exists={}, actual_size={}, expected_size={}",
-                             id, fpath.string(), exists, actual_size, expected_size);
+                spdlog::debug("LoadArtifact: serving file-based 3MF for task {}: path={}, "
+                              "exists={}, actual_size={}, expected_size={}",
+                              id, fpath.string(), exists, actual_size, expected_size);
                 if (!exists) {
                     spdlog::error("LoadArtifact: spilled 3MF file missing for task {}: {}", id,
                                   fpath.string());

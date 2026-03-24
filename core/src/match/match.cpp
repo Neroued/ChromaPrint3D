@@ -117,8 +117,8 @@ int EstimateClusterCount(const cv::Mat& samples) {
 
     chosen_k = std::clamp(chosen_k, 4, std::min(128, n / 4));
 
-    spdlog::info("AutoK: selected k={} (elbow_k={}, mean_dE={:.2f})", chosen_k,
-                 valid_candidates[elbow_idx], mean_dE);
+    spdlog::debug("AutoK: selected k={} (elbow_k={}, mean_dE={:.2f})", chosen_k,
+                  valid_candidates[elbow_idx], mean_dE);
     return chosen_k;
 }
 
@@ -374,7 +374,7 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
             std::min(requested_superpixels, static_cast<int>(valid_indices.size()));
         const bool use_slic = (requested_superpixels > 1 && target_superpixels > 1 &&
                                static_cast<std::size_t>(target_superpixels) < valid_indices.size());
-        spdlog::info(
+        spdlog::debug(
             "MatchFromRaster: valid_pixels={}, cluster_method=slic, clustering={} (target={})",
             valid_indices.size(), use_slic ? "yes" : "no", target_superpixels);
 
@@ -485,9 +485,9 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
     const bool use_cluster =
         (resolved_k > 1 && static_cast<std::size_t>(resolved_k) < valid_indices.size());
 
-    spdlog::info("MatchFromRaster: valid_pixels={}, cluster_method=kmeans, clustering={} (k={}{})",
-                 valid_indices.size(), use_cluster ? "yes" : "no", resolved_k,
-                 auto_k ? ", auto" : "");
+    spdlog::debug("MatchFromRaster: valid_pixels={}, cluster_method=kmeans, clustering={} (k={}{})",
+                  valid_indices.size(), use_cluster ? "yes" : "no", resolved_k,
+                  auto_k ? ", auto" : "");
 
     if (!use_cluster) {
         run_per_pixel_matching();

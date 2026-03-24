@@ -939,9 +939,9 @@ ServiceResult ServerFacade::DownloadBoardModel(const std::string& board_id, Task
         std::error_code ec;
         bool exists      = std::filesystem::exists(fpath, ec);
         auto actual_size = exists ? std::filesystem::file_size(fpath, ec) : 0ULL;
-        spdlog::info("DownloadBoardModel: board={}, path={}, exists={}, actual_size={}, "
-                     "expected_size={}",
-                     board_id, fpath.string(), exists, actual_size, board->expected_file_size);
+        spdlog::debug("DownloadBoardModel: board={}, path={}, exists={}, actual_size={}, "
+                      "expected_size={}",
+                      board_id, fpath.string(), exists, actual_size, board->expected_file_size);
         if (!exists) {
             spdlog::error("DownloadBoardModel: file missing for board {}: {}", board_id,
                           fpath.string());

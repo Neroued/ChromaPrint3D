@@ -207,8 +207,8 @@ void WriteFileAtomically(const std::filesystem::path& final_path,
 
 void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
                                  const std::vector<uint8_t>& bytes) {
-    spdlog::info("WriteBufferToFileAtomically: path={}, bytes={}", final_path.string(),
-                 bytes.size());
+    spdlog::debug("WriteBufferToFileAtomically: path={}, bytes={}", final_path.string(),
+                  bytes.size());
 
     WriteFileAtomically(final_path, [&](const std::filesystem::path& temp_path) {
         std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);

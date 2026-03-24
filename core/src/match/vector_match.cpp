@@ -214,7 +214,7 @@ VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span
                 : 0.0f;
     }
 
-    spdlog::info(
+    spdlog::debug(
         "VectorRecipeMap::Match: {} shapes, {} unique colors, db_only={}, model_fallback={}, "
         "avg_db_de={:.2f}, avg_model_de={:.2f}",
         map.entries.size(), unique_colors.size(), stat_db_only, stat_model_used,

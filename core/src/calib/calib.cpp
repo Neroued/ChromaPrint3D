@@ -744,8 +744,8 @@ CalibrationBoardMeshes GenCalibrationBoardMeshes(const CalibrationBoardConfig& c
         total_verts += m.vertices.size();
         total_tris += m.indices.size();
     }
-    spdlog::info("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts,
-                 total_tris);
+    spdlog::debug("Mesh::Build: {} grids, total vertices={}, triangles={}", n, total_verts,
+                  total_tris);
 
     CalibrationBoardMeshes out;
     out.meta             = std::move(meta);
@@ -775,8 +775,8 @@ CalibrationBoardMeshes GenCalibrationBoardMeshesFromMeta(CalibrationBoardMeta me
         total_verts += m.vertices.size();
         total_tris += m.indices.size();
     }
-    spdlog::info("Mesh::Build(custom): {} grids, total vertices={}, triangles={}", n, total_verts,
-                 total_tris);
+    spdlog::debug("Mesh::Build(custom): {} grids, total vertices={}, triangles={}", n, total_verts,
+                  total_tris);
 
     CalibrationBoardMeshes out;
     out.meta             = std::move(meta);

@@ -61,12 +61,12 @@ struct NormalizeContoursStats {
     void Log(const char* label) const {
         int64_t n = calls.load(std::memory_order_relaxed);
         if (n == 0) return;
-        spdlog::info("[perf] NormalizeContours ({}): {} calls, "
-                     "convert={:.1f} ms, union={:.1f} ms, simplify={:.1f} ms, "
-                     "filter={:.1f} ms, sort={:.1f} ms",
-                     label, n, convert_us.load() / 1000.0, union_us.load() / 1000.0,
-                     simplify_us.load() / 1000.0, filter_us.load() / 1000.0,
-                     sort_us.load() / 1000.0);
+        spdlog::debug("[perf] NormalizeContours ({}): {} calls, "
+                      "convert={:.1f} ms, union={:.1f} ms, simplify={:.1f} ms, "
+                      "filter={:.1f} ms, sort={:.1f} ms",
+                      label, n, convert_us.load() / 1000.0, union_us.load() / 1000.0,
+                      simplify_us.load() / 1000.0, filter_us.load() / 1000.0,
+                      sort_us.load() / 1000.0);
     }
 };
 
@@ -310,7 +310,7 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
 
     if (svg_w <= 0.0f || svg_h <= 0.0f) { throw InputError("SVG has no visible content"); }
 
-    spdlog::info("VectorProc: SVG dimensions {:.2f} x {:.2f} px", svg_w, svg_h);
+    spdlog::debug("VectorProc: SVG dimensions {:.2f} x {:.2f} px", svg_w, svg_h);
 
     float scale = 1.0f;
     if (config.target_width_mm > 0.0f || config.target_height_mm > 0.0f) {
@@ -326,8 +326,8 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
     float final_w = svg_w * scale;
     float final_h = svg_h * scale;
 
-    spdlog::info("VectorProc: scale={:.4f}, output {:.2f} x {:.2f} mm, tol={:.4f}", scale, final_w,
-                 final_h, tol);
+    spdlog::debug("VectorProc: scale={:.4f}, output {:.2f} x {:.2f} mm, tol={:.4f}", scale, final_w,
+                  final_h, tol);
 
     auto* root = doc.documentElement().svgElement(true);
 
@@ -339,7 +339,7 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
         geo_elements.push_back(geo);
     });
 
-    spdlog::info(
+    spdlog::debug(
         "[perf] VectorProc phase 1 (parse+layout+traverse): {:.1f} ms, {} geometry elements",
         ElapsedMs(t0), geo_elements.size());
 
@@ -387,9 +387,9 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
         }
     }
 
-    spdlog::info("[perf] VectorProc phase 2 (ConvertGeometryElement): {:.1f} ms, {} shapes, "
-                 "{} contours, {} vertices",
-                 ElapsedMs(t1), vimg.shapes.size(), total_contours, total_vertices);
+    spdlog::debug("[perf] VectorProc phase 2 (ConvertGeometryElement): {:.1f} ms, {} shapes, "
+                  "{} contours, {} vertices",
+                  ElapsedMs(t1), vimg.shapes.size(), total_contours, total_vertices);
     g_normalize_stats.Log("phase2 per-shape");
     g_normalize_stats.Reset();
 
@@ -397,8 +397,8 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
 
     std::vector<VectorShape> clipped = detail::ClipOcclusion(vimg.shapes);
 
-    spdlog::info("[perf] VectorProc phase 3 (ClipOcclusion): {:.1f} ms, {} -> {} shapes",
-                 ElapsedMs(t2), vimg.shapes.size(), clipped.size());
+    spdlog::debug("[perf] VectorProc phase 3 (ClipOcclusion): {:.1f} ms, {} -> {} shapes",
+                  ElapsedMs(t2), vimg.shapes.size(), clipped.size());
 
     auto t3 = std::chrono::steady_clock::now();
 
@@ -416,9 +416,9 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
                                  [](const VectorShape& vs) { return vs.contours.empty(); }),
                   clipped.end());
 
-    spdlog::info("[perf] VectorProc phase 4 (post-occlusion normalize+filter): {:.1f} ms, "
-                 "{} final shapes",
-                 ElapsedMs(t3), clipped.size());
+    spdlog::debug("[perf] VectorProc phase 4 (post-occlusion normalize+filter): {:.1f} ms, "
+                  "{} final shapes",
+                  ElapsedMs(t3), clipped.size());
     g_normalize_stats.Log("phase4 post-occlusion");
     g_normalize_stats.Reset();
 
@@ -429,8 +429,10 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
     result.y_flipped = config.flip_y;
     result.shapes    = std::move(clipped);
 
-    spdlog::info("[perf] VectorProc total: {:.1f} ms, output {} shapes, {:.2f} x {:.2f} mm",
-                 ElapsedMs(t_total), result.shapes.size(), result.width_mm, result.height_mm);
+    spdlog::debug("[perf] VectorProc total: {:.1f} ms, output {} shapes, {:.2f} x {:.2f} mm",
+                  ElapsedMs(t_total), result.shapes.size(), result.width_mm, result.height_mm);
+    spdlog::info("VectorProc: {} shapes, {:.1f}x{:.1f} mm, {:.0f} ms", result.shapes.size(),
+                 result.width_mm, result.height_mm, ElapsedMs(t_total));
     return result;
 }
 

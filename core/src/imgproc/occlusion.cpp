@@ -182,9 +182,9 @@ std::vector<VectorShape> ClipOcclusion(const std::vector<VectorShape>& shapes) {
 
     auto t_grid = std::chrono::steady_clock::now();
 
-    spdlog::info("[perf] ClipOcclusion prep: bbox+paths={:.1f} ms, grid={}x{} built in {:.1f} ms",
-                 std::chrono::duration<double, std::milli>(t_prep - t_start).count(), grid.cols,
-                 grid.rows, std::chrono::duration<double, std::milli>(t_grid - t_prep).count());
+    spdlog::debug("[perf] ClipOcclusion prep: bbox+paths={:.1f} ms, grid={}x{} built in {:.1f} ms",
+                  std::chrono::duration<double, std::milli>(t_prep - t_start).count(), grid.cols,
+                  grid.rows, std::chrono::duration<double, std::milli>(t_grid - t_prep).count());
 
     std::vector<VectorShape> result(static_cast<size_t>(n));
     const std::ptrdiff_t pn = static_cast<std::ptrdiff_t>(n);
@@ -257,8 +257,8 @@ std::vector<VectorShape> ClipOcclusion(const std::vector<VectorShape>& shapes) {
     double total_ms =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_start)
             .count();
-    spdlog::info("[perf] ClipOcclusion done: {} -> {} shapes in {:.1f} ms (grid {}x{})", n,
-                 final_result.size(), total_ms, grid.cols, grid.rows);
+    spdlog::debug("[perf] ClipOcclusion done: {} -> {} shapes in {:.1f} ms (grid {}x{})", n,
+                  final_result.size(), total_ms, grid.cols, grid.rows);
     return final_result;
 }
 

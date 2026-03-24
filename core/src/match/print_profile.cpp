@@ -4,7 +4,7 @@
 #include "chromaprint3d/error.h"
 #include "detail/match_utils.h"
 
-#include <spdlog/spdlog.h>
+
 
 #include <algorithm>
 #include <cctype>
