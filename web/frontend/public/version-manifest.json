@@ -1,7 +1,7 @@
 {
-  "version": "1.2.9",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.9",
-  "changelog": "- 新增「最近更新」弹窗，升级后自动展示版本亮点\n- 修复配方编辑器中撤销操作可能导致颜色数据异常的问题\n- 配方替换响应更快，减少不必要的数据加载",
-  "changelog_en": "- New What's New dialog shows version highlights after updates\n- Fix undo in recipe editor that could corrupt color data when adjacent regions share the same recipe\n- Faster recipe replacement with reduced unnecessary data transfers",
-  "published_at": "2026-03-22"
+  "version": "1.2.10",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.10",
+  "changelog": "- 矢量图处理速度大幅提升\n- 改进 SVG 文件解析，支持更多格式特性\n- 配方编辑器响应速度优化，支持包含更多颜色的图片\n- 修复全局选色模式下无法取消选择的问题\n- 修复特定颜色库组合下配方匹配失败的问题",
+  "changelog_en": "- Significantly faster vector image processing\n- Improved SVG parsing with better format support\n- Faster recipe editor with support for more colors\n- Fixed deselect in global color-select mode\n- Fixed recipe matching with certain color DB combinations",
+  "published_at": "2026-03-24"
 }
