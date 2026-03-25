@@ -8,6 +8,7 @@
 #include "slicer_preset.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -109,5 +110,15 @@ struct MeshNamesAndSlots {
 MeshNamesAndSlots BuildMeshNamesAndSlots(size_t mesh_count, const std::vector<Channel>& palette,
                                          int base_channel_idx, int base_layers,
                                          bool has_transparent_layer);
+
+// ── File utility (used by pipeline for atomic writes) ─────────────────────────
+
+namespace detail {
+
+/// Atomically write a byte buffer to disk (write temp + rename).
+void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
+                                 const std::vector<uint8_t>& bytes);
+
+} // namespace detail
 
 } // namespace ChromaPrint3D

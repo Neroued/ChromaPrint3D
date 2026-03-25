@@ -63,10 +63,6 @@ target_sources(chromaprint3d PRIVATE
     src/calib/loc.cpp
     src/geo/geo.cpp
     src/geo/export_3mf.cpp
-    src/geo/three_mf_writer.cpp
-    src/geo/three_mf_extensions.cpp
-    src/geo/three_mf_opc.cpp
-    src/geo/three_mf_zip.cpp
     src/geo/bambu_metadata.cpp
     src/vecgeo/vector_mesh_builder.cpp
     src/vecgeo/triangulate.cpp
@@ -92,22 +88,7 @@ target_link_libraries(chromaprint3d PUBLIC opencv_core opencv_imgproc opencv_img
 target_link_libraries(chromaprint3d PUBLIC Clipper2)
 target_link_libraries(chromaprint3d PUBLIC spdlog::spdlog_header_only)
 target_link_libraries(chromaprint3d PUBLIC lunasvg::lunasvg)
-
-find_package(ZLIB QUIET)
-if(ZLIB_FOUND)
-    target_link_libraries(chromaprint3d PUBLIC ZLIB::ZLIB)
-    target_compile_definitions(chromaprint3d PUBLIC CHROMAPRINT3D_HAS_ZLIB=1)
-    message(STATUS "Found zlib: ${ZLIB_VERSION_STRING}")
-elseif(CHROMAPRINT3D_3MF_ZLIB_REQUIRED)
-    message(FATAL_ERROR "CHROMAPRINT3D_3MF_ZLIB_REQUIRED=ON but zlib was not found")
-else()
-    message(WARNING "zlib not found — 3MF export falls back to ZIP store-only mode")
-endif()
-
-if(CHROMAPRINT3D_3MF_FORCE_STORE)
-    target_compile_definitions(chromaprint3d PUBLIC CHROMAPRINT3D_3MF_FORCE_STORE=1)
-    message(STATUS "3MF ZIP compression is disabled by CHROMAPRINT3D_3MF_FORCE_STORE")
-endif()
+target_link_libraries(chromaprint3d PUBLIC neroued::3mf)
 
 find_library(LCMS2_LIBRARY lcms2)
 find_path(LCMS2_INCLUDE_DIR lcms2.h)

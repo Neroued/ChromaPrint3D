@@ -8,7 +8,6 @@
 #include "chromaprint3d/color_db.h"
 #include "chromaprint3d/print_profile.h"
 #include "chromaprint3d/error.h"
-#include "geo/three_mf_writer.h"
 
 #include <spdlog/spdlog.h>
 

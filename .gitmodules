@@ -10,3 +10,6 @@
 [submodule "3dparty/lunasvg"]
 	path = 3dparty/lunasvg
 	url = https://github.com/Neroued/lunasvg.git
+[submodule "3dparty/neroued_3mf"]
+	path = 3dparty/neroued_3mf
+	url = https://github.com/Neroued/neroued_3mf.git

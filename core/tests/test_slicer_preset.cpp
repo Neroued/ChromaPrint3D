@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-#if defined(CHROMAPRINT3D_HAS_ZLIB)
+#if defined(CHROMAPRINT3D_TEST_HAS_ZLIB)
 #    include <zlib.h>
 #endif
 
@@ -46,7 +46,7 @@ struct ZipEntry {
 
 std::vector<uint8_t> InflateRawDeflate(const std::vector<uint8_t>& compressed,
                                        std::size_t expected_size) {
-#if defined(CHROMAPRINT3D_HAS_ZLIB)
+#if defined(CHROMAPRINT3D_TEST_HAS_ZLIB)
     std::vector<uint8_t> output(expected_size);
     z_stream stream{};
     stream.next_in   = const_cast<Bytef*>(compressed.data());
@@ -77,6 +77,7 @@ std::vector<ZipEntry> ParseZipEntries(const std::vector<uint8_t>& bytes) {
         if (signature != kZipLocalFileHeaderSignature) { break; }
         if (pos + 30 > bytes.size()) { throw std::runtime_error("Corrupted ZIP local header"); }
 
+        uint16_t general_purpose   = ReadU16(bytes, pos + 6);
         uint16_t compression       = ReadU16(bytes, pos + 8);
         uint32_t compressed_size   = ReadU32(bytes, pos + 18);
         uint32_t uncompressed_size = ReadU32(bytes, pos + 22);
@@ -86,25 +87,72 @@ std::vector<ZipEntry> ParseZipEntries(const std::vector<uint8_t>& bytes) {
         std::size_t name_off = pos + 30;
         std::size_t data_off =
             name_off + static_cast<std::size_t>(name_len) + static_cast<std::size_t>(extra_len);
-        std::size_t data_end = data_off + static_cast<std::size_t>(compressed_size);
-        if (data_end > bytes.size()) { throw std::runtime_error("Corrupted ZIP entry payload"); }
-        if (compression != 0 && compression != 8) {
-            throw std::runtime_error("Unsupported ZIP compression method");
-        }
 
-        ZipEntry entry;
-        entry.compression_method = compression;
-        entry.name.assign(reinterpret_cast<const char*>(bytes.data() + name_off), name_len);
-        entry.raw_data.assign(bytes.begin() + static_cast<std::ptrdiff_t>(data_off),
-                              bytes.begin() + static_cast<std::ptrdiff_t>(data_end));
-        if (compression == 0) {
-            entry.data = entry.raw_data;
+        bool has_data_descriptor = (general_purpose & 0x0008) != 0;
+
+        if (has_data_descriptor && compressed_size == 0) {
+            std::size_t scan = data_off;
+            while (scan + 4 <= bytes.size()) {
+                uint32_t sig = ReadU32(bytes, scan);
+                if (sig == kZipLocalFileHeaderSignature || sig == 0x02014B50u) { break; }
+                if (sig == 0x08074B50u) {
+                    compressed_size   = ReadU32(bytes, scan + 8);
+                    uncompressed_size = ReadU32(bytes, scan + 12);
+                    break;
+                }
+                ++scan;
+            }
+            std::size_t data_end = (compressed_size > 0) ? data_off + compressed_size : scan;
+
+            ZipEntry entry;
+            entry.compression_method = compression;
+            entry.name.assign(reinterpret_cast<const char*>(bytes.data() + name_off), name_len);
+            entry.raw_data.assign(bytes.begin() + static_cast<std::ptrdiff_t>(data_off),
+                                  bytes.begin() + static_cast<std::ptrdiff_t>(data_end));
+            if (compression == 0) {
+                entry.data = entry.raw_data;
+            } else {
+                entry.data =
+                    InflateRawDeflate(entry.raw_data, static_cast<std::size_t>(uncompressed_size));
+            }
+            entries.push_back(std::move(entry));
+            // Advance past data descriptor
+            if (scan + 4 <= bytes.size() && ReadU32(bytes, scan) == 0x08074B50u) {
+                pos = scan + 16;
+            } else {
+                pos = scan;
+            }
         } else {
-            entry.data =
-                InflateRawDeflate(entry.raw_data, static_cast<std::size_t>(uncompressed_size));
+            std::size_t data_end = data_off + static_cast<std::size_t>(compressed_size);
+            if (data_end > bytes.size()) {
+                throw std::runtime_error("Corrupted ZIP entry payload");
+            }
+            if (compression != 0 && compression != 8) {
+                throw std::runtime_error("Unsupported ZIP compression method");
+            }
+
+            ZipEntry entry;
+            entry.compression_method = compression;
+            entry.name.assign(reinterpret_cast<const char*>(bytes.data() + name_off), name_len);
+            entry.raw_data.assign(bytes.begin() + static_cast<std::ptrdiff_t>(data_off),
+                                  bytes.begin() + static_cast<std::ptrdiff_t>(data_end));
+            if (compression == 0) {
+                entry.data = entry.raw_data;
+            } else {
+                entry.data =
+                    InflateRawDeflate(entry.raw_data, static_cast<std::size_t>(uncompressed_size));
+            }
+            entries.push_back(std::move(entry));
+            pos = data_end;
+
+            if (has_data_descriptor) {
+                if (pos + 4 <= bytes.size() && ReadU32(bytes, pos) == 0x08074B50u) {
+                    pos += 16;
+                } else if (pos + 12 <= bytes.size()) {
+                    pos += 12;
+                }
+            }
         }
-        entries.push_back(std::move(entry));
-        pos = data_end;
     }
     return entries;
 }
