@@ -230,11 +230,7 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
     builder.AddMetadata("BambuStudio:3mfVersion", "1");
     builder.AddNamespace("BambuStudio", "http://schemas.bambulab.com/package/2021");
 
-    builder.EnableProduction();
-    builder.SetProductionMergeObjects(true);
-    builder.AddExternalModelMetadata("BambuStudio:3mfVersion", "1");
-
-    // Compute bed centering transform
+    // Compute bed centering transform before enabling production
     float min_x = std::numeric_limits<float>::infinity();
     float max_x = -std::numeric_limits<float>::infinity();
     float min_y = std::numeric_limits<float>::infinity();
@@ -258,6 +254,10 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
         center_ty = kBedCenterY - (min_y + max_y) * 0.5f;
     }
 
+    builder.EnableProduction(neroued_3mf::Transform::Translation(center_tx, center_ty, 0));
+    builder.SetProductionMergeObjects(true);
+    builder.AddExternalModelMetadata("BambuStudio:3mfVersion", "1");
+
     detail::ExportedGroup group;
     group.assembly_name = model_name.empty() ? "ChromaPrint3D-Model" : model_name;
 
@@ -273,7 +273,7 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
         }
 
         uint32_t oid = builder.AddMeshObject(objects[i].name, std::move(converted));
-        builder.AddBuildItem(oid, neroued_3mf::Transform::Translation(center_tx, center_ty, 0));
+        builder.AddBuildItem(oid);
         object_ids.push_back(oid);
 
         group.total_face_count += face_count;
