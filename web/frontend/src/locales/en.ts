@@ -22,6 +22,7 @@ export default {
     disabled: 'Disabled',
     pollFailed: 'Task polling failed, please retry ({message})',
     downloadFailed: 'Download failed, please retry',
+    videoTutorial: 'Video Tutorial',
   },
 
   app: {

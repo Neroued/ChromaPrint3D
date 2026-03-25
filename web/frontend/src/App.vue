@@ -166,6 +166,15 @@ function toggleLocale() {
                 <NText depth="3" class="app-shell__meta-text">{{ t('common.darkMode') }}</NText>
                 <NSwitch v-model:value="isDark" size="small" />
               </NSpace>
+              <NButton
+                tag="a"
+                href="https://www.bilibili.com/video/BV1cPATzyEz9/"
+                target="_blank"
+                size="small"
+                quaternary
+              >
+                {{ t('common.videoTutorial') }}
+              </NButton>
               <NButton size="small" quaternary @click="toggleLocale">
                 {{ locale === 'zh-CN' ? 'EN' : '中' }}
               </NButton>

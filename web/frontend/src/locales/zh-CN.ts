@@ -52,6 +52,7 @@ export default {
     disabled: '禁用',
     pollFailed: '任务状态轮询失败，请重试（{message}）',
     downloadFailed: '下载失败，请重试',
+    videoTutorial: '视频教程',
   },
 
   app: {
