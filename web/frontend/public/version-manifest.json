@@ -1,7 +1,7 @@
 {
-  "version": "1.2.10",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.10",
-  "changelog": "- 矢量图处理速度大幅提升\n- 改进 SVG 文件解析，支持更多格式特性\n- 配方编辑器响应速度优化，支持包含更多颜色的图片\n- 修复全局选色模式下无法取消选择的问题\n- 修复特定颜色库组合下配方匹配失败的问题",
-  "changelog_en": "- Significantly faster vector image processing\n- Improved SVG parsing with better format support\n- Faster recipe editor with support for more colors\n- Fixed deselect in global color-select mode\n- Fixed recipe matching with certain color DB combinations",
-  "published_at": "2026-03-24"
+  "version": "1.2.11",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.11",
+  "changelog": "- 矢量模式渐变处理和精度优化\n- 3MF 导出性能与稳定性提升",
+  "changelog_en": "- Improved gradient handling and precision in vector mode\n- Enhanced 3MF export performance and stability",
+  "published_at": "2026-03-25"
 }
