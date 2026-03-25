@@ -151,9 +151,7 @@ export default {
     halftone: '半色调抖动',
     enableModel: '启用模型',
     modelOnlyHint: '仅 BambooLab PLA 数据库支持模型增强',
-    gradientDither: '渐变抖动',
     ditherStrength: '抖动强度',
-    gradientDitherStrength: '渐变抖动强度',
     imageProcessing: '图像处理',
     sizeSettings: '尺寸设置',
     scaleFactor: '缩放倍率',
@@ -239,8 +237,6 @@ export default {
         '生成来源掩码图（PNG），白色像素表示使用了模型预测的配方，黑色表示使用了 ColorDB 匹配',
       tessellation_tolerance_mm:
         '矢量曲线三角化时的容差（毫米），值越小曲线越平滑但网格越多。默认 0.03，推荐 0.03-0.12',
-      gradient_dither: '对 SVG 渐变区域进行抖动处理，改善渐变在有限调色板下的过渡效果',
-      gradient_dither_strength: '渐变区域的抖动强度。值越大渐变过渡越平滑，但可能产生颗粒感',
     },
   },
 

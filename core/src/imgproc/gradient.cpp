@@ -9,26 +9,54 @@ namespace ChromaPrint3D::detail {
 
 namespace {
 
+float ApplySpreadMethod(float t, SpreadMethod spread) {
+    switch (spread) {
+    case SpreadMethod::Repeat:
+        t = t - std::floor(t);
+        break;
+    case SpreadMethod::Reflect:
+        t = 1.0f - std::abs(std::fmod(t, 2.0f) - 1.0f);
+        break;
+    case SpreadMethod::Pad:
+    default:
+        t = std::clamp(t, 0.0f, 1.0f);
+        break;
+    }
+    return t;
+}
+
 Rgb InterpolateGradient(const GradientInfo& grad, float t) {
     if (grad.stops.empty()) { return Rgb(0.5f, 0.5f, 0.5f); }
 
-    t = std::clamp(t, 0.0f, 1.0f);
+    t = ApplySpreadMethod(t, grad.spread);
 
-    if (t <= grad.stops.front().offset) { return grad.stops.front().color; }
-    if (t >= grad.stops.back().offset) { return grad.stops.back().color; }
+    if (t <= grad.stops.front().offset) {
+        const auto& s = grad.stops.front();
+        return Rgb(s.color.x * s.opacity, s.color.y * s.opacity, s.color.z * s.opacity);
+    }
+    if (t >= grad.stops.back().offset) {
+        const auto& s = grad.stops.back();
+        return Rgb(s.color.x * s.opacity, s.color.y * s.opacity, s.color.z * s.opacity);
+    }
 
     for (size_t i = 0; i + 1 < grad.stops.size(); ++i) {
         if (t >= grad.stops[i].offset && t <= grad.stops[i + 1].offset) {
             float range   = grad.stops[i + 1].offset - grad.stops[i].offset;
             float frac    = (range > 0.0f) ? (t - grad.stops[i].offset) / range : 0.0f;
+            float a0      = grad.stops[i].opacity;
+            float a1      = grad.stops[i + 1].opacity;
+            float a       = a0 + (a1 - a0) * frac;
             const Rgb& c0 = grad.stops[i].color;
             const Rgb& c1 = grad.stops[i + 1].color;
-            return Rgb(c0.x + (c1.x - c0.x) * frac, c0.y + (c1.y - c0.y) * frac,
-                       c0.z + (c1.z - c0.z) * frac);
+            return Rgb((c0.x + (c1.x - c0.x) * frac) * a, (c0.y + (c1.y - c0.y) * frac) * a,
+                       (c0.z + (c1.z - c0.z) * frac) * a);
         }
     }
-    return grad.stops.back().color;
+    const auto& s = grad.stops.back();
+    return Rgb(s.color.x * s.opacity, s.color.y * s.opacity, s.color.z * s.opacity);
 }
+
+} // namespace
 
 bool PointInContours(const std::vector<Contour>& contours, float px, float py) {
     int crossings = 0;
@@ -45,8 +73,6 @@ bool PointInContours(const std::vector<Contour>& contours, float px, float py) {
     }
     return (crossings % 2) == 1;
 }
-
-} // namespace
 
 cv::Mat RasterizeGradientShape(const VectorShape& shape, float pixel_mm, float& out_offset_x,
                                float& out_offset_y) {
@@ -72,7 +98,7 @@ cv::Mat RasterizeGradientShape(const VectorShape& shape, float pixel_mm, float& 
     out_offset_x = min_x;
     out_offset_y = min_y;
 
-    cv::Mat result(h, w, CV_32FC3, cv::Scalar(0, 0, 0));
+    cv::Mat result(h, w, CV_32FC4, cv::Scalar(0, 0, 0, 0));
 
     const GradientInfo& grad = shape.gradient;
     bool is_radial           = (shape.fill_type == FillType::RadialGradient);
@@ -80,7 +106,7 @@ cv::Mat RasterizeGradientShape(const VectorShape& shape, float pixel_mm, float& 
 #pragma omp parallel for schedule(dynamic)
     for (int row = 0; row < h; ++row) {
         float py  = min_y + (static_cast<float>(row) + 0.5f) * pixel_mm;
-        auto* ptr = result.ptr<cv::Vec3f>(row);
+        auto* ptr = result.ptr<cv::Vec4f>(row);
         for (int col = 0; col < w; ++col) {
             float px = min_x + (static_cast<float>(col) + 0.5f) * pixel_mm;
 
@@ -104,7 +130,7 @@ cv::Mat RasterizeGradientShape(const VectorShape& shape, float pixel_mm, float& 
             }
 
             Rgb color = InterpolateGradient(grad, t);
-            ptr[col]  = cv::Vec3f(color.r(), color.g(), color.b());
+            ptr[col]  = cv::Vec4f(color.r(), color.g(), color.b(), 1.0f);
         }
     }
 

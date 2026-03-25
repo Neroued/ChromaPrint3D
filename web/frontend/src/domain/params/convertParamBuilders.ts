@@ -50,8 +50,6 @@ const VECTOR_FIELDS: Array<keyof ConvertVectorParams> = [
   'allowed_channels',
   'generate_preview',
   'tessellation_tolerance_mm',
-  'gradient_dither',
-  'gradient_dither_strength',
   'nozzle_size',
   'face_orientation',
 ]

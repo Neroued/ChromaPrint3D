@@ -29,8 +29,16 @@ enum class SvgFillRule : uint8_t {
 
 /// Gradient color stop.
 struct GradientStop {
-    float offset = 0.0f;
+    float offset  = 0.0f;
+    float opacity = 1.0f;
     Rgb color;
+};
+
+/// SVG gradient spread method.
+enum class SpreadMethod : uint8_t {
+    Pad,
+    Reflect,
+    Repeat,
 };
 
 /// Gradient definition extracted from SVG.
@@ -38,7 +46,8 @@ struct GradientInfo {
     std::vector<GradientStop> stops;
     float x1 = 0.0f, y1 = 0.0f; ///< Start point (linear) or center (radial).
     float x2 = 0.0f, y2 = 0.0f; ///< End point (linear).
-    float r = 0.0f;             ///< Radius (radial only).
+    float r             = 0.0f; ///< Radius (radial only).
+    SpreadMethod spread = SpreadMethod::Pad;
 };
 
 /// A single shape from a vector image, with contours and fill information.

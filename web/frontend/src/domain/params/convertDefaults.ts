@@ -41,7 +41,5 @@ export function createInitialConvertParams({
     generate_source_mask: defaults.generate_source_mask,
     db_names: dbNames,
     tessellation_tolerance_mm: 0.03,
-    gradient_dither: 'none',
-    gradient_dither_strength: 0.8,
   }
 }

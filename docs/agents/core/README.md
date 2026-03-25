@@ -26,6 +26,7 @@
 | 修改体素/网格生成 | `core/src/geo/geo.cpp`、`core/src/vecgeo/vector_mesh_builder.cpp` |
 | 修改 3MF 导出 | `core/src/geo/export_3mf.cpp` |
 | 修改 Bambu 预设与耗材元数据 | `core/src/geo/bambu_metadata.cpp` |
+| 修改 SVG 几何提取与遮挡裁剪 | `core/src/imgproc/vector_proc.cpp`、`core/src/imgproc/occlusion.cpp`、`core/src/imgproc/gradient.cpp` |
 | 修改端到端转换编排 | `core/src/pipeline/pipeline.cpp`、`core/src/pipeline/vector_pipeline.cpp` |
 | 修改校准板与 ColorDB 构建 | `core/src/calib/calib.cpp` |
 

@@ -30,6 +30,7 @@ struct Options {
 
     float layer_height_mm           = 0.0f;
     float tessellation_tolerance_mm = 0.03f;
+    float gradient_pixel_mm         = 0.0f;
     int base_layers                 = -1;
     bool double_sided               = false;
 
@@ -55,6 +56,7 @@ void PrintUsage(const char* exe) {
         "  --base-layers N     Base layers override (-1 inherit, >=0 explicit, default -1)\n"
         "  --double-sided 0|1  Generate mirrored color layers on both sides (default 0)\n"
         "  --tess-tol X        Bezier tessellation tolerance in mm (default 0.03)\n"
+        "  --gradient-px-mm X  Gradient rasterization resolution in mm/px (0=auto)\n"
         "  --log-level LEVEL   trace/debug/info/warn/error/off (default: info)\n",
         exe);
 }
@@ -236,6 +238,13 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             }
             continue;
         }
+        if (arg == "--gradient-px-mm" && i + 1 < argc) {
+            if (!ParseFloat(argv[++i], opt.gradient_pixel_mm) || opt.gradient_pixel_mm < 0.0f) {
+                std::fprintf(stderr, "Invalid --gradient-px-mm\n");
+                return false;
+            }
+            continue;
+        }
         if (arg == "--log-level" && i + 1 < argc) {
             opt.log_level = argv[++i];
             continue;
@@ -281,6 +290,7 @@ int main(int argc, char** argv) {
         req.base_layers               = opt.base_layers;
         req.double_sided              = opt.double_sided;
         req.tessellation_tolerance_mm = opt.tessellation_tolerance_mm;
+        req.gradient_pixel_mm         = opt.gradient_pixel_mm;
         req.output_3mf_path           = opt.out_path;
         req.generate_preview          = false;
 

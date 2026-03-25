@@ -216,9 +216,7 @@ struct ConvertVectorRequest {
     float model_margin     = -1.0f;
     std::vector<std::string> allowed_channel_keys;
 
-    DitherMethod gradient_dither   = DitherMethod::FloydSteinberg;
-    float gradient_dither_strength = 0.8f;
-    float gradient_pixel_mm        = 0.0f; ///< Gradient rasterization resolution (0 = auto).
+    float gradient_pixel_mm = 0.0f; ///< Gradient rasterization resolution (0 = auto).
 
     float layer_height_mm           = 0.0f; ///< 0 = derive from profile.
     float tessellation_tolerance_mm = 0.03f;

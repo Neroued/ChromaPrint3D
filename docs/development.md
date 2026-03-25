@@ -192,6 +192,7 @@ npm run dev
 | `base_layers` | int / null | `null` | `-1`（CLI 语义）或 `>=0` | 底板层数覆盖。API 不传表示继承 ColorDB；CLI 中 `-1` 表示继承，`0` 表示无底板 |
 | `double_sided` | bool | `false` | `true`, `false` | 双面生成开关。开启后在底板两侧生成镜像颜色层 |
 | `transparent_layer_mm` | float | `0` | `0`, `0.04`, `0.08` | 透明镀层厚度（mm）。仅在 `face_orientation=facedown` 且 `double_sided=false` 时可用。启用后在打印模型最底层追加一层透明材料网格 |
+| `gradient_pixel_mm` | float | `0` | `>=0` | 渐变色区域栅格化分辨率（mm/px）。`0`=自动（3×`tessellation_tolerance_mm`）。SVG 中的渐变填充会被栅格化并拆分为纯色子区域参与颜色匹配与 3MF 生成 |
 
 组合后会先选择 `data/presets/` 下 4 个预设之一（如 `bambu_p2s_0.08mm_n04_faceup.json`）。预设中的耗材丝配置（颜色、类型、温度等）完整写入 3MF，Bambu Studio 打开时优先加载文件内配置。模型颜色自动匹配到预设中最接近的耗材丝槽位（RGB 欧氏距离）。此外，`face_orientation=facedown` 会在导出阶段将模型几何整体绕 Y 轴旋转 180°，`faceup` 则保持原方向。
 

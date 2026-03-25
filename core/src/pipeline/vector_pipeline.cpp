@@ -141,6 +141,7 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     vproc_cfg.target_height_mm          = request.target_height_mm;
     vproc_cfg.tessellation_tolerance_mm = request.tessellation_tolerance_mm;
     vproc_cfg.flip_y                    = request.flip_y;
+    vproc_cfg.gradient_pixel_mm         = request.gradient_pixel_mm;
 
     VectorProc vproc(vproc_cfg);
     VectorProcResult vimg;

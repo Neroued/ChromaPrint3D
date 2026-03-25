@@ -121,9 +121,7 @@ export default {
     halftone: 'Halftone Dither',
     enableModel: 'Enable Model',
     modelOnlyHint: 'Model enhancement only available for BambooLab PLA databases',
-    gradientDither: 'Gradient Dither',
     ditherStrength: 'Dither Strength',
-    gradientDitherStrength: 'Gradient Dither Strength',
     imageProcessing: 'Image Processing',
     sizeSettings: 'Size Settings',
     scaleFactor: 'Scale Factor',
@@ -206,9 +204,6 @@ export default {
         'Generate source mask (PNG). White = model prediction, Black = ColorDB match',
       tessellation_tolerance_mm:
         'Curve tessellation tolerance (mm). Smaller = smoother but more mesh. Default 0.03',
-      gradient_dither: 'Dither SVG gradient regions to improve transitions with limited palette',
-      gradient_dither_strength:
-        'Gradient dither strength. Higher = smoother transitions but may add grain',
     },
   },
 

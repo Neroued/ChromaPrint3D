@@ -31,8 +31,6 @@ describe('convertParamBuilders', () => {
     nozzle_size: 'n02',
     face_orientation: 'facedown',
     tessellation_tolerance_mm: 0.15,
-    gradient_dither: 'none',
-    gradient_dither_strength: 0.5,
   }
 
   it('buildRasterParams should exclude vector-only fields', () => {
@@ -45,13 +43,11 @@ describe('convertParamBuilders', () => {
     expect(raster.base_layers).toBe(3)
     expect(raster.double_sided).toBe(true)
     expect((raster as Record<string, unknown>).tessellation_tolerance_mm).toBeUndefined()
-    expect((raster as Record<string, unknown>).gradient_dither).toBeUndefined()
   })
 
   it('buildVectorParams should exclude raster-only fields', () => {
     const vector = buildVectorParams(input)
     expect(vector.tessellation_tolerance_mm).toBe(0.15)
-    expect(vector.gradient_dither).toBe('none')
     expect(vector.model_enable).toBe(true)
     expect(vector.model_only).toBe(false)
     expect(vector.model_threshold).toBe(2.5)

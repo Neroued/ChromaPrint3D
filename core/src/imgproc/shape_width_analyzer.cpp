@@ -1,4 +1,5 @@
 #include "chromaprint3d/shape_width_analyzer.h"
+#include "clipper_scale.h"
 
 #include <clipper2/clipper.h>
 #include <opencv2/imgproc.hpp>
@@ -11,10 +12,10 @@
 
 namespace ChromaPrint3D {
 
-namespace {
+using detail::kClipperScale;
 
-constexpr double kClipperScale = 100000.0;
-constexpr int kRasterPadding   = 2;
+namespace {
+constexpr int kRasterPadding = 2;
 
 struct ShapeBounds {
     float min_x = std::numeric_limits<float>::max();

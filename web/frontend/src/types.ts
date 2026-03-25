@@ -70,8 +70,6 @@ export interface ConvertVectorParams {
   allowed_channels?: PaletteChannel[]
   generate_preview?: boolean
   tessellation_tolerance_mm?: number
-  gradient_dither?: string
-  gradient_dither_strength?: number
   nozzle_size?: NozzleSize
   face_orientation?: FaceOrientation
 }

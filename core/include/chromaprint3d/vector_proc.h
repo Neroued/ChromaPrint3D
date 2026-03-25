@@ -33,6 +33,10 @@ struct VectorProcConfig {
 
     float tessellation_tolerance_mm = 0.03f; ///< Bezier flattening tolerance.
     bool flip_y                     = false;
+
+    /// Rasterization resolution for gradient flattening (mm/pixel).
+    /// 0 = auto (3x tessellation_tolerance_mm).
+    float gradient_pixel_mm = 0.0f;
 };
 
 /// Vector image preprocessor: parses SVG, flattens beziers, scales, clips occlusion.

@@ -1,4 +1,5 @@
 #include "occlusion.h"
+#include "clipper_scale.h"
 
 #include <clipper2/clipper.h>
 
@@ -24,16 +25,16 @@
 
 namespace ChromaPrint3D::detail {
 
-namespace {
+using detail::kClipperScale;
 
-constexpr double kScale = 1000000.0;
+namespace {
 
 Clipper2Lib::Path64 ContourToPath(const Contour& c) {
     Clipper2Lib::Path64 path;
     path.reserve(c.size());
     for (const Vec2f& p : c) {
-        path.emplace_back(static_cast<int64_t>(std::round(p.x * kScale)),
-                          static_cast<int64_t>(std::round(p.y * kScale)));
+        path.emplace_back(static_cast<int64_t>(std::round(p.x * kClipperScale)),
+                          static_cast<int64_t>(std::round(p.y * kClipperScale)));
     }
     return path;
 }
@@ -42,8 +43,8 @@ Contour PathToContour(const Clipper2Lib::Path64& path) {
     Contour c;
     c.reserve(path.size());
     for (const auto& pt : path) {
-        c.emplace_back(static_cast<float>(pt.x) / static_cast<float>(kScale),
-                       static_cast<float>(pt.y) / static_cast<float>(kScale));
+        c.emplace_back(static_cast<float>(pt.x) / static_cast<float>(kClipperScale),
+                       static_cast<float>(pt.y) / static_cast<float>(kClipperScale));
     }
     return c;
 }

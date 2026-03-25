@@ -48,7 +48,6 @@ const {
   error,
   filteredDBOptions,
   formatTooltip2Decimals,
-  gradientDitherOptions,
   handleChannelKeysChange,
   imageDimensions,
   inlineLabelWidth,
@@ -507,53 +506,26 @@ watch(canEnableTransparentLayer, (can) => {
           </NFormItem>
         </div>
 
-        <div
-          v-else-if="isVector"
-          class="param-inline-row"
-          :class="{ 'param-inline-row--single': !supportsModelGate }"
+        <NFormItem
+          v-else-if="isVector && supportsModelGate"
+          class="param-inline-item"
+          label-placement="left"
+          :label-width="simpleLabelWidth"
         >
-          <!-- Gradient dither (vector only) -->
-          <NFormItem
-            class="param-inline-item"
-            label-placement="left"
-            :label-width="inlineLabelWidth"
-          >
-            <template #label>
-              <NTooltip>
-                <template #trigger>
-                  <span class="tip-label">{{ t('param.gradientDither') }}</span>
-                </template>
-                {{ tooltips.gradient_dither }}
-              </NTooltip>
-            </template>
-            <NSelect
-              :value="modelValue.gradient_dither ?? 'none'"
-              :options="gradientDitherOptions"
-              @update:value="(v: string) => update({ gradient_dither: v })"
-            />
-          </NFormItem>
-
-          <NFormItem
-            v-if="supportsModelGate"
-            class="param-inline-item"
-            label-placement="left"
-            :label-width="inlineLabelWidth"
-          >
-            <template #label>
-              <NTooltip>
-                <template #trigger>
-                  <span class="tip-label">{{ t('param.enableModel') }}</span>
-                </template>
-                {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
-              </NTooltip>
-            </template>
-            <NSwitch
-              :value="modelValue.model_enable"
-              :disabled="!modelPackAvailable"
-              @update:value="(v: boolean) => update({ model_enable: v })"
-            />
-          </NFormItem>
-        </div>
+          <template #label>
+            <NTooltip>
+              <template #trigger>
+                <span class="tip-label">{{ t('param.enableModel') }}</span>
+              </template>
+              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
+            </NTooltip>
+          </template>
+          <NSwitch
+            :value="modelValue.model_enable"
+            :disabled="!modelPackAvailable"
+            @update:value="(v: boolean) => update({ model_enable: v })"
+          />
+        </NFormItem>
 
         <NFormItem
           v-else-if="supportsModelGate"
@@ -596,30 +568,6 @@ watch(canEnableTransparentLayer, (can) => {
             :tooltip="true"
             :format-tooltip="formatTooltip2Decimals"
             @update:value="(v: number) => update({ dither_strength: roundTo(v, 2) })"
-          />
-        </NFormItem>
-
-        <NFormItem
-          v-if="isVector && modelValue.gradient_dither && modelValue.gradient_dither !== 'none'"
-          label-placement="left"
-          :label-width="simpleLabelWidth"
-        >
-          <template #label>
-            <NTooltip>
-              <template #trigger>
-                <span class="tip-label">{{ t('param.gradientDitherStrength') }}</span>
-              </template>
-              {{ tooltips.gradient_dither_strength }}
-            </NTooltip>
-          </template>
-          <NSlider
-            :value="modelValue.gradient_dither_strength ?? 0.8"
-            :min="0"
-            :max="1"
-            :step="0.05"
-            :tooltip="true"
-            :format-tooltip="formatTooltip2Decimals"
-            @update:value="(v: number) => update({ gradient_dither_strength: roundTo(v, 2) })"
           />
         </NFormItem>
 
@@ -800,42 +748,6 @@ watch(canEnableTransparentLayer, (can) => {
                 @update:value="
                   (v: number | null) => update({ tessellation_tolerance_mm: roundTo(v ?? 0.03, 2) })
                 "
-              />
-            </NFormItem>
-
-            <NFormItem>
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
-                    <span class="tip-label">{{ t('param.gradientDither') }}</span>
-                  </template>
-                  {{ tooltips.gradient_dither }}
-                </NTooltip>
-              </template>
-              <NSelect
-                :value="modelValue.gradient_dither ?? 'none'"
-                :options="gradientDitherOptions"
-                @update:value="(v: string) => update({ gradient_dither: v })"
-              />
-            </NFormItem>
-
-            <NFormItem v-if="modelValue.gradient_dither && modelValue.gradient_dither !== 'none'">
-              <template #label>
-                <NTooltip>
-                  <template #trigger>
-                    <span class="tip-label">{{ t('param.gradientDitherStrength') }}</span>
-                  </template>
-                  {{ tooltips.gradient_dither_strength }}
-                </NTooltip>
-              </template>
-              <NSlider
-                :value="modelValue.gradient_dither_strength ?? 0.8"
-                :min="0"
-                :max="1"
-                :step="0.05"
-                :tooltip="true"
-                :format-tooltip="formatTooltip2Decimals"
-                @update:value="(v: number) => update({ gradient_dither_strength: roundTo(v, 2) })"
               />
             </NFormItem>
           </NCollapseItem>

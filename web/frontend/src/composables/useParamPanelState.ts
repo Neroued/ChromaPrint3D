@@ -49,11 +49,6 @@ export function useParamPanelState() {
     { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
   ]
 
-  const gradientDitherOpts: SelectOption[] = [
-    { label: t('param.off'), value: 'none' },
-    { label: 'Floyd-Steinberg', value: 'floyd_steinberg' },
-  ]
-
   const clusterModeOpts: SelectOption[] = [
     { label: t('param.clusterModeOff'), value: 'off' },
     { label: t('param.clusterModeAuto'), value: 'auto' },
@@ -88,8 +83,6 @@ export function useParamPanelState() {
     generate_preview: t('param.tooltips.generate_preview'),
     generate_source_mask: t('param.tooltips.generate_source_mask'),
     tessellation_tolerance_mm: t('param.tooltips.tessellation_tolerance_mm'),
-    gradient_dither: t('param.tooltips.gradient_dither'),
-    gradient_dither_strength: t('param.tooltips.gradient_dither_strength'),
   }
 
   function buildDBOptions(dbs: ColorDBInfo[]): SelectOption[] {
@@ -238,8 +231,6 @@ export function useParamPanelState() {
       if (newType === 'vector') {
         update({
           tessellation_tolerance_mm: modelValue.value.tessellation_tolerance_mm ?? 0.03,
-          gradient_dither: modelValue.value.gradient_dither ?? 'none',
-          gradient_dither_strength: modelValue.value.gradient_dither_strength ?? 0.8,
         })
       }
       if (mode.value === 'simple') {
@@ -257,16 +248,6 @@ export function useParamPanelState() {
       if (type !== 'raster') return
       if (dither === 'blue_noise') {
         update({ dither: 'none' })
-      }
-    },
-    { immediate: true },
-  )
-
-  watch(
-    () => modelValue.value.gradient_dither,
-    (gradientDither) => {
-      if (gradientDither === 'blue_noise') {
-        update({ gradient_dither: 'none' })
       }
     },
     { immediate: true },
@@ -572,7 +553,6 @@ export function useParamPanelState() {
     filteredDBOptions,
     formatTooltip1Decimal,
     formatTooltip2Decimals,
-    gradientDitherOptions: gradientDitherOpts,
     handleChannelKeysChange,
     imageDimensions,
     inlineLabelWidth,

@@ -1507,21 +1507,6 @@ ServiceResult ServerFacade::BuildVectorRequest(const json& params, const std::ve
         if (params.contains("tessellation_tolerance_mm")) {
             out.tessellation_tolerance_mm = params["tessellation_tolerance_mm"].get<float>();
         }
-        if (params.contains("gradient_dither")) {
-            std::string d = params["gradient_dither"].get<std::string>();
-            if (d == "blue_noise") {
-                out.gradient_dither = DitherMethod::BlueNoise;
-            } else if (d == "floyd_steinberg") {
-                out.gradient_dither = DitherMethod::FloydSteinberg;
-            } else if (d == "none") {
-                out.gradient_dither = DitherMethod::None;
-            } else {
-                throw std::runtime_error("Invalid gradient_dither method: " + d);
-            }
-        }
-        if (params.contains("gradient_dither_strength")) {
-            out.gradient_dither_strength = params["gradient_dither_strength"].get<float>();
-        }
         if (params.contains("gradient_pixel_mm")) {
             out.gradient_pixel_mm = params["gradient_pixel_mm"].get<float>();
         }
@@ -1551,10 +1536,6 @@ ServiceResult ServerFacade::BuildVectorRequest(const json& params, const std::ve
 
     if (out.k_candidates < 1) {
         return ServiceResult::Error(400, "invalid_params", "k_candidates must be >= 1");
-    }
-    if (out.gradient_dither_strength < 0.0f || out.gradient_dither_strength > 1.0f) {
-        return ServiceResult::Error(400, "invalid_params",
-                                    "gradient_dither_strength must be in [0,1]");
     }
     if (out.base_layers < -1) {
         return ServiceResult::Error(400, "invalid_params", "base_layers must be >= -1");
