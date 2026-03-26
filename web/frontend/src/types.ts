@@ -269,7 +269,10 @@ export interface MattingPostprocessParams {
 
 // ---- Vectorize ----
 
+export type PipelineMode = 'v1' | 'v2'
+
 export interface VectorizeParams {
+  pipeline_mode?: PipelineMode
   num_colors?: number
   smoothness?: number
   detail_level?: number
@@ -281,10 +284,13 @@ export interface VectorizeParams {
   upscale_short_edge?: number
   max_working_pixels?: number
   slic_region_size?: number
+  slic_compactness?: number
   edge_sensitivity?: number
   refine_passes?: number
   max_merge_color_dist?: number
   thin_line_max_radius?: number
+  enable_subpixel_refine?: boolean
+  subpixel_max_displacement?: number
   enable_antialias_detect?: boolean
   aa_tolerance?: number
   merge_segment_tolerance?: number

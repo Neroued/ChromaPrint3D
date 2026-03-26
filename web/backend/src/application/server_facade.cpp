@@ -179,33 +179,40 @@ ServiceResult ServerFacade::ConvertDefaults() const {
 
 ServiceResult ServerFacade::VectorizeDefaults() const {
     VectorizerConfig cfg;
-    return ServiceResult::Success(200, {
-                                           {"num_colors", cfg.num_colors},
-                                           {"min_region_area", cfg.min_region_area},
-                                           {"curve_fit_error", cfg.curve_fit_error},
-                                           {"corner_angle_threshold", cfg.corner_angle_threshold},
-                                           {"smoothing_spatial", cfg.smoothing_spatial},
-                                           {"smoothing_color", cfg.smoothing_color},
-                                           {"upscale_short_edge", cfg.upscale_short_edge},
-                                           {"max_working_pixels", cfg.max_working_pixels},
-                                           {"slic_region_size", cfg.slic_region_size},
-                                           {"edge_sensitivity", cfg.edge_sensitivity},
-                                           {"refine_passes", cfg.refine_passes},
-                                           {"max_merge_color_dist", cfg.max_merge_color_dist},
-                                           {"thin_line_max_radius", cfg.thin_line_max_radius},
-                                           {"min_contour_area", cfg.min_contour_area},
-                                           {"min_hole_area", cfg.min_hole_area},
-                                           {"contour_simplify", cfg.contour_simplify},
-                                           {"enable_coverage_fix", cfg.enable_coverage_fix},
-                                           {"min_coverage_ratio", cfg.min_coverage_ratio},
-                                           {"smoothness", cfg.smoothness},
-                                           {"detail_level", cfg.detail_level},
-                                           {"merge_segment_tolerance", cfg.merge_segment_tolerance},
-                                           {"enable_antialias_detect", cfg.enable_antialias_detect},
-                                           {"aa_tolerance", cfg.aa_tolerance},
-                                           {"svg_enable_stroke", cfg.svg_enable_stroke},
-                                           {"svg_stroke_width", cfg.svg_stroke_width},
-                                       });
+    cfg.pipeline_mode = neroued::vectorizer::PipelineMode::V2;
+    return ServiceResult::Success(200,
+                                  {
+                                      {"pipeline_mode", "v2"},
+                                      {"num_colors", cfg.num_colors},
+                                      {"min_region_area", cfg.min_region_area},
+                                      {"curve_fit_error", cfg.curve_fit_error},
+                                      {"corner_angle_threshold", cfg.corner_angle_threshold},
+                                      {"smoothing_spatial", cfg.smoothing_spatial},
+                                      {"smoothing_color", cfg.smoothing_color},
+                                      {"upscale_short_edge", cfg.upscale_short_edge},
+                                      {"max_working_pixels", cfg.max_working_pixels},
+                                      {"slic_region_size", cfg.slic_region_size},
+                                      {"slic_compactness", cfg.slic_compactness},
+                                      {"edge_sensitivity", cfg.edge_sensitivity},
+                                      {"refine_passes", cfg.refine_passes},
+                                      {"max_merge_color_dist", cfg.max_merge_color_dist},
+                                      {"thin_line_max_radius", cfg.thin_line_max_radius},
+                                      {"enable_subpixel_refine", cfg.enable_subpixel_refine},
+                                      {"subpixel_max_displacement", cfg.subpixel_max_displacement},
+                                      {"min_contour_area", cfg.min_contour_area},
+                                      {"min_hole_area", cfg.min_hole_area},
+                                      {"contour_simplify", cfg.contour_simplify},
+                                      {"enable_coverage_fix", cfg.enable_coverage_fix},
+                                      {"min_coverage_ratio", cfg.min_coverage_ratio},
+                                      {"smoothness", cfg.smoothness},
+                                      {"detail_level", cfg.detail_level},
+                                      {"merge_segment_tolerance", cfg.merge_segment_tolerance},
+                                      {"enable_antialias_detect", cfg.enable_antialias_detect},
+                                      {"aa_tolerance", cfg.aa_tolerance},
+                                      {"svg_enable_stroke", cfg.svg_enable_stroke},
+                                      {"svg_stroke_width", cfg.svg_stroke_width},
+                                      {"enable_depth_validation", cfg.enable_depth_validation},
+                                  });
 }
 
 ServiceResult ServerFacade::ListDatabases(const std::optional<std::string>& session_token) {
@@ -523,15 +530,16 @@ ServiceResult ServerFacade::SubmitVectorize(const std::string& owner,
         return built;
     }
     spdlog::debug(
-        "SubmitVectorize config: num_colors={}, min_region_area={}, curve_fit_error={:.3f}, "
-        "corner_angle_threshold={:.1f}, smoothing_spatial={:.1f}, smoothing_color={:.1f}, "
-        "upscale_short_edge={}, max_working_pixels={}, slic_region_size={}, "
-        "edge_sensitivity={:.2f}, refine_passes={}, max_merge_color_dist={:.1f}, "
-        "svg_enable_stroke={}, svg_stroke_width={:.2f}",
-        cfg.num_colors, cfg.min_region_area, cfg.curve_fit_error, cfg.corner_angle_threshold,
-        cfg.smoothing_spatial, cfg.smoothing_color, cfg.upscale_short_edge, cfg.max_working_pixels,
-        cfg.slic_region_size, cfg.edge_sensitivity, cfg.refine_passes, cfg.max_merge_color_dist,
-        cfg.svg_enable_stroke, cfg.svg_stroke_width);
+        "SubmitVectorize config: pipeline_mode={}, num_colors={}, min_region_area={}, "
+        "curve_fit_error={:.3f}, corner_angle_threshold={:.1f}, smoothing_spatial={:.1f}, "
+        "smoothing_color={:.1f}, upscale_short_edge={}, max_working_pixels={}, "
+        "slic_region_size={}, edge_sensitivity={:.2f}, refine_passes={}, "
+        "max_merge_color_dist={:.1f}, svg_enable_stroke={}, svg_stroke_width={:.2f}",
+        cfg.pipeline_mode == neroued::vectorizer::PipelineMode::V1 ? "v1" : "v2", cfg.num_colors,
+        cfg.min_region_area, cfg.curve_fit_error, cfg.corner_angle_threshold, cfg.smoothing_spatial,
+        cfg.smoothing_color, cfg.upscale_short_edge, cfg.max_working_pixels, cfg.slic_region_size,
+        cfg.edge_sensitivity, cfg.refine_passes, cfg.max_merge_color_dist, cfg.svg_enable_stroke,
+        cfg.svg_stroke_width);
 
     auto submit = tasks_.SubmitVectorize(owner, image, cfg, StripExtension(image_name));
     if (!submit.ok) {
@@ -1548,9 +1556,19 @@ ServiceResult ServerFacade::BuildVectorRequest(const json& params, const std::ve
 }
 
 ServiceResult ServerFacade::BuildVectorizeConfig(const json& params, VectorizerConfig& out) const {
-    out = VectorizerConfig{};
+    out               = VectorizerConfig{};
+    out.pipeline_mode = neroued::vectorizer::PipelineMode::V2;
     spdlog::debug("BuildVectorizeConfig: params keys={}", params.size());
     try {
+        if (params.contains("pipeline_mode")) {
+            auto mode = params["pipeline_mode"].get<std::string>();
+            if (mode == "v1")
+                out.pipeline_mode = neroued::vectorizer::PipelineMode::V1;
+            else if (mode == "v2")
+                out.pipeline_mode = neroued::vectorizer::PipelineMode::V2;
+            else
+                throw std::runtime_error("Invalid pipeline_mode: " + mode);
+        }
         if (params.contains("num_colors")) out.num_colors = params["num_colors"].get<int>();
         if (params.contains("min_region_area")) {
             out.min_region_area = params["min_region_area"].get<int>();
@@ -1620,6 +1638,18 @@ ServiceResult ServerFacade::BuildVectorizeConfig(const json& params, VectorizerC
         }
         if (params.contains("aa_tolerance")) {
             out.aa_tolerance = params["aa_tolerance"].get<float>();
+        }
+        if (params.contains("slic_compactness")) {
+            out.slic_compactness = params["slic_compactness"].get<float>();
+        }
+        if (params.contains("enable_subpixel_refine")) {
+            out.enable_subpixel_refine = params["enable_subpixel_refine"].get<bool>();
+        }
+        if (params.contains("subpixel_max_displacement")) {
+            out.subpixel_max_displacement = params["subpixel_max_displacement"].get<float>();
+        }
+        if (params.contains("enable_depth_validation")) {
+            out.enable_depth_validation = params["enable_depth_validation"].get<bool>();
         }
     } catch (const std::exception& e) {
         return ServiceResult::Error(400, "invalid_params", e.what());
@@ -1692,21 +1722,32 @@ ServiceResult ServerFacade::BuildVectorizeConfig(const json& params, VectorizerC
     if (out.aa_tolerance < 1.0f || out.aa_tolerance > 50.0f) {
         return ServiceResult::Error(400, "invalid_params", "aa_tolerance must be in [1,50]");
     }
+    if (out.slic_compactness <= 0.0f || out.slic_compactness > 40.0f) {
+        return ServiceResult::Error(400, "invalid_params", "slic_compactness must be in (0,40]");
+    }
+    if (out.subpixel_max_displacement < 0.0f || out.subpixel_max_displacement > 5.0f) {
+        return ServiceResult::Error(400, "invalid_params",
+                                    "subpixel_max_displacement must be in [0,5]");
+    }
+    const char* pipeline_tag =
+        out.pipeline_mode == neroued::vectorizer::PipelineMode::V1 ? "v1" : "v2";
     spdlog::debug(
-        "BuildVectorizeConfig resolved: num_colors={}, min_region_area={}, curve_fit_error={:.3f}, "
-        "corner_angle_threshold={:.1f}, smoothing_spatial={:.1f}, smoothing_color={:.1f}, "
-        "upscale_short_edge={}, max_working_pixels={}, slic_region_size={}, "
-        "edge_sensitivity={:.2f}, refine_passes={}, max_merge_color_dist={:.1f}, "
-        "thin_line_max_radius={:.2f}, "
+        "BuildVectorizeConfig resolved: pipeline_mode={}, num_colors={}, min_region_area={}, "
+        "curve_fit_error={:.3f}, corner_angle_threshold={:.1f}, smoothing_spatial={:.1f}, "
+        "smoothing_color={:.1f}, upscale_short_edge={}, max_working_pixels={}, "
+        "slic_region_size={}, slic_compactness={:.1f}, edge_sensitivity={:.2f}, "
+        "refine_passes={}, max_merge_color_dist={:.1f}, thin_line_max_radius={:.2f}, "
+        "enable_subpixel_refine={}, subpixel_max_displacement={:.2f}, "
         "min_contour_area={:.2f}, min_hole_area={:.2f}, contour_simplify={:.2f}, "
         "enable_coverage_fix={}, min_coverage_ratio={:.4f}, "
         "svg_enable_stroke={}, svg_stroke_width={:.2f}",
-        out.num_colors, out.min_region_area, out.curve_fit_error, out.corner_angle_threshold,
-        out.smoothing_spatial, out.smoothing_color, out.upscale_short_edge, out.max_working_pixels,
-        out.slic_region_size, out.edge_sensitivity, out.refine_passes, out.max_merge_color_dist,
-        out.thin_line_max_radius, out.min_contour_area, out.min_hole_area, out.contour_simplify,
-        out.enable_coverage_fix, out.min_coverage_ratio, out.svg_enable_stroke,
-        out.svg_stroke_width);
+        pipeline_tag, out.num_colors, out.min_region_area, out.curve_fit_error,
+        out.corner_angle_threshold, out.smoothing_spatial, out.smoothing_color,
+        out.upscale_short_edge, out.max_working_pixels, out.slic_region_size, out.slic_compactness,
+        out.edge_sensitivity, out.refine_passes, out.max_merge_color_dist, out.thin_line_max_radius,
+        out.enable_subpixel_refine, out.subpixel_max_displacement, out.min_contour_area,
+        out.min_hole_area, out.contour_simplify, out.enable_coverage_fix, out.min_coverage_ratio,
+        out.svg_enable_stroke, out.svg_stroke_width);
     return ServiceResult::Success(200, json::object());
 }
 

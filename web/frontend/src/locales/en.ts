@@ -322,8 +322,15 @@ export default {
     },
     settings: {
       title: 'Vectorize Settings',
+      pipelineMode: 'Algorithm',
+      pipelineModeHint:
+        'V1: Boundary-graph + cutout model, best for line art and simple graphics. V2: Stacking model + depth ordering, best for photos and complex images.',
+      pipelineV1: 'V1 (Boundary)',
+      pipelineV2: 'V2 (Stacking)',
       quickTip:
         'Adjust Color Count and Smoothness for quick tuning. Fine-tune curve fitting in Advanced Settings if needed.',
+      quickTipV2:
+        'Adjust Color Count for quick tuning. Fine-tune curve fitting and contour simplification in Advanced Settings if needed.',
       outputEnhancement: 'Output Enhancement',
       numColors: 'Number of Colors',
       numColorsHint:
@@ -365,6 +372,9 @@ export default {
       slicRegionSize: 'Superpixel Size',
       slicRegionSizeHint:
         'Target size of each superpixel. Smaller = finer detail but slower. Recommended 15-30.',
+      slicCompactness: 'Compactness',
+      slicCompactnessHint:
+        'SLIC compactness parameter. Lower = follow color edges more; higher = more regular shapes. Recommended 4-10.',
       edgeSensitivity: 'Edge Sensitivity',
       edgeSensitivityHint:
         'How strongly superpixels snap to image edges. Higher = sharper boundaries. Recommended 0.6-1.0.',
@@ -388,6 +398,11 @@ export default {
       svgStrokeWidth: 'Stroke Width (px)',
       svgStrokeWidthHint:
         'Width of stroke outlines when enhancement is enabled. 0.3-0.8 is usually natural.',
+      enableSubpixelRefine: 'Subpixel Refine',
+      enableSubpixelRefineHint: 'Gradient-guided sub-pixel boundary refinement for smoother edges.',
+      subpixelMaxDisplacement: 'Max Displacement (px)',
+      subpixelMaxDisplacementHint:
+        'Maximum normal displacement for sub-pixel refinement (pixels). Recommended 0.3-1.0.',
       enableAntialiasDetect: 'Antialias Detection',
       enableAntialiasDetectHint:
         'Detect anti-aliased mixed-edge pixels for cleaner boundaries. Enable for images with smooth edges.',
