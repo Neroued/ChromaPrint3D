@@ -1,6 +1,6 @@
 {
   "name": "chromaprint3d",
-  "version": "1.2.11",
+  "version": "1.2.12-rc.1",
   "private": true,
   "description": "ChromaPrint3D - Multi-color 3D printing image processor",
   "author": "neroued <neroued@gmail.com>",

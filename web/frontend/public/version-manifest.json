@@ -1,7 +1,6 @@
 {
-  "version": "1.2.11",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.11",
-  "changelog": "- 矢量模式渐变处理和精度优化\n- 3MF 导出性能与稳定性提升",
-  "changelog_en": "- Improved gradient handling and precision in vector mode\n- Enhanced 3MF export performance and stability",
-  "published_at": "2026-03-25"
+  "version": "1.2.12-rc.1",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.12-rc.1",
+  "changelog": "",
+  "published_at": "2026-03-28"
 }
