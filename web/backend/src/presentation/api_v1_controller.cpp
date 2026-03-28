@@ -352,10 +352,21 @@ void ApiV1Controller::TaskById(const drogon::HttpRequestPtr& req, Callback&& cb,
                                const std::string& id) {
     auto token = SessionToken(req);
     if (!token) {
+        spdlog::debug("TaskById: no session for task {}, cookie='{}', header='{}'", id,
+                      req->getCookie("session").empty() ? "(empty)" : "(set)",
+                      req->getHeader(kSessionHeader).empty() ? "(empty)" : "(set)");
         ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "No session"));
         return;
     }
-    ReplyJson(std::move(cb), Facade().GetTask(*token, id));
+    auto result = Facade().GetTask(*token, id);
+    if (!result.ok) {
+        auto cookie_val = req->getCookie("session");
+        auto header_val = req->getHeader(kSessionHeader);
+        spdlog::warn("TaskById: task {} lookup failed, cookie={}, header={}, used={}", id,
+                     cookie_val.empty() ? "(empty)" : cookie_val.substr(0, 8),
+                     header_val.empty() ? "(empty)" : header_val.substr(0, 8), token->substr(0, 8));
+    }
+    ReplyJson(std::move(cb), result);
 }
 
 void ApiV1Controller::DeleteTask(const drogon::HttpRequestPtr& req, Callback&& cb,
@@ -501,8 +512,14 @@ void ApiV1Controller::ApplySessionCookie(const drogon::HttpResponsePtr& resp,
 }
 
 std::optional<std::string> ApiV1Controller::SessionToken(const drogon::HttpRequestPtr& req) const {
-    auto token = req->getCookie("session");
-    if (token.empty()) token = req->getHeader(kSessionHeader);
+    auto header = req->getHeader(kSessionHeader);
+    auto cookie = req->getCookie("session");
+    if (!header.empty() && !cookie.empty() && header != cookie) {
+        spdlog::debug("SessionToken: header/cookie mismatch, preferring header (header={}, "
+                      "cookie={})",
+                      header.substr(0, 8), cookie.substr(0, 8));
+    }
+    auto token = !header.empty() ? header : cookie;
     if (token.empty()) return std::nullopt;
     return token;
 }

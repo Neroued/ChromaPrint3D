@@ -944,8 +944,15 @@ std::optional<TaskSnapshot> TaskRuntime::FindTask(const std::string& owner,
                                                   const std::string& id) const {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
-    if (it == tasks_.end()) return std::nullopt;
-    if (it->second.snapshot.owner != owner) return std::nullopt;
+    if (it == tasks_.end()) {
+        spdlog::warn("FindTask: task {} not in map (map_size={})", id, tasks_.size());
+        return std::nullopt;
+    }
+    if (it->second.snapshot.owner != owner) {
+        spdlog::warn("FindTask: task {} owner mismatch: request={} vs task={}", id, OwnerTag(owner),
+                     OwnerTag(it->second.snapshot.owner));
+        return std::nullopt;
+    }
     return it->second.snapshot;
 }
 
@@ -1539,6 +1546,11 @@ void TaskRuntime::EnforceResultBudgetLocked() {
             }
         }
         if (oldest == tasks_.end()) break;
+        spdlog::warn("EnforceResultBudget: evicting task {}, kind={}, owner={}, artifact_bytes={}, "
+                     "total_before={}, budget={}",
+                     oldest->first, TaskKindToString(oldest->second.snapshot.kind),
+                     OwnerTag(oldest->second.snapshot.owner), oldest->second.artifact_bytes,
+                     total_artifact_bytes_, max_total_result_bytes_);
         total_artifact_bytes_ -= std::min(total_artifact_bytes_, oldest->second.artifact_bytes);
         tasks_.erase(oldest);
     }
