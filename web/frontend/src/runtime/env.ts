@@ -111,3 +111,11 @@ export function getSitePublicSecurityRecordUrl(): string {
   const customUrl = normalizeText(import.meta.env.VITE_SITE_PUBLIC_SECURITY_RECORD_URL)
   return customUrl || DEFAULT_PUBLIC_SECURITY_RECORD_URL
 }
+
+export function getStableUrl(): string {
+  return normalizeText(import.meta.env.VITE_STABLE_URL)
+}
+
+export function getPreviewUrl(): string {
+  return normalizeText(import.meta.env.VITE_PREVIEW_URL)
+}

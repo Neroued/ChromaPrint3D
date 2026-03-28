@@ -82,6 +82,14 @@ if [[ -n "${VITE_UPDATE_MANIFEST_URL:-}" ]]; then
     info "Using VITE_UPDATE_MANIFEST_URL=$VITE_UPDATE_MANIFEST_URL"
     BUILD_ENV+=(VITE_UPDATE_MANIFEST_URL="$VITE_UPDATE_MANIFEST_URL")
 fi
+if [[ -n "${VITE_STABLE_URL:-}" ]]; then
+    info "Using VITE_STABLE_URL=$VITE_STABLE_URL"
+    BUILD_ENV+=(VITE_STABLE_URL="$VITE_STABLE_URL")
+fi
+if [[ -n "${VITE_PREVIEW_URL:-}" ]]; then
+    info "Using VITE_PREVIEW_URL=$VITE_PREVIEW_URL"
+    BUILD_ENV+=(VITE_PREVIEW_URL="$VITE_PREVIEW_URL")
+fi
 if (( ${#BUILD_ENV[@]} > 0 )); then
     (cd "$ROOT_DIR/web/frontend" && env "${BUILD_ENV[@]}" npm run build)
 else

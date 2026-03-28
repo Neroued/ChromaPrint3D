@@ -49,6 +49,8 @@ import {
   getSiteIcpUrl,
   getSitePublicSecurityRecordNumber,
   getSitePublicSecurityRecordUrl,
+  getStableUrl,
+  getPreviewUrl,
 } from './runtime/env'
 
 const { t, locale } = useI18n()
@@ -83,6 +85,14 @@ const sitePublicSecurityRecordNumber = getSitePublicSecurityRecordNumber()
 const sitePublicSecurityRecordUrl = getSitePublicSecurityRecordUrl()
 const showSiteIcpRecord = !isElectronRuntime() && Boolean(siteIcpNumber)
 const showSitePublicSecurityRecord = !isElectronRuntime() && Boolean(sitePublicSecurityRecordNumber)
+const stableUrl = getStableUrl()
+const previewUrl = getPreviewUrl()
+const isPreview = computed(() => /-rc\.\d+/.test(serverVersion.value))
+const versionSwitchUrl = computed(() => (isPreview.value ? stableUrl : previewUrl))
+const versionSwitchLabel = computed(() =>
+  isPreview.value ? t('app.preview.goStable') : t('app.preview.goPreview'),
+)
+const showVersionSwitch = computed(() => !isElectronRuntime() && Boolean(versionSwitchUrl.value))
 const activePreprocessTab = ref('vectorize')
 const activeCalibrationTab = ref('calibration')
 
@@ -150,6 +160,9 @@ function toggleLocale() {
               >
                 v{{ serverVersion }}
               </NText>
+              <NTag v-if="isPreview" type="warning" size="small" :bordered="false" round>
+                {{ t('app.preview.badge') }}
+              </NTag>
             </NSpace>
             <NSpace align="center" :size="10" class="app-shell__header-status">
               <NText v-if="serverOnline && totalTasks > 0" depth="3" class="app-shell__meta-text">
@@ -358,6 +371,16 @@ function toggleLocale() {
               ChromaPrint3D{{ serverVersion ? ` v${serverVersion}` : '' }}
             </NText>
             <CheckUpdateLink />
+            <a
+              v-if="showVersionSwitch"
+              :href="versionSwitchUrl"
+              rel="noopener noreferrer"
+              class="app-shell__footer-link"
+            >
+              <NText depth="3" class="app-shell__meta-text app-shell__meta-text--link">
+                {{ versionSwitchLabel }}
+              </NText>
+            </a>
             <NText depth="3" class="app-shell__meta-text">
               Multi-color 3D Print Image Processor
             </NText>

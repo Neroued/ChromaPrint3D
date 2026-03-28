@@ -411,34 +411,80 @@ git push
 
 ## 8. 发布流程
 
-发布通过 PR 驱动，版本 tag 由 CI 自动创建。
+发布通过 PR 驱动，版本 tag 由 CI 自动创建。支持**预览发布**（pre-release）和**正式发布**两种模式。
 
-### 8.1 发起发布
+### 8.1 预览发布（推荐先行）
+
+预览版用于在正式发布前进行部署级测试。版本格式为 `X.Y.Z-rc.N`（release candidate）。
 
 ```bash
-./scripts/release.sh 1.2.6
+# 自动从 rc.1 开始（或从已有 rc tag 递增）
+./scripts/release-preview.sh 1.2.12
+
+# 显式指定 rc 编号
+./scripts/release-preview.sh 1.2.12 2
 ```
 
 脚本会：
 
-1. 校验版本号格式与连续性
-2. 从最新 `origin/master` 创建 `release/v1.2.6` 分支
-3. 更新 `CMakeLists.txt`、`web/frontend/package.json`、`web/electron/package.json` 中的版本号
+1. 校验版本号格式、自动计算 rc 编号
+2. 从最新 `origin/master` 创建 `preview/v1.2.12-rc.1` 分支
+3. 更新 `CMakeLists.txt`（含 `CHROMAPRINT3D_VERSION_PRERELEASE`）、`web/frontend/package.json`、`web/electron/package.json`
+4. 提交、推送分支、通过 `gh` 创建 PR
+
+合并后 CI 自动打 tag `v1.2.12-rc.1`，触发完整构建流水线：
+
+- GitHub Release 标记为 **Pre-release**
+- Docker 镜像打 `preview` / `preview-api` 浮动标签和 `1.2.12-rc.1` / `1.2.12-rc.1-api` 固定标签
+
+如果预览版发现 bug，修复后再执行 `release-preview.sh 1.2.12` 即可自动递增到 `rc.2`、`rc.3`...
+
+### 8.2 正式发布（从预览转正）
+
+```bash
+./scripts/release.sh 1.2.12
+```
+
+脚本会：
+
+1. 校验版本号格式与连续性（仅对比稳定版 tag）
+2. 从最新 `origin/master` 创建 `release/v1.2.12` 分支
+3. 更新版本号并**清除预发布后缀**（`CHROMAPRINT3D_VERSION_PRERELEASE` 置空）
 4. 提交、推送分支、通过 `gh` 自动创建 PR
 
-### 8.2 合并与发布
+### 8.3 合并与发布
 
 1. CI 自动在 PR 上运行（前端 lint/test/build + 后端构建 + 单元测试 + clang-format 检查）
 2. 审查通过后合并 PR
-3. `release-tag.yml` 工作流检测到 `release/v*` 分支合并后，自动创建 annotated tag 并推送
+3. `release-tag.yml` 工作流检测到 `release/v*` 或 `preview/v*` 分支合并后，自动创建 annotated tag 并推送
 4. tag 推送触发 `release.yml`：构建各平台后端/前端/Electron 安装包、Docker 镜像、GitHub Release
 
-### 8.3 版本号位置
+### 8.4 完整发布工作流示例
+
+```
+release-preview.sh 1.2.12       → preview/v1.2.12-rc.1 → PR → 合并 → tag v1.2.12-rc.1
+  ↓ 部署到预览环境测试
+  ↓ 发现 bug，修复后...
+release-preview.sh 1.2.12       → preview/v1.2.12-rc.2 → PR → 合并 → tag v1.2.12-rc.2
+  ↓ 测试通过
+release.sh 1.2.12               → release/v1.2.12      → PR → 合并 → tag v1.2.12
+```
+
+### 8.5 版本号位置
 
 | 文件 | 用途 |
 |---|---|
-| `CMakeLists.txt` | C++ 库版本（`project(... VERSION X.Y.Z)`） |
+| `CMakeLists.txt` | C++ 库版本（`project(... VERSION X.Y.Z)` + `CHROMAPRINT3D_VERSION_PRERELEASE`） |
 | `web/frontend/package.json` | 前端版本 |
 | `web/electron/package.json` | Electron 版本 |
 
-三个文件的版本号由 `release.sh` 统一更新，无需手动同步。
+三个文件的版本号由 `release.sh` / `release-preview.sh` 统一更新，无需手动同步。
+
+### 8.6 Docker 镜像标签
+
+| 标签 | 触发条件 | 用途 |
+|---|---|---|
+| `latest` / `vX.Y.Z` / `vX.Y` | 正式 tag | 一体镜像，开箱即用 |
+| `api` / `vX.Y.Z-api` / `vX.Y-api` | 正式 tag | 仅 API，分体部署 |
+| `preview` / `vX.Y.Z-rc.N` | 预览 tag | 一体预览镜像 |
+| `preview-api` / `vX.Y.Z-rc.N-api` | 预览 tag | 仅 API 预览镜像 |

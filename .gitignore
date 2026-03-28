@@ -47,7 +47,7 @@ modeling/data
 modeling/dbs
 
 # Local deploy secrets
-scripts/deploy_split.env
+scripts/deploy_split*.env
 scripts/deploy_split.local.env
 scripts/*.local.env
 

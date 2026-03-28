@@ -51,9 +51,9 @@ if git show-ref --verify --quiet "refs/heads/$RELEASE_BRANCH" 2>/dev/null; then
     die "Branch $RELEASE_BRANCH already exists locally."
 fi
 
-# ---------- Version continuity check ----------
+# ---------- Version continuity check (skip pre-release tags) ----------
 
-PREV_TAG="$(git tag --sort=-v:refname -l 'v[0-9]*' | head -1)"
+PREV_TAG="$(git tag --sort=-v:refname -l 'v[0-9]*' | grep -v -- '-' | head -1)"
 if [[ -n "$PREV_TAG" ]]; then
     PREV="${PREV_TAG#v}"
     IFS='.' read -r PM Pm Pp <<< "$PREV"
@@ -91,10 +91,17 @@ info "Updating version to $VERSION..."
 sed -i "s/project(ChromaPrint3D VERSION [0-9]\+\.[0-9]\+\.[0-9]\+/project(ChromaPrint3D VERSION ${VERSION}/" \
     "$ROOT/CMakeLists.txt"
 
-sed -i "s/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/\"version\": \"${VERSION}\"/" \
+# Clear pre-release suffix for stable releases
+if grep -q 'set(CHROMAPRINT3D_VERSION_PRERELEASE' "$ROOT/CMakeLists.txt"; then
+    sed -i 's/set(CHROMAPRINT3D_VERSION_PRERELEASE "[^"]*"/set(CHROMAPRINT3D_VERSION_PRERELEASE ""/' \
+        "$ROOT/CMakeLists.txt"
+fi
+
+# Match both plain X.Y.Z and pre-release X.Y.Z-rc.N formats
+sed -i 's/"version": "[0-9]\+\.[0-9]\+\.[0-9]\+[^"]*"/"version": "'"${VERSION}"'"/' \
     "$ROOT/web/frontend/package.json"
 
-sed -i "s/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/\"version\": \"${VERSION}\"/" \
+sed -i 's/"version": "[0-9]\+\.[0-9]\+\.[0-9]\+[^"]*"/"version": "'"${VERSION}"'"/' \
     "$ROOT/web/electron/package.json"
 
 grep -q "VERSION ${VERSION}" "$ROOT/CMakeLists.txt" || die "Failed to update CMakeLists.txt"

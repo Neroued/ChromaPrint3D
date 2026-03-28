@@ -68,6 +68,11 @@ export default {
       title: "What's New in v{version}",
       gotIt: 'Got it',
     },
+    preview: {
+      badge: 'Preview',
+      goStable: 'Go to Stable',
+      goPreview: 'Try Preview',
+    },
   },
 
   convert: {

@@ -33,8 +33,8 @@ docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
 
 启动后访问 `http://localhost:8080`。
 
-> 提供两种镜像标签：`latest`（前端 + 后端一体，开箱即用）和 `api`（仅后端 API，用于跨域分体部署）。  
-> 分体部署详见 [docs/deployment.md](docs/deployment.md)。
+> 镜像标签：`latest`（一体，开箱即用）、`api`（仅 API，分体部署）、`preview` / `preview-api`（预览版，发布前测试）。  
+> 分体部署与预览版双轨部署详见 [docs/deployment.md](docs/deployment.md)。
 
 ## CLI 工具
 
@@ -89,8 +89,8 @@ docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
 
 Then open `http://localhost:8080`.
 
-> Two image tags are available: `latest` (frontend + backend all-in-one) and `api` (backend API only, for cross-origin split deployment).  
-> See [docs/deployment.md](docs/deployment.md) for split deployment details.
+> Image tags: `latest` (all-in-one), `api` (API only, split deployment), `preview` / `preview-api` (pre-release testing).  
+> See [docs/deployment.md](docs/deployment.md) for split deployment and preview dual-track deployment details.
 
 ### CLI Tools
 

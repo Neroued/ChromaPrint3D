@@ -46,7 +46,9 @@ jobs:
           cp artifacts/backend-linux-x86_64/unpack/lib/libonnxruntime*.so* build/_deps/onnxruntime-src/lib/ 2>/dev/null || true
           cp -a artifacts/frontend-dist/. web/frontend/dist/
 
-      # ── Tags for all-in-one image (latest / vX.Y.Z / vX.Y) ──────────────
+      # ── Tags for all-in-one image ─────────────────────────────────────────
+      #   Stable (v1.2.12):       latest, 1.2.12, 1.2
+      #   Preview (v1.2.12-rc.1): preview, 1.2.12-rc.1
       - name: Docker meta (allinone)
         id: meta-allinone
         uses: docker/metadata-action@v5
@@ -56,10 +58,13 @@ jobs:
             ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=preview,enable=${{ contains(github.ref_name, '-rc') }}
 
-      # ── Tags for API-only image (api / vX.Y.Z-api / vX.Y-api) ──────────
+      # ── Tags for API-only image ──────────────────────────────────────────
+      #   Stable (v1.2.12):       api, 1.2.12-api, 1.2-api
+      #   Preview (v1.2.12-rc.1): preview-api, 1.2.12-rc.1-api
       - name: Docker meta (api)
         id: meta-api
         uses: docker/metadata-action@v5
@@ -71,8 +76,9 @@ jobs:
             ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}},suffix=-api
-            type=semver,pattern={{major}}.{{minor}},suffix=-api
-            type=raw,value=api
+            type=semver,pattern={{major}}.{{minor}},suffix=-api,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=api,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=preview-api,enable=${{ contains(github.ref_name, '-rc') }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3

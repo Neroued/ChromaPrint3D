@@ -98,6 +98,11 @@ export default {
       title: 'v{version} 版本亮点',
       gotIt: '知道了',
     },
+    preview: {
+      badge: '预览版',
+      goStable: '前往正式版',
+      goPreview: '体验预览版',
+    },
   },
 
   convert: {
