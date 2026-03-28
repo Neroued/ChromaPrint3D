@@ -111,8 +111,8 @@ export function useParamPanelState() {
   const selectedVendor = ref('BambooLab')
   const targetWidthMm = ref(200)
   const targetHeightMm = ref(200)
-  const selectedPixelPresetIndex = ref(1)
-  const customPixelMm = ref(0.42)
+  const selectedPixelPresetIndex = ref(2)
+  const customPixelMm = ref(0.1)
   const selectedChannelKeys = ref<string[]>([])
   type ClusterMode = 'off' | 'auto' | 'manual'
   const clusterMode = ref<ClusterMode>('auto')
@@ -463,8 +463,8 @@ export function useParamPanelState() {
     targetHeightMm.value = 200
     mode.value = 'simple'
     clusterMode.value = 'auto'
-    selectedPixelPresetIndex.value = 1
-    customPixelMm.value = 0.42
+    selectedPixelPresetIndex.value = 2
+    customPixelMm.value = 0.1
     const currentDbNames = modelValue.value.db_names ?? filteredDBs.value.map((db) => db.name)
     appStore.setParams(
       createInitialConvertParams({
