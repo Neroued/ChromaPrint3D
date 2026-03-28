@@ -181,12 +181,12 @@ public:
                                      const ChromaPrint3D::ModelPackage* model_pack);
 
     std::vector<TaskSnapshot> ListTasks(const std::string& owner) const;
-    std::optional<TaskSnapshot> FindTask(const std::string& owner, const std::string& id) const;
+    std::optional<TaskSnapshot> FindTask(const std::string& owner, const std::string& id);
     bool DeleteTask(const std::string& owner, const std::string& id, int& status_code,
                     std::string& message);
     std::optional<TaskArtifact> LoadArtifact(const std::string& owner, const std::string& id,
                                              const std::string& artifact, int& status_code,
-                                             std::string& message) const;
+                                             std::string& message);
 
     int ActiveTaskCount() const;
 

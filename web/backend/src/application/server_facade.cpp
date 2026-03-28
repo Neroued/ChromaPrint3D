@@ -700,7 +700,7 @@ ServiceResult ServerFacade::ListTasks(const std::string& owner) const {
     return ServiceResult::Success(200, {{"tasks", std::move(tasks)}});
 }
 
-ServiceResult ServerFacade::GetTask(const std::string& owner, const std::string& id) const {
+ServiceResult ServerFacade::GetTask(const std::string& owner, const std::string& id) {
     if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
     auto task = tasks_.FindTask(owner, id);
     if (!task) return ServiceResult::Error(404, "not_found", "Task not found");
@@ -717,8 +717,7 @@ ServiceResult ServerFacade::DeleteTask(const std::string& owner, const std::stri
 }
 
 ServiceResult ServerFacade::DownloadTaskArtifact(const std::string& owner, const std::string& id,
-                                                 const std::string& artifact,
-                                                 TaskArtifact& out) const {
+                                                 const std::string& artifact, TaskArtifact& out) {
     if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
     int status          = 500;
     std::string message = "Unknown error";

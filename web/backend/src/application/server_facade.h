@@ -81,10 +81,10 @@ public:
     ServiceResult RecipeEditorGenerate(const std::string& owner, const std::string& task_id);
 
     ServiceResult ListTasks(const std::string& owner) const;
-    ServiceResult GetTask(const std::string& owner, const std::string& id) const;
+    ServiceResult GetTask(const std::string& owner, const std::string& id);
     ServiceResult DeleteTask(const std::string& owner, const std::string& id);
     ServiceResult DownloadTaskArtifact(const std::string& owner, const std::string& id,
-                                       const std::string& artifact, TaskArtifact& out) const;
+                                       const std::string& artifact, TaskArtifact& out);
 
     ServiceResult MattingMethods() const;
 

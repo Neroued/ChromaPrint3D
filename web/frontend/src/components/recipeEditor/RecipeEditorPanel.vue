@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NCard, NButton, NSpace, NText, NAlert, NSwitch, NTooltip, useMessage } from 'naive-ui'
 import type { RecipeEditorSummary, RecipeCandidate, LabColor, RecipeInfo } from '../../types'
@@ -105,6 +105,7 @@ async function loadSummary() {
     summary.value = await fetchRecipeEditorSummary(props.taskId)
     await loadRegionMap(props.taskId, summary.value.width, summary.value.height)
     await loadPreview()
+    startKeepalive()
   } catch (e) {
     summaryError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -393,6 +394,31 @@ async function handleDownload3MF() {
   }
 }
 
+// ── Keep-alive heartbeat ─────────────────────────────────────────────────────
+
+const KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000
+
+let keepaliveTimer: ReturnType<typeof setInterval> | null = null
+
+function startKeepalive() {
+  stopKeepalive()
+  keepaliveTimer = setInterval(async () => {
+    if (!props.taskId || !summary.value) return
+    try {
+      summary.value = await fetchRecipeEditorSummary(props.taskId)
+    } catch {
+      /* silent – don't disrupt the user on heartbeat failure */
+    }
+  }, KEEPALIVE_INTERVAL_MS)
+}
+
+function stopKeepalive() {
+  if (keepaliveTimer) {
+    clearInterval(keepaliveTimer)
+    keepaliveTimer = null
+  }
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 watch(
@@ -404,12 +430,17 @@ watch(
     undoStack.value = []
     generateDone.value = false
     editedAfterGenerate.value = false
+    stopKeepalive()
     clearRegionMap()
     panZoom.resetView()
     if (props.taskId) void loadSummary()
   },
   { immediate: true },
 )
+
+onUnmounted(() => {
+  stopKeepalive()
+})
 </script>
 
 <template>

@@ -988,8 +988,7 @@ std::vector<TaskSnapshot> TaskRuntime::ListTasks(const std::string& owner) const
     return out;
 }
 
-std::optional<TaskSnapshot> TaskRuntime::FindTask(const std::string& owner,
-                                                  const std::string& id) const {
+std::optional<TaskSnapshot> TaskRuntime::FindTask(const std::string& owner, const std::string& id) {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end()) {
@@ -1000,6 +999,9 @@ std::optional<TaskSnapshot> TaskRuntime::FindTask(const std::string& owner,
         spdlog::warn("FindTask: task {} owner mismatch: request={} vs task={}", id, OwnerTag(owner),
                      OwnerTag(it->second.snapshot.owner));
         return std::nullopt;
+    }
+    if (it->second.snapshot.status == RuntimeTaskStatus::Completed) {
+        it->second.snapshot.completed_at = std::chrono::steady_clock::now();
     }
     return it->second.snapshot;
 }
@@ -1042,7 +1044,7 @@ bool TaskRuntime::DeleteTask(const std::string& owner, const std::string& id, in
 std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
                                                       const std::string& id,
                                                       const std::string& artifact, int& status_code,
-                                                      std::string& message) const {
+                                                      std::string& message) {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end() || it->second.snapshot.owner != owner) {
@@ -1056,6 +1058,7 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
         message     = "Task not completed";
         return std::nullopt;
     }
+    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
 
     const auto& rec = it->second;
 
