@@ -522,6 +522,154 @@ static void FlattenGradientShapes(std::vector<VectorShape>& shapes, float pixel_
     }
 }
 
+static float SignedContourArea(const Contour& c) {
+    if (c.size() < 3) return 0.0f;
+    float sum = 0.0f;
+    for (size_t i = 0, n = c.size(); i < n; ++i) {
+        const Vec2f& a = c[i];
+        const Vec2f& b = c[(i + 1) % n];
+        sum += (a.x * b.y - b.x * a.y);
+    }
+    return sum * 0.5f;
+}
+
+/// Split VectorShapes that contain multiple disconnected outer contours into
+/// separate shapes so each gets its own recipe entry / region_id.
+static void SplitDisconnectedShapes(std::vector<VectorShape>& shapes) {
+    std::vector<VectorShape> output;
+    output.reserve(shapes.size());
+    size_t split_count = 0;
+
+    for (auto& shape : shapes) {
+        if (shape.contours.size() <= 1) {
+            output.push_back(std::move(shape));
+            continue;
+        }
+
+        int outer_count = 0;
+        for (const auto& c : shape.contours) {
+            if (SignedContourArea(c) > 0.0f) ++outer_count;
+        }
+
+        if (outer_count <= 1) {
+            output.push_back(std::move(shape));
+            continue;
+        }
+
+        ++split_count;
+
+        if (outer_count == static_cast<int>(shape.contours.size())) {
+            for (auto& c : shape.contours) {
+                VectorShape sub;
+                sub.fill_type     = shape.fill_type;
+                sub.svg_fill_rule = shape.svg_fill_rule;
+                sub.fill_color    = shape.fill_color;
+                sub.gradient      = shape.gradient;
+                sub.opacity       = shape.opacity;
+                sub.contours.push_back(std::move(c));
+                output.push_back(std::move(sub));
+            }
+            continue;
+        }
+
+        struct RingInfo {
+            Clipper2Lib::Path64 path;
+            double abs_area    = 0.0;
+            bool is_outer      = true;
+            int owner_outer    = -1;
+            size_t contour_idx = 0;
+        };
+
+        std::vector<RingInfo> rings;
+        rings.reserve(shape.contours.size());
+        for (size_t i = 0; i < shape.contours.size(); ++i) {
+            const auto& c = shape.contours[i];
+            if (c.size() < 3) continue;
+            RingInfo info;
+            info.path = ContourToPath(c);
+            if (info.path.size() < 3) continue;
+            info.abs_area    = std::abs(Clipper2Lib::Area(info.path));
+            info.contour_idx = i;
+            rings.push_back(std::move(info));
+        }
+
+        if (rings.size() <= 1) {
+            output.push_back(std::move(shape));
+            continue;
+        }
+
+        for (size_t i = 0; i < rings.size(); ++i) {
+            int depth = 0;
+            for (size_t j = 0; j < rings.size(); ++j) {
+                if (i == j) continue;
+                if (Clipper2Lib::Path2ContainsPath1(rings[i].path, rings[j].path)) ++depth;
+            }
+            rings[i].is_outer = (depth % 2 == 0);
+        }
+
+        std::vector<int> outer_ids;
+        outer_ids.reserve(rings.size());
+        for (size_t i = 0; i < rings.size(); ++i) {
+            if (rings[i].is_outer) outer_ids.push_back(static_cast<int>(i));
+        }
+
+        if (outer_ids.size() <= 1) {
+            output.push_back(std::move(shape));
+            continue;
+        }
+
+        for (size_t i = 0; i < rings.size(); ++i) {
+            if (rings[i].is_outer) continue;
+            double best_area = std::numeric_limits<double>::infinity();
+            int best_outer   = -1;
+            for (int oid : outer_ids) {
+                if (!Clipper2Lib::Path2ContainsPath1(rings[i].path,
+                                                     rings[static_cast<size_t>(oid)].path)) {
+                    continue;
+                }
+                double oa = rings[static_cast<size_t>(oid)].abs_area;
+                if (oa < best_area) {
+                    best_area  = oa;
+                    best_outer = oid;
+                }
+            }
+            if (best_outer < 0) {
+                rings[i].is_outer = true;
+                outer_ids.push_back(static_cast<int>(i));
+            } else {
+                rings[i].owner_outer = best_outer;
+            }
+        }
+
+        for (int oid : outer_ids) {
+            VectorShape sub;
+            sub.fill_type     = shape.fill_type;
+            sub.svg_fill_rule = shape.svg_fill_rule;
+            sub.fill_color    = shape.fill_color;
+            sub.gradient      = shape.gradient;
+            sub.opacity       = shape.opacity;
+
+            sub.contours.push_back(
+                std::move(shape.contours[rings[static_cast<size_t>(oid)].contour_idx]));
+
+            for (size_t i = 0; i < rings.size(); ++i) {
+                if (!rings[i].is_outer && rings[i].owner_outer == oid) {
+                    sub.contours.push_back(std::move(shape.contours[rings[i].contour_idx]));
+                }
+            }
+
+            output.push_back(std::move(sub));
+        }
+    }
+
+    if (split_count > 0) {
+        spdlog::info("VectorProc: split {} multi-region shapes ({} -> {} shapes)", split_count,
+                     shapes.size(), output.size());
+    }
+
+    shapes = std::move(output);
+}
+
 static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorProcConfig& config,
                                          const std::string& result_name) {
     auto t_total = std::chrono::steady_clock::now();
@@ -681,6 +829,14 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
                   ElapsedMs(t3), clipped.size());
     g_normalize_stats.Log("phase4 post-occlusion");
     g_normalize_stats.Reset();
+
+    auto t4 = std::chrono::steady_clock::now();
+
+    SplitDisconnectedShapes(clipped);
+
+    spdlog::debug("[perf] VectorProc phase 5 (split disconnected shapes): {:.1f} ms, "
+                  "{} shapes after split",
+                  ElapsedMs(t4), clipped.size());
 
     VectorProcResult result;
     result.name      = result_name;
