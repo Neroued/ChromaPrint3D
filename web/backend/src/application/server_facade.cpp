@@ -1154,7 +1154,8 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
                 {"has_3mf", !cp->result.model_3mf.empty() || cp->has_3mf_on_disk},
                 {"has_preview", !cp->result.preview_png.empty()},
                 {"has_source_mask", !cp->result.source_mask_png.empty()},
-                {"has_region_map", !cp->region_map_binary.empty()},
+                {"has_region_map",
+                 !cp->region_map_binary.empty() || cp->raster_region_map.has_value()},
                 {"layer_previews", LayerPreviewsToJson(cp->result.layer_previews)},
             };
         } else {

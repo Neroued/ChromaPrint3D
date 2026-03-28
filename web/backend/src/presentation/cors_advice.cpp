@@ -37,7 +37,8 @@ void ApplyCorsHeaders(const drogon::HttpRequestPtr& req, const drogon::HttpRespo
     resp->addHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     resp->addHeader("Access-Control-Allow-Headers", std::string("Content-Type, ") + kSessionHeader);
     resp->addHeader("Access-Control-Allow-Credentials", "true");
-    resp->addHeader("Access-Control-Expose-Headers", kSessionHeader);
+    resp->addHeader("Access-Control-Expose-Headers",
+                    std::string(kSessionHeader) + ", X-Region-Map-Width, X-Region-Map-Height");
     resp->addHeader("Access-Control-Max-Age", "86400");
 }
 

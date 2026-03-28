@@ -24,6 +24,7 @@
 namespace {
 
 constexpr int kMaxUniqueRecipes = 2048;
+constexpr int kMaxRegionMapDim  = 1024;
 
 std::string LabToHex(const ChromaPrint3D::Lab& lab) {
     auto rgb   = lab.ToRgb();
@@ -62,6 +63,49 @@ double ElapsedMs(const std::chrono::steady_clock::time_point& begin,
 } // namespace
 
 namespace chromaprint3d::backend {
+
+namespace {
+
+TaskArtifact MakeRegionMapArtifact(const uint32_t* ids, int src_w, int src_h) {
+    const int max_side = std::max(src_w, src_h);
+    if (max_side <= kMaxRegionMapDim) {
+        const std::size_t total = static_cast<std::size_t>(src_w) * static_cast<std::size_t>(src_h);
+        std::vector<uint8_t> bin(total * sizeof(uint32_t));
+        std::memcpy(bin.data(), ids, bin.size());
+        return TaskArtifact{std::move(bin),
+                            {},
+                            "application/octet-stream",
+                            "region_map.bin",
+                            {{"X-Region-Map-Width", std::to_string(src_w)},
+                             {"X-Region-Map-Height", std::to_string(src_h)}}};
+    }
+    const double scale = static_cast<double>(kMaxRegionMapDim) / max_side;
+    const int dst_w    = std::max(1, static_cast<int>(std::round(src_w * scale)));
+    const int dst_h    = std::max(1, static_cast<int>(std::round(src_h * scale)));
+
+    const std::size_t dst_total = static_cast<std::size_t>(dst_w) * static_cast<std::size_t>(dst_h);
+    std::vector<uint32_t> dst_ids(dst_total);
+    for (int y = 0; y < dst_h; ++y) {
+        const int sy = std::min(static_cast<int>(y / scale), src_h - 1);
+        for (int x = 0; x < dst_w; ++x) {
+            const int sx = std::min(static_cast<int>(x / scale), src_w - 1);
+            dst_ids[static_cast<std::size_t>(y) * static_cast<std::size_t>(dst_w) +
+                    static_cast<std::size_t>(x)] =
+                ids[static_cast<std::size_t>(sy) * static_cast<std::size_t>(src_w) +
+                    static_cast<std::size_t>(sx)];
+        }
+    }
+    std::vector<uint8_t> bin(dst_total * sizeof(uint32_t));
+    std::memcpy(bin.data(), dst_ids.data(), bin.size());
+    return TaskArtifact{std::move(bin),
+                        {},
+                        "application/octet-stream",
+                        "region_map.bin",
+                        {{"X-Region-Map-Width", std::to_string(dst_w)},
+                         {"X-Region-Map-Height", std::to_string(dst_h)}}};
+}
+
+} // namespace
 
 const char* TaskKindToString(TaskKind kind) {
     switch (kind) {
@@ -301,10 +345,10 @@ SubmitResult TaskRuntime::SubmitConvertRasterMatchOnly(const std::string& owner,
                     std::to_string(kMaxUniqueRecipes));
             }
 
-            auto region_map    = ChromaPrint3D::RasterRegionMap::Build(match_result.recipe_map);
-            auto region_binary = region_map.SerializeRegionIds();
+            auto region_map = ChromaPrint3D::RasterRegionMap::Build(match_result.recipe_map);
 
-            cv::Mat preview_bgra = match_result.recipe_map.ToBgraImage();
+            cv::Mat preview_bgra =
+                ChromaPrint3D::DownsampleForPreview(match_result.recipe_map.ToBgraImage());
             std::vector<uint8_t> preview_png;
             if (!preview_bgra.empty()) { preview_png = ChromaPrint3D::EncodePng(preview_bgra); }
 
@@ -330,7 +374,6 @@ SubmitResult TaskRuntime::SubmitConvertRasterMatchOnly(const std::string& owner,
                 cp->progress               = 1.0f;
                 cp->match_only             = true;
                 cp->raster_region_map      = std::move(region_map);
-                cp->region_map_binary      = std::move(region_binary);
                 cp->raster_match_state     = std::make_optional(std::move(match_result));
             });
         });
@@ -760,7 +803,7 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             info.from_model   = new_from_model;
         }
 
-        cv::Mat preview_bgra = mstate.recipe_map.ToBgraImage();
+        cv::Mat preview_bgra = ChromaPrint3D::DownsampleForPreview(mstate.recipe_map.ToBgraImage());
         if (!preview_bgra.empty()) {
             cp->result.preview_png = ChromaPrint3D::EncodePng(preview_bgra);
         }
@@ -1071,13 +1114,26 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
             return TaskArtifact{cp->result.source_mask_png, {}, "image/png", "source_mask.png"};
         }
         if (artifact == "region-map") {
-            if (cp->region_map_binary.empty()) {
-                status_code = 404;
-                message     = "Region map not available";
-                return std::nullopt;
+            if (!cp->region_map_binary.empty()) {
+                const int w = cp->result.input_width;
+                const int h = cp->result.input_height;
+                if (w > 0 && h > 0 &&
+                    cp->region_map_binary.size() == static_cast<std::size_t>(w) *
+                                                        static_cast<std::size_t>(h) *
+                                                        sizeof(uint32_t)) {
+                    return MakeRegionMapArtifact(
+                        reinterpret_cast<const uint32_t*>(cp->region_map_binary.data()), w, h);
+                }
+                return TaskArtifact{
+                    cp->region_map_binary, {}, "application/octet-stream", "region_map.bin"};
             }
-            return TaskArtifact{
-                cp->region_map_binary, {}, "application/octet-stream", "region_map.bin"};
+            if (cp->raster_region_map.has_value()) {
+                const auto& rm = *cp->raster_region_map;
+                return MakeRegionMapArtifact(rm.region_ids.data(), rm.width, rm.height);
+            }
+            status_code = 404;
+            message     = "Region map not available";
+            return std::nullopt;
         }
         if (artifact.rfind(kLayerPreviewArtifactPrefix, 0) == 0) {
             const std::string index_text =
@@ -1103,13 +1159,34 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
                 return std::nullopt;
             }
             const auto& png = cp->result.layer_previews.layer_pngs[idx];
-            if (png.empty()) {
-                status_code = 404;
-                message     = "Layer preview is empty";
-                return std::nullopt;
+            if (!png.empty()) {
+                return TaskArtifact{
+                    png, {}, "image/png", "layer-preview-" + std::to_string(idx) + ".png"};
             }
-            return TaskArtifact{
-                png, {}, "image/png", "layer-preview-" + std::to_string(idx) + ".png"};
+            const auto& palette = cp->result.layer_previews.palette;
+            std::vector<ChromaPrint3D::Channel> channels;
+            channels.reserve(palette.size());
+            if (cp->raster_match_state.has_value()) {
+                channels = cp->raster_match_state->profile.palette;
+            } else if (cp->vector_match_state.has_value()) {
+                channels = cp->vector_match_state->profile.palette;
+            }
+            const ChromaPrint3D::RecipeMap* rmap = nullptr;
+            if (cp->raster_match_state.has_value()) { rmap = &cp->raster_match_state->recipe_map; }
+            if (rmap && !channels.empty()) {
+                cv::Mat layer_bgra = ChromaPrint3D::DownsampleForPreview(
+                    rmap->ToLayerBgraImage(static_cast<int>(idx), channels));
+                if (!layer_bgra.empty()) {
+                    auto rendered = ChromaPrint3D::EncodePng(layer_bgra);
+                    return TaskArtifact{std::move(rendered),
+                                        {},
+                                        "image/png",
+                                        "layer-preview-" + std::to_string(idx) + ".png"};
+                }
+            }
+            status_code = 404;
+            message     = "Layer preview is empty";
+            return std::nullopt;
         }
     }
 

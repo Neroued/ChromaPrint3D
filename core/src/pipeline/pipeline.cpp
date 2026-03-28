@@ -299,7 +299,7 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
 
     // === Generate preview and source mask ===
     if (mr.generate_preview) {
-        cv::Mat preview_bgra = mr.recipe_map.ToBgraImage();
+        cv::Mat preview_bgra = DownsampleForPreview(mr.recipe_map.ToBgraImage());
         if (!preview_bgra.empty()) { result.preview_png = EncodePng(preview_bgra); }
     }
     if (mr.generate_source_mask) {
@@ -319,49 +319,6 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
             LayerPreviewChannel{static_cast<int>(i), channel.color, channel.material});
     }
     result.layer_previews.layer_pngs.resize(static_cast<std::size_t>(mr.profile.color_layers));
-    std::atomic<bool> has_layer_preview_error{false};
-    std::string layer_preview_error_message;
-#ifdef _OPENMP
-#    pragma omp parallel for schedule(dynamic)
-#endif
-    for (int layer_idx = 0; layer_idx < mr.profile.color_layers; ++layer_idx) {
-        if (has_layer_preview_error.load(std::memory_order_relaxed)) { continue; }
-
-        try {
-            cv::Mat layer_bgra = mr.recipe_map.ToLayerBgraImage(layer_idx, mr.profile.palette);
-            if (layer_bgra.empty()) {
-                throw InputError("Failed to render raster layer preview image");
-            }
-            result.layer_previews.layer_pngs[static_cast<std::size_t>(layer_idx)] =
-                EncodePng(layer_bgra);
-        } catch (const std::exception& e) {
-#ifdef _OPENMP
-#    pragma omp critical(pipeline_layer_preview_error)
-#endif
-            {
-                if (!has_layer_preview_error.load(std::memory_order_relaxed)) {
-                    layer_preview_error_message = e.what();
-                    has_layer_preview_error.store(true, std::memory_order_relaxed);
-                }
-            }
-        } catch (...) {
-#ifdef _OPENMP
-#    pragma omp critical(pipeline_layer_preview_error)
-#endif
-            {
-                if (!has_layer_preview_error.load(std::memory_order_relaxed)) {
-                    layer_preview_error_message =
-                        "Unknown error while rendering layer preview images";
-                    has_layer_preview_error.store(true, std::memory_order_relaxed);
-                }
-            }
-        }
-    }
-    if (has_layer_preview_error.load(std::memory_order_relaxed)) {
-        throw InputError(layer_preview_error_message.empty()
-                             ? "Failed to render raster layer preview image"
-                             : layer_preview_error_message);
-    }
 
     // === Build 3D model ===
     NotifyProgress(progress, ConvertStage::BuildingModel, 0.0f);

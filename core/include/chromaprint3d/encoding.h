@@ -28,4 +28,9 @@ std::vector<uint8_t> EncodeJpeg(const cv::Mat& image, int quality = 95);
 /// \return True if successful, false otherwise
 bool SaveImage(const cv::Mat& image, const std::string& path);
 
+/// Downsample an image if either dimension exceeds \p max_dim.
+/// Uses area interpolation and preserves aspect ratio.
+/// Returns the original image unmodified when no downsampling is needed.
+cv::Mat DownsampleForPreview(const cv::Mat& image, int max_dim = 2048);
+
 } // namespace ChromaPrint3D

@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { fetchBlobWithSession } from '../runtime/protectedRequest'
+import { fetchWithSession } from '../runtime/protectedRequest'
 import { getRegionMapPath } from '../api/recipeEditor'
 import { buildApiUrl } from '../runtime/env'
 
@@ -7,6 +7,8 @@ export interface RegionMapData {
   width: number
   height: number
   regionIds: Uint32Array
+  sourceWidth: number
+  sourceHeight: number
 }
 
 export function useRegionMap() {
@@ -18,18 +20,31 @@ export function useRegionMap() {
     loading.value = true
     error.value = null
     try {
-      const blob = await fetchBlobWithSession(buildApiUrl(getRegionMapPath(taskId)))
-      const buf = await blob.arrayBuffer()
-      const expectedBytes = width * height * 4
+      const response = await fetchWithSession(buildApiUrl(getRegionMapPath(taskId)))
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const buf = await response.arrayBuffer()
+
+      let mapW = width
+      let mapH = height
+      const hdrW = response.headers.get('X-Region-Map-Width')
+      const hdrH = response.headers.get('X-Region-Map-Height')
+      if (hdrW && hdrH) {
+        mapW = parseInt(hdrW, 10)
+        mapH = parseInt(hdrH, 10)
+      }
+
+      const expectedBytes = mapW * mapH * 4
       if (buf.byteLength !== expectedBytes) {
         throw new Error(
           `Region map size mismatch: got ${buf.byteLength}, expected ${expectedBytes}`,
         )
       }
       regionMap.value = {
-        width,
-        height,
+        width: mapW,
+        height: mapH,
         regionIds: new Uint32Array(buf),
+        sourceWidth: width,
+        sourceHeight: height,
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e)
@@ -42,8 +57,10 @@ export function useRegionMap() {
   function getRegionAtPixel(x: number, y: number): number | null {
     const map = regionMap.value
     if (!map) return null
-    if (x < 0 || x >= map.width || y < 0 || y >= map.height) return null
-    return map.regionIds[y * map.width + x] ?? null
+    const mx = Math.floor((x * map.width) / map.sourceWidth)
+    const my = Math.floor((y * map.height) / map.sourceHeight)
+    if (mx < 0 || mx >= map.width || my < 0 || my >= map.height) return null
+    return map.regionIds[my * map.width + mx] ?? null
   }
 
   function getRegionIdsForRecipeIndex(

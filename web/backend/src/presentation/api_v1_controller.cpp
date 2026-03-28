@@ -576,6 +576,7 @@ void ApiV1Controller::ReplyBinary(Callback&& cb, const TaskArtifact& artifact,
         }
     }
 
+    for (const auto& [key, value] : artifact.extra_headers) { resp->addHeader(key, value); }
     if (set_session_token) {
         ApplySessionCookie(resp, *set_session_token);
         resp->addHeader(kSessionHeader, *set_session_token);

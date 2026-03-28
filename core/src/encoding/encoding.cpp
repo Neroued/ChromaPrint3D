@@ -4,6 +4,10 @@
 #include <spdlog/spdlog.h>
 
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+
+#include <algorithm>
+#include <cmath>
 
 namespace ChromaPrint3D {
 
@@ -37,6 +41,19 @@ std::vector<uint8_t> EncodeJpeg(const cv::Mat& image, int quality) {
 bool SaveImage(const cv::Mat& image, const std::string& path) {
     if (image.empty() || path.empty()) { return false; }
     return cv::imwrite(path, image);
+}
+
+cv::Mat DownsampleForPreview(const cv::Mat& image, int max_dim) {
+    if (image.empty() || max_dim <= 0) return image;
+    const int max_side = std::max(image.cols, image.rows);
+    if (max_side <= max_dim) return image;
+    const double scale = static_cast<double>(max_dim) / max_side;
+    const int new_w    = std::max(1, static_cast<int>(std::round(image.cols * scale)));
+    const int new_h    = std::max(1, static_cast<int>(std::round(image.rows * scale)));
+    cv::Mat dst;
+    cv::resize(image, dst, cv::Size(new_w, new_h), 0, 0, cv::INTER_AREA);
+    spdlog::debug("DownsampleForPreview: {}x{} -> {}x{}", image.cols, image.rows, new_w, new_h);
+    return dst;
 }
 
 } // namespace ChromaPrint3D

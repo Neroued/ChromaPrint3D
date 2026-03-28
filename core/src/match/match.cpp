@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -25,8 +26,9 @@
 namespace ChromaPrint3D {
 namespace {
 
-constexpr int kKMeansMaxIter = 30;
-constexpr double kKMeansEps  = 1e-4;
+constexpr int kKMeansMaxIter        = 30;
+constexpr double kKMeansEps         = 1e-4;
+constexpr int kMaxClusterSubsamples = 32768;
 
 /// Automatically select optimal K for kmeans color clustering.
 /// Uses WCSS elbow detection with a perceptual quality floor (Delta E).
@@ -499,7 +501,50 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
     cv::Mat centers;
     const cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER,
                                     kKMeansMaxIter, kKMeansEps);
-    cv::kmeans(samples, resolved_k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+
+    if (num_valid > kMaxClusterSubsamples) {
+        cv::Mat sub_indices(num_valid, 1, CV_32SC1);
+        for (int i = 0; i < num_valid; ++i) sub_indices.at<int>(i) = i;
+        cv::randShuffle(sub_indices);
+
+        cv::Mat sub_samples(kMaxClusterSubsamples, 3, CV_32FC1);
+        for (int i = 0; i < kMaxClusterSubsamples; ++i) {
+            samples.row(sub_indices.at<int>(i)).copyTo(sub_samples.row(i));
+        }
+
+        cv::Mat sub_labels;
+        cv::kmeans(sub_samples, resolved_k, sub_labels, criteria, 3, cv::KMEANS_PP_CENTERS,
+                   centers);
+
+        labels = cv::Mat(num_valid, 1, CV_32SC1);
+#ifdef _OPENMP
+#    pragma omp parallel for schedule(static)
+#endif
+        for (int i = 0; i < num_valid; ++i) {
+            const float* sample = samples.ptr<float>(i);
+            float best_dist     = std::numeric_limits<float>::max();
+            int best_label      = 0;
+            for (int k = 0; k < resolved_k; ++k) {
+                const float* center = centers.ptr<float>(k);
+                float dist          = 0.0f;
+                for (int d = 0; d < 3; ++d) {
+                    float diff = sample[d] - center[d];
+                    dist += diff * diff;
+                }
+                if (dist < best_dist) {
+                    best_dist  = dist;
+                    best_label = k;
+                }
+            }
+            labels.at<int>(i, 0) = best_label;
+        }
+
+        spdlog::debug(
+            "MatchFromRaster: subsampled kmeans ({}->{}), assigned {} pixels to {} centers",
+            num_valid, kMaxClusterSubsamples, num_valid, resolved_k);
+    } else {
+        cv::kmeans(samples, resolved_k, labels, criteria, 3, cv::KMEANS_PP_CENTERS, centers);
+    }
 
     std::vector<detail::CandidateResult> cluster_candidates(static_cast<std::size_t>(resolved_k));
     for (int i = 0; i < resolved_k; ++i) {

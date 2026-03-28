@@ -112,6 +112,7 @@ struct TaskArtifact {
     std::filesystem::path file_path;
     std::string content_type;
     std::string filename;
+    std::vector<std::pair<std::string, std::string>> extra_headers;
 
     bool is_file_based() const { return !file_path.empty(); }
 };
