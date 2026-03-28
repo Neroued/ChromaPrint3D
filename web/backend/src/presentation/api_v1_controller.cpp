@@ -161,6 +161,7 @@ void ApiV1Controller::RecipeEditorSummary(const drogon::HttpRequestPtr& req, Cal
         ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "Session required"));
         return;
     }
+    Facade().EnsureSession(token, nullptr);
     ReplyJson(std::move(cb), Facade().RecipeEditorSummary(*token, task_id));
 }
 
@@ -177,6 +178,7 @@ void ApiV1Controller::RecipeEditorAlternatives(const drogon::HttpRequestPtr& req
                   ServiceResult::Error(400, "invalid_request", "Request body is empty"));
         return;
     }
+    Facade().EnsureSession(token, nullptr);
     ReplyJson(std::move(cb), Facade().RecipeEditorAlternatives(*token, task_id, body));
 }
 
@@ -193,6 +195,7 @@ void ApiV1Controller::RecipeEditorReplace(const drogon::HttpRequestPtr& req, Cal
                   ServiceResult::Error(400, "invalid_request", "Request body is empty"));
         return;
     }
+    Facade().EnsureSession(token, nullptr);
     ReplyJson(std::move(cb), Facade().RecipeEditorReplace(*token, task_id, body));
 }
 
@@ -203,6 +206,7 @@ void ApiV1Controller::RecipeEditorGenerate(const drogon::HttpRequestPtr& req, Ca
         ReplyJson(std::move(cb), ServiceResult::Error(401, "unauthorized", "Session required"));
         return;
     }
+    Facade().EnsureSession(token, nullptr);
     ReplyJson(std::move(cb), Facade().RecipeEditorGenerate(*token, task_id));
 }
 

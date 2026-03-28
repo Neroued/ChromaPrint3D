@@ -163,7 +163,7 @@ public:
                             std::string& message);
 
     std::optional<nlohmann::json> GetRecipeEditorSummary(const std::string& owner,
-                                                         const std::string& id) const;
+                                                         const std::string& id);
 
     std::optional<nlohmann::json>
     QueryRecipeAlternatives(const std::string& owner, const std::string& id,

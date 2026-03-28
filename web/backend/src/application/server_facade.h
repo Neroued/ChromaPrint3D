@@ -73,7 +73,7 @@ public:
                                                const std::string& svg_name,
                                                const std::optional<std::string>& params_json);
 
-    ServiceResult RecipeEditorSummary(const std::string& owner, const std::string& task_id) const;
+    ServiceResult RecipeEditorSummary(const std::string& owner, const std::string& task_id);
     ServiceResult RecipeEditorAlternatives(const std::string& owner, const std::string& task_id,
                                            const std::string& body_json);
     ServiceResult RecipeEditorReplace(const std::string& owner, const std::string& task_id,

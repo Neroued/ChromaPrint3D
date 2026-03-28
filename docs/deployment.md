@@ -141,7 +141,7 @@ services:
       - "--task-ttl"
       - "900"
       - "--max-result-mb"
-      - "64"       # 3MF 已落盘，内存中仅存 preview/mask；可按 max_tasks × 0.5MB 估算
+      - "256"      # 3MF 已落盘，但配方编辑器的 match state（10-30MB/task）仍计入预算
       # 可选：进一步收紧像素上限
       # - "--max-pixels"
       # - "12000000"
@@ -364,7 +364,7 @@ server {
 > - 如果调整了后端上传上限，请同步修改该配置中的全局与各上传路由 `client_max_body_size`。
 > - 后端 `--max-pixels`（默认 `16777216`）限制的是**解码后像素数**，与文件大小限制独立；仅放宽 Nginx 限制并不能避免后端 `413 image_too_large`。
 > - Web 部署若要“限制更紧”，请同时下调后端 `--max-upload-mb`/`--max-pixels` 与 Nginx `client_max_body_size`。
-> - `--max-result-mb` 现在仅追踪内存中的制品大小（preview、mask、layer previews）。3MF 结果已自动落盘到 `data_dir/tmp/results/`，不计入内存预算。因此该值可以比旧版本大幅降低（如 64MB），同时容纳更多已完成任务。
+> - `--max-result-mb` 追踪内存中的制品大小，包括 preview、mask、layer previews，以及**配方编辑器的 match state**（每任务约 10-30MB，取决于图像大小和 ColorDB 数量）。3MF 结果已自动落盘到 `data_dir/tmp/results/`，不计入内存预算。启用配方编辑器时建议 `--max-result-mb` 不低于 256MB。
 > - 失败或中断的 3MF 导出会主动回收未提交的临时文件；服务启动时也会清扫 `data_dir/tmp/results/` 与 fallback 结果目录中的历史残留，避免旧的半写入文件持续占满 `tmpfs`。
 > - 如需排查结果目录占用，可执行 `docker exec chromaprint3d du -sh /app/data/tmp/results` 查看总量，再用 `docker exec chromaprint3d ls -lhS /app/data/tmp/results | head -30` 定位最大文件。
 
@@ -653,7 +653,7 @@ crontab -e
 | `--max-tasks` | CPU 核心 / OMP 线程数 | 4 | 6 |
 | `OMP_NUM_THREADS` | CPU 核心 / max_tasks | 1 | 3 |
 | `--http-threads` | 2–8，通常 4 足够 | 4 | 4 |
-| `--max-result-mb` | 3MF 已落盘，仅 preview/mask 在内存 | 64 | 64 |
+| `--max-result-mb` | 含 match state；配方编辑器每任务约 10-30MB | 256 | 256 |
 | `--max-upload-mb` | 按可接受的最大图片大小 | 30 | 100 |
 | `--max-pixels` | 按内存余量，每像素峰值约 200B | 12M | 33M |
 | `--max-owner-tasks` | 单用户不应独占全部 worker | 4 | 8 |
@@ -700,3 +700,66 @@ docker run -d -p 8080:8080 neroued/chromaprint3d:latest
 |------|------|------|
 | `latest` / `vX.Y.Z` / `vX.Y` | 前端 + 后端一体 | 普通用户开箱即用 |
 | `api` / `vX.Y.Z-api` / `vX.Y-api` | 仅后端 API | 跨域分体部署，前端由 CDN/Nginx 独立托管 |
+| `preview` / `vX.Y.Z-rc.N` | 前端 + 后端一体（预览） | 预览版测试 |
+| `preview-api` / `vX.Y.Z-rc.N-api` | 仅后端 API（预览） | 预览版分体部署 |
+
+## 预览版双轨部署
+
+预览版与正式版可以在同一套分体架构上并行运行，互不干扰。
+
+### 架构
+
+```
+用户浏览器
+├── chromaprint3d.com (443)           → 正式版前端（云主机）
+│   └── API → api.chromaprint3d.com:9443      → 正式版后端（家庭主机 Docker :8080）
+└── preview.chromaprint3d.com (443)   → 预览版前端（云主机）
+    └── API → api-preview.chromaprint3d.com:9444  → 预览版后端（家庭主机 Docker :8081）
+```
+
+### DNS 配置
+
+在已有 DNS 基础上增加预览域名解析：
+
+| 类型 | 主机记录 | 记录值 | 说明 |
+|------|---------|--------|------|
+| A | preview | `<云主机IP>` | 预览前端 |
+| A | api-preview | `<家庭公网IP>` | 预览 API |
+
+### 家庭主机：预览后端
+
+在家庭主机创建独立的预览部署目录：
+
+```bash
+mkdir -p ~/chromaprint3d-deploy-preview/nginx/conf.d
+```
+
+`docker-compose.yml` 与正式版结构一致，关键区别：
+
+- `image: neroued/chromaprint3d:preview-api`（或固定 `vX.Y.Z-rc.N-api`）
+- 容器名使用 `chromaprint3d-preview`
+- `--cors-origin` 改为 `https://preview.chromaprint3d.com`
+- Nginx 监听端口改为 `9444:443`
+- `server_name` 改为 `api-preview.chromaprint3d.com`
+
+### 云主机：预览前端
+
+在云主机增加预览站点的 Nginx server block，结构与正式版一致：
+
+- `server_name preview.chromaprint3d.com`
+- `root /var/www/chromaprint3d-preview`
+- CSP `connect-src` 允许 `https://api-preview.chromaprint3d.com:9444`
+
+### 一键部署
+
+仓库提供预览部署配置模板 `scripts/deploy_split-preview.env`：
+
+```bash
+# 正式版部署
+./scripts/deploy_split.sh scripts/deploy_split.local.env
+
+# 预览版部署
+./scripts/deploy_split.sh scripts/deploy_split-preview.local.env
+```
+
+两套部署使用不同配置文件，指向不同的 `CLOUD_WEB_ROOT`、`HOME_DEPLOY_DIR`、`VITE_API_BASE`，复用同一个部署脚本。

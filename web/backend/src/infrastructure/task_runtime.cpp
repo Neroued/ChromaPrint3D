@@ -638,11 +638,12 @@ bool TaskRuntime::PostprocessMatting(const std::string& owner, const std::string
 // --------------- Recipe Editor Sync Methods ---------------
 
 std::optional<nlohmann::json> TaskRuntime::GetRecipeEditorSummary(const std::string& owner,
-                                                                  const std::string& id) const {
+                                                                  const std::string& id) {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
     if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
     return GetRecipeEditorSummaryLocked(it->second);
 }
 
@@ -676,6 +677,8 @@ TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string
 
     auto candidates = ChromaPrint3D::FindAlternativeRecipes(target_lab, cp->recipe_search_cache,
                                                             max_candidates, offset);
+
+    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
 
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& c : candidates) {
@@ -787,6 +790,8 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
     std::size_t new_bytes     = ComputeArtifactBytes(it->second.snapshot);
     total_artifact_bytes_     = total_artifact_bytes_ - old_bytes + new_bytes;
     it->second.artifact_bytes = new_bytes;
+
+    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
 
     auto summary = GetRecipeEditorSummaryLocked(it->second);
     if (summary.has_value()) { out_summary = std::move(*summary); }
@@ -1309,7 +1314,8 @@ void TaskRuntime::MarkCompleted(const std::string& id) {
     if (it == tasks_.end()) return;
     it->second.snapshot.status       = RuntimeTaskStatus::Completed;
     it->second.snapshot.completed_at = std::chrono::steady_clock::now();
-    it->second.artifact_bytes        = ComputeArtifactBytes(it->second.snapshot);
+    total_artifact_bytes_ -= it->second.artifact_bytes;
+    it->second.artifact_bytes = ComputeArtifactBytes(it->second.snapshot);
     total_artifact_bytes_ += it->second.artifact_bytes;
     const double elapsed =
         ElapsedMs(it->second.snapshot.created_at, it->second.snapshot.completed_at);

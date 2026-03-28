@@ -603,7 +603,7 @@ ServiceResult ServerFacade::SubmitConvertVectorMatchOnly(
 }
 
 ServiceResult ServerFacade::RecipeEditorSummary(const std::string& owner,
-                                                const std::string& task_id) const {
+                                                const std::string& task_id) {
     if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
     auto summary = tasks_.GetRecipeEditorSummary(owner, task_id);
     if (!summary) return ServiceResult::Error(404, "not_found", "Summary not available");
