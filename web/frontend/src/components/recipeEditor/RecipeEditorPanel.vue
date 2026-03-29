@@ -458,10 +458,21 @@ onUnmounted(() => {
           </template>
           {{ t('recipeEditor.globalModeTooltip') }}
         </NTooltip>
-        <NButton v-if="hasSelection" size="small" quaternary @click="clearSelection">
+        <NButton
+          size="small"
+          quaternary
+          :style="hasSelection ? undefined : { visibility: 'hidden', pointerEvents: 'none' }"
+          @click="clearSelection"
+        >
           {{ t('recipeEditor.clearSelection') }}
         </NButton>
-        <NButton v-if="canUndo" size="small" quaternary :disabled="replacing" @click="handleUndo">
+        <NButton
+          size="small"
+          quaternary
+          :disabled="replacing"
+          :style="canUndo ? undefined : { visibility: 'hidden', pointerEvents: 'none' }"
+          @click="handleUndo"
+        >
           {{ t('recipeEditor.undo') }}
         </NButton>
       </NSpace>
@@ -485,12 +496,16 @@ onUnmounted(() => {
           alt="recipe preview"
           :height="420"
           :controller="panZoom"
+          :content-width="summary?.width ?? 0"
+          :content-height="summary?.height ?? 0"
         >
           <template #default="{ transform }">
             <RegionOverlayCanvas
               :region-map="regionMap"
               :selected-region-ids="selectedRegionIds"
               :transform="transform"
+              :source-width="summary?.width ?? 0"
+              :source-height="summary?.height ?? 0"
             />
           </template>
         </ZoomableImageViewport>

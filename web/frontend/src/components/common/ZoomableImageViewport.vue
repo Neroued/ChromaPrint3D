@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { usePanZoom } from '../../composables/usePanZoom'
 import type { PanZoomController } from '../../composables/usePanZoom'
 
@@ -11,6 +11,8 @@ const props = withDefaults(
     checkerboard?: boolean
     controller?: PanZoomController
     showImage?: boolean
+    contentWidth?: number
+    contentHeight?: number
   }>(),
   {
     src: '',
@@ -19,12 +21,81 @@ const props = withDefaults(
     checkerboard: true,
     controller: undefined,
     showImage: true,
+    contentWidth: 0,
+    contentHeight: 0,
   },
 )
 
+const containerRef = ref<HTMLElement | null>(null)
+const containerW = ref(0)
+const containerH = ref(0)
+
+let resizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  const el = containerRef.value
+  if (!el) return
+  containerW.value = el.clientWidth
+  containerH.value = el.clientHeight
+  resizeObserver = new ResizeObserver(() => {
+    containerW.value = el.clientWidth
+    containerH.value = el.clientHeight
+  })
+  resizeObserver.observe(el)
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+})
+
+const useExplicitFit = computed(
+  () =>
+    props.contentWidth > 0 &&
+    props.contentHeight > 0 &&
+    containerW.value > 0 &&
+    containerH.value > 0,
+)
+
+const fitParams = computed(() => {
+  if (!useExplicitFit.value) return null
+  const cw = containerW.value
+  const ch = containerH.value
+  const nw = props.contentWidth
+  const nh = props.contentHeight
+  const fitScale = Math.min(cw / nw, ch / nh)
+  const offsetX = (cw - nw * fitScale) / 2
+  const offsetY = (ch - nh * fitScale) / 2
+  return { fitScale, offsetX, offsetY }
+})
+
 const internalPanZoom = usePanZoom()
 const panZoom = computed<PanZoomController>(() => props.controller ?? internalPanZoom)
-const transformValue = computed(() => panZoom.value.previewTransform.value)
+
+const transformValue = computed(() => {
+  const pz = panZoom.value
+  const s = pz.scale.value
+  const tx = pz.translateX.value
+  const ty = pz.translateY.value
+  const fp = fitParams.value
+  if (fp) {
+    const cx = tx + fp.offsetX * s
+    const cy = ty + fp.offsetY * s
+    const cs = fp.fitScale * s
+    return `translate(${cx}px, ${cy}px) scale(${cs})`
+  }
+  return pz.previewTransform.value
+})
+
+const imgStyle = computed(() => {
+  const base: Record<string, string> = { transform: transformValue.value }
+  if (useExplicitFit.value) {
+    base.width = `${props.contentWidth}px`
+    base.height = `${props.contentHeight}px`
+    base.objectFit = 'none'
+  }
+  return base
+})
+
 const imageSrc = computed(() => props.src ?? '')
 const viewportStyle = computed(() => {
   const value = props.height
@@ -64,6 +135,7 @@ defineExpose({
 
 <template>
   <div
+    ref="containerRef"
     class="zoomable-image-viewport"
     :class="viewportClass"
     :style="viewportStyle"
@@ -77,7 +149,7 @@ defineExpose({
       v-if="showImage && imageSrc"
       :src="imageSrc"
       class="zoomable-image-viewport__img"
-      :style="{ transform: transformValue }"
+      :style="imgStyle"
       draggable="false"
       :alt="alt"
     />

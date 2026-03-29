@@ -6,6 +6,8 @@ const props = defineProps<{
   regionMap: RegionMapData | null
   selectedRegionIds: Set<number>
   transform: string
+  sourceWidth: number
+  sourceHeight: number
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -19,12 +21,19 @@ function redraw() {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
+  const sw = props.sourceWidth
+  const sh = props.sourceHeight
+
   if (props.selectedRegionIds.size === 0) {
-    ctx.clearRect(0, 0, map.width, map.height)
+    ctx.clearRect(0, 0, sw, sh)
     return
   }
 
-  const imageData = ctx.createImageData(map.width, map.height)
+  const tmpCanvas = document.createElement('canvas')
+  tmpCanvas.width = map.width
+  tmpCanvas.height = map.height
+  const tmpCtx = tmpCanvas.getContext('2d')!
+  const imageData = tmpCtx.createImageData(map.width, map.height)
   const data = imageData.data
   const regionIds = map.regionIds
   const selected = props.selectedRegionIds
@@ -35,7 +44,11 @@ function redraw() {
     data[i * 4 + 3] = MASK_ALPHA
   }
 
-  ctx.putImageData(imageData, 0, 0)
+  tmpCtx.putImageData(imageData, 0, 0)
+
+  ctx.clearRect(0, 0, sw, sh)
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(tmpCanvas, 0, 0, sw, sh)
 }
 
 watch(
@@ -50,8 +63,8 @@ watch(
     v-if="regionMap"
     ref="canvasRef"
     class="zoomable-image-viewport__layer"
-    :width="regionMap.width"
-    :height="regionMap.height"
-    :style="{ transform }"
+    :width="sourceWidth"
+    :height="sourceHeight"
+    :style="{ transform, width: sourceWidth + 'px', height: sourceHeight + 'px' }"
   />
 </template>

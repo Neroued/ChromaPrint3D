@@ -39,9 +39,10 @@ export function usePanZoom(options: PanZoomOptions = {}) {
     const newScale = Math.max(minScale, Math.min(maxScale, scale.value * factor))
     const ratio = newScale / scale.value
 
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
+    const el = e.currentTarget as HTMLElement
+    const rect = el.getBoundingClientRect()
+    const mx = e.clientX - rect.left - el.clientLeft
+    const my = e.clientY - rect.top - el.clientTop
 
     translateX.value = mx - (mx - translateX.value) * ratio
     translateY.value = my - (my - translateY.value) * ratio
