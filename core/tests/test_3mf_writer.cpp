@@ -465,7 +465,7 @@ TEST(ThreeMfExport, ExportedBufferHasL2Signature) {
 }
 
 TEST(ThreeMfExport, ExportedBufferHasL1Payload) {
-    Mesh mesh                    = MakeHighTriCountMesh(500);
+    Mesh mesh                    = MakeHighTriCountMesh(50000);
     std::vector<Channel> palette = {Channel{.color = "Blue", .hex_color = "#0000FF"}};
     std::vector<Mesh> meshes     = {mesh};
 
@@ -476,7 +476,10 @@ TEST(ThreeMfExport, ExportedBufferHasL1Payload) {
     EXPECT_TRUE(result.has_l2_signature);
     EXPECT_TRUE(result.has_l1_payload);
 
-    std::string expected = std::string("ChromaPrint3D ") + CHROMAPRINT3D_VERSION_STRING;
     std::string decoded(result.payload.begin(), result.payload.end());
-    EXPECT_EQ(decoded, expected);
+    std::string version_prefix =
+        std::string("ChromaPrint3D ") + CHROMAPRINT3D_VERSION_STRING + " | ";
+    EXPECT_EQ(decoded.substr(0, version_prefix.size()), version_prefix);
+    EXPECT_NE(decoded.find("To be, or not to be"), std::string::npos);
+    EXPECT_NE(decoded.find("And lose the name of action."), std::string::npos);
 }
