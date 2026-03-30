@@ -45,6 +45,7 @@ set(LUNASVG_DISABLE_LOAD_SYSTEM_FONTS ON CACHE BOOL "Disable system font loading
 add_subdirectory(3dparty/lunasvg)
 
 set(N3MF_BUILD_TESTS OFF CACHE BOOL "Disable neroued_3mf tests" FORCE)
+set(N3MF_BUILD_TOOLS OFF CACHE BOOL "Disable neroued_3mf CLI tools" FORCE)
 add_subdirectory(3dparty/neroued_3mf)
 if(TARGET Clipper2)
     if(MSVC)

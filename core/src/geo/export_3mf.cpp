@@ -1,6 +1,7 @@
 #include "chromaprint3d/error.h"
 #include "chromaprint3d/export_3mf.h"
 #include "chromaprint3d/mesh.h"
+#include "chromaprint3d/version.h"
 #include "chromaprint3d/voxel.h"
 #include "bambu_metadata.h"
 
@@ -191,7 +192,12 @@ void EnsureNonEmptyGeometry(const std::vector<InputObject>& objects, std::size_t
     }
 }
 
-neroued_3mf::WriteOptions DefaultWriteOptions() { return {}; }
+neroued_3mf::WriteOptions DefaultWriteOptions() {
+    neroued_3mf::WriteOptions opts;
+    std::string tag = std::string("ChromaPrint3D ") + CHROMAPRINT3D_VERSION_STRING;
+    opts.watermark.payload.assign(tag.begin(), tag.end());
+    return opts;
+}
 
 neroued_3mf::Document BuildStandardDocument(const std::vector<InputObject>& objects) {
     neroued_3mf::DocumentBuilder builder;

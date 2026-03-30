@@ -2,6 +2,7 @@
 
 #include "chromaprint3d/error.h"
 #include "chromaprint3d/export_3mf.h"
+#include "chromaprint3d/version.h"
 #include "chromaprint3d/voxel.h"
 
 #include <neroued/3mf/neroued_3mf.h>
@@ -174,6 +175,21 @@ Mesh MakeDenseMesh(int size_xy, int layers) {
         }
     }
     return Mesh::Build(grid);
+}
+
+Mesh MakeHighTriCountMesh(int num_triangles) {
+    Mesh mesh;
+    mesh.vertices.reserve(static_cast<std::size_t>(num_triangles) * 3);
+    mesh.indices.reserve(static_cast<std::size_t>(num_triangles));
+    for (int i = 0; i < num_triangles; ++i) {
+        float x  = static_cast<float>(i) * 2.0f;
+        int base = static_cast<int>(mesh.vertices.size());
+        mesh.vertices.push_back({x, 0.0f, 0.0f});
+        mesh.vertices.push_back({x + 1.0f, 0.0f, 0.0f});
+        mesh.vertices.push_back({x + 0.5f, 1.0f, 0.0f});
+        mesh.indices.push_back({base, base + 1, base + 2});
+    }
+    return mesh;
 }
 
 } // namespace
@@ -433,4 +449,34 @@ TEST(ThreeMfExport, ThrowsOnEmptyMeshes) {
     std::vector<Mesh> meshes;
 
     EXPECT_THROW(Export3mfFromMeshes(meshes, palette), InputError);
+}
+
+// ── Watermark verification ─────────────────────────────────────────────────
+
+TEST(ThreeMfExport, ExportedBufferHasL2Signature) {
+    Mesh mesh                    = MakeHighTriCountMesh(500);
+    std::vector<Channel> palette = {Channel{.color = "Red", .hex_color = "#FF0000"}};
+    std::vector<Mesh> meshes     = {mesh};
+
+    auto buffer = Export3mfFromMeshes(meshes, palette);
+    ASSERT_FALSE(buffer.empty());
+
+    EXPECT_TRUE(neroued_3mf::HasL2Signature({buffer.data(), buffer.size()}));
+}
+
+TEST(ThreeMfExport, ExportedBufferHasL1Payload) {
+    Mesh mesh                    = MakeHighTriCountMesh(500);
+    std::vector<Channel> palette = {Channel{.color = "Blue", .hex_color = "#0000FF"}};
+    std::vector<Mesh> meshes     = {mesh};
+
+    auto buffer = Export3mfFromMeshes(meshes, palette);
+    ASSERT_FALSE(buffer.empty());
+
+    auto result = neroued_3mf::DetectWatermark({buffer.data(), buffer.size()});
+    EXPECT_TRUE(result.has_l2_signature);
+    EXPECT_TRUE(result.has_l1_payload);
+
+    std::string expected = std::string("ChromaPrint3D ") + CHROMAPRINT3D_VERSION_STRING;
+    std::string decoded(result.payload.begin(), result.payload.end());
+    EXPECT_EQ(decoded, expected);
 }
