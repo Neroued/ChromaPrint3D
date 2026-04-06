@@ -12,6 +12,8 @@ import {
   NGrid,
   NGridItem,
   NInputNumber,
+  NRadio,
+  NRadioGroup,
   NSlider,
   NSpace,
   NSpin,
@@ -30,7 +32,7 @@ import { useRasterToolUpload } from '../composables/useRasterToolUpload'
 import { useObjectUrlLifecycle } from '../composables/useObjectUrlLifecycle'
 import { useBlobDownload } from '../composables/useBlobDownload'
 import ZoomableImageViewport from './common/ZoomableImageViewport.vue'
-import type { VectorizeParams, VectorizeTaskStatus } from '../types'
+import type { PipelineMode, VectorizeParams, VectorizeTaskStatus } from '../types'
 import { useAppStore } from '../stores/app'
 import {
   defaultVectorizeParams,
@@ -89,6 +91,8 @@ const {
 const submitParams = computed<VectorizeParams>(() =>
   normalizeVectorizeParams(params.value, defaultVectorizeParams),
 )
+
+const isV1 = computed(() => params.value.pipeline_mode === 'v1')
 
 // ── Task management ─────────────────────────────────────────────────────
 
@@ -297,8 +301,29 @@ onMounted(async () => {
           </template>
           <NSpace vertical :size="12">
             <div class="settings-scroll">
+              <!-- Pipeline Mode Selector -->
+              <NForm label-placement="left" :label-width="140" :disabled="loading" size="small">
+                <NFormItem>
+                  <template #label>
+                    <NTooltip>
+                      <template #trigger>
+                        <span class="tip-label">{{ t('vectorize.settings.pipelineMode') }}</span>
+                      </template>
+                      {{ t('vectorize.settings.pipelineModeHint') }}
+                    </NTooltip>
+                  </template>
+                  <NRadioGroup
+                    :value="params.pipeline_mode"
+                    @update:value="(v: string) => (params.pipeline_mode = v as PipelineMode)"
+                  >
+                    <NRadio value="v1">{{ t('vectorize.settings.pipelineV1') }}</NRadio>
+                    <NRadio value="v2">{{ t('vectorize.settings.pipelineV2') }}</NRadio>
+                  </NRadioGroup>
+                </NFormItem>
+              </NForm>
+
               <NText depth="3" style="font-size: 11px">
-                {{ t('vectorize.settings.quickTip') }}
+                {{ isV1 ? t('vectorize.settings.quickTip') : t('vectorize.settings.quickTipV2') }}
               </NText>
 
               <!-- Core Parameters -->
@@ -329,7 +354,7 @@ onMounted(async () => {
                     />
                   </NSpace>
                 </NFormItem>
-                <NFormItem>
+                <NFormItem v-if="isV1">
                   <template #label>
                     <NTooltip>
                       <template #trigger>
@@ -387,7 +412,7 @@ onMounted(async () => {
                       style="width: 100%"
                     />
                   </NFormItem>
-                  <NFormItem>
+                  <NFormItem v-if="isV1">
                     <template #label>
                       <NTooltip>
                         <template #trigger>
@@ -520,6 +545,7 @@ onMounted(async () => {
                     </NCollapseItem>
 
                     <NCollapseItem
+                      v-if="isV1"
                       :title="t('vectorize.advanced.segmentation')"
                       name="segmentation"
                     >
@@ -544,6 +570,26 @@ onMounted(async () => {
                             v-model:value="params.slic_region_size"
                             :min="0"
                             :max="100"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.slicCompactness')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.slicCompactnessHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.slic_compactness"
+                            :min="0.1"
+                            :max="40"
+                            :step="0.5"
+                            :precision="1"
                             style="width: 100%"
                           />
                         </NFormItem>
@@ -582,6 +628,39 @@ onMounted(async () => {
                             v-model:value="params.refine_passes"
                             :min="0"
                             :max="20"
+                            style="width: 100%"
+                          />
+                        </NFormItem>
+                        <NFormItem>
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.enableSubpixelRefine')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.enableSubpixelRefineHint') }}
+                            </NTooltip>
+                          </template>
+                          <NSwitch v-model:value="params.enable_subpixel_refine" />
+                        </NFormItem>
+                        <NFormItem v-if="params.enable_subpixel_refine">
+                          <template #label>
+                            <NTooltip>
+                              <template #trigger>
+                                <span class="tip-label">{{
+                                  t('vectorize.advanced.subpixelMaxDisplacement')
+                                }}</span>
+                              </template>
+                              {{ t('vectorize.advanced.subpixelMaxDisplacementHint') }}
+                            </NTooltip>
+                          </template>
+                          <NInputNumber
+                            v-model:value="params.subpixel_max_displacement"
+                            :min="0"
+                            :max="5"
+                            :step="0.1"
+                            :precision="1"
                             style="width: 100%"
                           />
                         </NFormItem>
@@ -691,7 +770,7 @@ onMounted(async () => {
                             style="width: 100%"
                           />
                         </NFormItem>
-                        <NFormItem>
+                        <NFormItem v-if="isV1">
                           <template #label>
                             <NTooltip>
                               <template #trigger>

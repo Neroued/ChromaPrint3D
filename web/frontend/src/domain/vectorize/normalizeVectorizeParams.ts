@@ -1,7 +1,8 @@
 import { roundTo } from '../../runtime/number'
-import type { VectorizeParams } from '../../types'
+import type { PipelineMode, VectorizeParams } from '../../types'
 
 export const defaultVectorizeParams = {
+  pipeline_mode: 'v2' as PipelineMode,
   num_colors: 0,
   smoothness: 0.5,
   detail_level: -1,
@@ -13,10 +14,13 @@ export const defaultVectorizeParams = {
   upscale_short_edge: 600,
   max_working_pixels: 3000000,
   slic_region_size: 20,
+  slic_compactness: 6,
   edge_sensitivity: 0.8,
   refine_passes: 6,
   max_merge_color_dist: 150,
   thin_line_max_radius: 2.5,
+  enable_subpixel_refine: true,
+  subpixel_max_displacement: 0.7,
   enable_antialias_detect: false,
   aa_tolerance: 10,
   merge_segment_tolerance: 0.05,
@@ -30,6 +34,7 @@ export const defaultVectorizeParams = {
 } satisfies Required<
   Pick<
     VectorizeParams,
+    | 'pipeline_mode'
     | 'num_colors'
     | 'smoothness'
     | 'detail_level'
@@ -41,10 +46,13 @@ export const defaultVectorizeParams = {
     | 'upscale_short_edge'
     | 'max_working_pixels'
     | 'slic_region_size'
+    | 'slic_compactness'
     | 'edge_sensitivity'
     | 'refine_passes'
     | 'max_merge_color_dist'
     | 'thin_line_max_radius'
+    | 'enable_subpixel_refine'
+    | 'subpixel_max_displacement'
     | 'enable_antialias_detect'
     | 'aa_tolerance'
     | 'merge_segment_tolerance'
@@ -76,6 +84,10 @@ function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
 }
 
+function normalizePipelineMode(value: unknown, fallback: PipelineMode): PipelineMode {
+  return value === 'v1' || value === 'v2' ? value : fallback
+}
+
 export function normalizeVectorizeParams(
   params: VectorizeParams,
   defaults: VectorizeParams = defaultVectorizeParams,
@@ -85,6 +97,7 @@ export function normalizeVectorizeParams(
   const numColors = rawNumColors === 0 ? 0 : normalizeNumber(rawNumColors, 16, 2, 256, true)
 
   return {
+    pipeline_mode: normalizePipelineMode(params.pipeline_mode, defaults.pipeline_mode ?? 'v2'),
     num_colors: numColors,
     smoothness: normalizeNumber(params.smoothness, defaults.smoothness ?? 0.5, 0, 1, false, 2),
     detail_level: (() => {
@@ -148,6 +161,14 @@ export function normalizeVectorizeParams(
       100,
       true,
     ),
+    slic_compactness: normalizeNumber(
+      params.slic_compactness,
+      defaults.slic_compactness ?? 6,
+      0.1,
+      40,
+      false,
+      1,
+    ),
     edge_sensitivity: normalizeNumber(
       params.edge_sensitivity,
       defaults.edge_sensitivity ?? 0.8,
@@ -170,6 +191,18 @@ export function normalizeVectorizeParams(
       defaults.thin_line_max_radius ?? 2.5,
       0.5,
       10,
+      false,
+      1,
+    ),
+    enable_subpixel_refine: normalizeBoolean(
+      params.enable_subpixel_refine,
+      defaults.enable_subpixel_refine ?? true,
+    ),
+    subpixel_max_displacement: normalizeNumber(
+      params.subpixel_max_displacement,
+      defaults.subpixel_max_displacement ?? 0.7,
+      0,
+      5,
       false,
       1,
     ),

@@ -225,42 +225,51 @@ npm run dev
 以下参数用于 `POST /api/v1/vectorize/tasks` 的 `params` JSON，同时 `GET /api/v1/vectorize/defaults`
 会返回对应默认值。
 
-| 参数 | 类型 | 默认值 | 有效范围 | 说明 | 建议暴露层级 |
-|---|---|---:|---|---|---|
-| `num_colors` | int | 0 | `0` 或 `[2,256]` | 颜色量化数量。`0`=自动检测最优数量；`2-256`=显式指定 | 前端主参数 |
-| `curve_fit_error` | float | 0.8 | `[0.1,5]` | Bezier 拟合误差阈值（像素），越小越贴边界 | 前端主参数 |
-| `contour_simplify` | float | 0.45 | `[0,10]` | 轮廓简化强度，越大节点越少 | 前端主参数 |
-| `svg_enable_stroke` | bool | true | `true/false` | 启用细线增强描边输出 | 前端主参数 |
-| `enable_coverage_fix` | bool | true | `true/false` | 启用覆盖修复补洞 | 前端主参数 |
-| `smoothing_spatial` | float | 15 | `[0,50]` | Mean Shift 空间窗口（sp） | 前端高级参数 |
-| `smoothing_color` | float | 25 | `[0,80]` | Mean Shift 颜色窗口（sr） | 前端高级参数 |
-| `thin_line_max_radius` | float | 2.5 | `[0.5,10]` | 细线检测距离阈值（像素） | 前端高级参数 |
-| `slic_region_size` | int | 20 | `[0,100]` | SLIC 超像素尺寸，越小越精细但更慢 | 前端高级参数 |
-| `edge_sensitivity` | float | 0.8 | `[0,1]` | 边缘对齐灵敏度：SLIC 在边缘处降低空间权重的力度 | 前端高级参数 |
-| `refine_passes` | int | 6 | `[0,20]` | 边界像素逐像素细化迭代次数，`0` 禁用 | 前端高级参数 |
-| `max_merge_color_dist` | float | 150 | `[0,2000]` | 小区域合并最大 LAB ΔE²，超过则拒绝合并 | 前端高级参数 |
-| `min_region_area` | int | 10 | `>=0` | 小区域合并阈值（像素²） | 前端高级参数 |
-| `min_contour_area` | float | 10.0 | `>=0` | 最小保留轮廓面积（像素²） | 前端高级参数 |
-| `min_hole_area` | float | 4.0 | `>=0` | 最小保留孔洞面积（像素²） | 前端高级参数 |
-| `min_coverage_ratio` | float | 0.998 | `[0,1]` | 覆盖率低于该值时触发 coverage fix | 前端高级参数 |
-| `svg_stroke_width` | float | 0.5 | `[0,20]` | SVG 描边宽度（像素） | 前端高级参数 |
-| `smoothness` | float | 0.5 | `[0,1]` | 轮廓平滑度：0 = 保留所有细节，1 = 最大平滑 | 前端主参数 |
-| `detail_level` | float | -1 | `[-1,1]` | 统一细节控制：`>=0` 时自动推导 `curve_fit_error` 与 `contour_simplify`；`-1` 禁用 | 前端主参数 |
-| `merge_segment_tolerance` | float | 0.05 | `[0,0.5]` | 近线性 Bezier 段合并容差（弦长比），`0` 禁用合并 | 前端高级参数 |
-| `enable_antialias_detect` | bool | false | `true/false` | 启用抗锯齿混合边缘检测，改善 AA 源图的边界精度 | 前端高级参数 |
-| `aa_tolerance` | float | 10 | `[1,50]` | AA 混合像素检测 LAB Delta-E 容差 | 仅 CLI / 调试 |
-| `corner_angle_threshold` | float | 135 | `[90,175]` | 角点判定阈值（度） | 仅 CLI / 调试 |
-| `upscale_short_edge` | int | 600 | `[0,2000]` | 自动放大触发短边阈值，`0` 禁用放大 | 仅 CLI / 调试 |
-| `max_working_pixels` | int | 3000000 | `[0,100000000]` | 大图预处理像素上限；超出时先按面积缩小以控制 SVG 复杂度，`0` 禁用 | 仅 API / 调试 |
+**管线选择（v0.2.0+）：** 通过 `pipeline_mode` 选择 V1（边界图 + 剪切）或 V2（层叠模型 + 深度排序）。部分参数仅在特定管线下生效，在"适用"列标注。
+
+| 参数 | 类型 | 默认值 | 有效范围 | 适用 | 说明 | 建议暴露层级 |
+|---|---|---:|---|---|---|---|
+| `pipeline_mode` | string | `"v2"` | `"v1"` / `"v2"` | — | 管线模式：V1 = 边界图 + 剪切，V2 = 层叠模型 + 深度排序 | 前端主参数 |
+| `num_colors` | int | 0 | `0` 或 `[2,256]` | V1+V2 | 颜色量化数量。`0`=自动检测最优数量；`2-256`=显式指定 | 前端主参数 |
+| `smoothness` | float | 0.5 | `[0,1]` | V1 | 轮廓平滑度：0 = 保留所有细节，1 = 最大平滑 | 前端主参数 |
+| `curve_fit_error` | float | 0.8 | `[0.1,5]` | V1+V2 | Bezier 拟合误差阈值（像素），越小越贴边界 | 前端主参数 |
+| `contour_simplify` | float | 0.45 | `[0,10]` | V1+V2 | 轮廓简化强度，越大节点越少 | 前端主参数 |
+| `detail_level` | float | -1 | `[-1,1]` | V1 | 统一细节控制：`>=0` 时自动推导 `curve_fit_error` 与 `contour_simplify`；`-1` 禁用 | 前端主参数 |
+| `svg_enable_stroke` | bool | true | `true/false` | V1+V2 | 启用细线增强描边输出 | 前端主参数 |
+| `enable_coverage_fix` | bool | true | `true/false` | V1+V2 | 启用覆盖修复补洞 | 前端主参数 |
+| `smoothing_spatial` | float | 15 | `[0,50]` | V1+V2 | Mean Shift 空间窗口（sp） | 前端高级参数 |
+| `smoothing_color` | float | 25 | `[0,80]` | V1+V2 | Mean Shift 颜色窗口（sr） | 前端高级参数 |
+| `thin_line_max_radius` | float | 2.5 | `[0.5,10]` | V1 | 细线检测距离阈值（像素） | 前端高级参数 |
+| `slic_region_size` | int | 20 | `[0,100]` | V1 | SLIC 超像素尺寸，越小越精细但更慢 | 前端高级参数 |
+| `slic_compactness` | float | 6.0 | `(0,40]` | V1 | SLIC 紧凑度，越低越贴合颜色边缘 | 前端高级参数 |
+| `edge_sensitivity` | float | 0.8 | `[0,1]` | V1 | 边缘对齐灵敏度：SLIC 在边缘处降低空间权重的力度 | 前端高级参数 |
+| `refine_passes` | int | 6 | `[0,20]` | V1 | 边界像素逐像素细化迭代次数，`0` 禁用 | 前端高级参数 |
+| `enable_subpixel_refine` | bool | true | `true/false` | V1 | 梯度引导的亚像素边界精修 | 前端高级参数 |
+| `subpixel_max_displacement` | float | 0.7 | `[0,5]` | V1 | 亚像素精修最大法线偏移（像素） | 前端高级参数 |
+| `max_merge_color_dist` | float | 200 | `[0,2000]` | V1+V2 | 小区域合并最大 LAB ΔE²，超过则拒绝合并 | 前端高级参数 |
+| `min_region_area` | int | 50 | `>=0` | V1+V2 | 小区域合并阈值（像素²） | 前端高级参数 |
+| `min_contour_area` | float | 10.0 | `>=0` | V1+V2 | 最小保留轮廓面积（像素²） | 前端高级参数 |
+| `min_hole_area` | float | 4.0 | `>=0` | V1+V2 | 最小保留孔洞面积（像素²） | 前端高级参数 |
+| `min_coverage_ratio` | float | 0.998 | `[0,1]` | V1+V2 | 覆盖率低于该值时触发 coverage fix | 前端高级参数 |
+| `svg_stroke_width` | float | 0.5 | `[0,20]` | V1+V2 | SVG 描边宽度（像素） | 前端高级参数 |
+| `merge_segment_tolerance` | float | 0.05 | `[0,0.5]` | V1+V2 | 近线性 Bezier 段合并容差（弦长比），`0` 禁用合并 | 前端高级参数 |
+| `enable_antialias_detect` | bool | false | `true/false` | V1 | 启用抗锯齿混合边缘检测，改善 AA 源图的边界精度 | 前端高级参数 |
+| `aa_tolerance` | float | 10 | `[1,50]` | V1 | AA 混合像素检测 LAB Delta-E 容差 | 仅 CLI / 调试 |
+| `corner_angle_threshold` | float | 135 | `[90,175]` | V1 | 角点判定阈值（度） | 仅 CLI / 调试 |
+| `upscale_short_edge` | int | 600 | `[0,2000]` | V1+V2 | 自动放大触发短边阈值，`0` 禁用放大 | 仅 CLI / 调试 |
+| `max_working_pixels` | int | 3000000 | `[0,100000000]` | V1+V2 | 大图预处理像素上限；超出时先按面积缩小以控制 SVG 复杂度，`0` 禁用 | 仅 API / 调试 |
+| `enable_depth_validation` | bool | false | `true/false` | V2 | V2 深度排序诊断开关（仅 API） | 仅 API / 调试 |
 
 说明：
 
 - 前端默认选择性暴露：主参数 + 高级参数；技术性参数优先在 CLI 调试。
+- **V2 为默认管线模式**。V1 仅适用的参数在 V2 模式下被前端隐藏，后端仍可接受但不生效。
 - `num_colors=0`（默认）时，管线通过复合评分候选搜索自动选择最优颜色数。评估重建误差、碎片化代价和复杂度惩罚，对候选 K∈{2,3,4,6,8,12,16,24} 取 argmin。结果通过 `VectorizeResult.resolved_num_colors` 返回。
-- 建议先调整 `num_colors`、`smoothness`、`detail_level`，它们能覆盖大部分质量/复杂度权衡。
-- `detail_level` 启用时（`>=0`）会自动设置 `curve_fit_error` 与 `contour_simplify`，无需手动调。
+- V1 模式：建议先调整 `num_colors`、`smoothness`、`detail_level`，它们能覆盖大部分质量/复杂度权衡。
+- V2 模式：建议调整 `num_colors`、`curve_fit_error`、`contour_simplify`。
+- `detail_level` 启用时（`>=0`）会自动设置 `curve_fit_error` 与 `contour_simplify`，无需手动调（仅 V1）。
 - 当源图分辨率很高（如 4K+）且导出 SVG 过大时，优先保留 `max_working_pixels` 默认值或适当下调。
-- 对含抗锯齿边缘的源图（如 Photoshop 导出），可启用 `enable_antialias_detect` 以获取更准确的边界。
+- 对含抗锯齿边缘的源图（如 Photoshop 导出），可启用 `enable_antialias_detect` 以获取更准确的边界（仅 V1）。
 
 #### 边缘感知分割与逐像素标签细化
 
