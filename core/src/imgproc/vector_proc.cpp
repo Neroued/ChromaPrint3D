@@ -291,13 +291,14 @@ static bool IsIdentityTransform(const lunasvg::Transform& t) {
            std::abs(m.d - 1.0f) < kEps && std::abs(m.e) < kEps && std::abs(m.f) < kEps;
 }
 
-static VectorShape ConvertGeometryElement(const lunasvg::SVGGeometryElement* geo, float tolerance) {
+static VectorShape ConvertGeometryElement(const lunasvg::SVGGeometryElement* geo, float tolerance,
+                                          std::atomic<size_t>& skipped_stroke_only) {
     VectorShape vs;
 
     const auto& paint = geo->fillPaintServer();
     if (!paint.isRenderable()) {
         if (geo->strokePaintServer().isRenderable()) {
-            spdlog::warn("VectorProc: stroke-only shape skipped (not supported)");
+            skipped_stroke_only.fetch_add(1, std::memory_order_relaxed);
         }
         return vs;
     }
@@ -734,13 +735,14 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
     std::vector<VectorShape> converted(geo_elements.size());
     const bool do_flip               = config.flip_y;
     const std::ptrdiff_t shape_count = static_cast<std::ptrdiff_t>(geo_elements.size());
+    std::atomic<size_t> skipped_stroke_only{0};
 
 #if defined(_OPENMP)
 #    pragma omp parallel for schedule(dynamic)
 #endif
     for (std::ptrdiff_t i = 0; i < shape_count; ++i) {
         const size_t idx = static_cast<size_t>(i);
-        VectorShape vs   = ConvertGeometryElement(geo_elements[idx], tol);
+        VectorShape vs   = ConvertGeometryElement(geo_elements[idx], tol, skipped_stroke_only);
 
         if (scale != 1.0f) {
             for (Contour& c : vs.contours) {
@@ -784,6 +786,10 @@ static VectorProcResult ProcessParsedSvg(lunasvg::Document& doc, const VectorPro
             }
             vimg.shapes.push_back(std::move(vs));
         }
+    }
+
+    if (const size_t n_stroke = skipped_stroke_only.load(std::memory_order_relaxed); n_stroke > 0) {
+        spdlog::warn("VectorProc: skipped {} stroke-only shapes (not supported)", n_stroke);
     }
 
     spdlog::debug("[perf] VectorProc phase 2 (ConvertGeometryElement): {:.1f} ms, {} shapes, "
