@@ -1,7 +1,6 @@
 {
-  "version": "1.2.13-rc.1",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.13-rc.1",
-  "changelog": "- 3MF 导出增加水印，便于识别作品来源与时间\n- 配方编辑器十字线与选中高亮更准确，减少偏移与抖动\n- 其他体验与稳定性改进",
-  "changelog_en": "- Watermarks on 3MF exports for source and time identification\n- More accurate crosshair and selection highlight in the recipe editor, with less jitter\n- Other experience and stability improvements",
+  "version": "1.2.13",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.2.13",
+  "changelog": "",
   "published_at": "2026-04-09"
 }
