@@ -55,8 +55,8 @@ struct ConvertRasterRequest {
     float target_height_mm = 0.0f; ///< Target physical height in mm (0 = use max_height in pixels).
 
     // Matching
-    PrintMode print_mode         = PrintMode::Mode0p08x5; ///< Print mode/profile.
-    ColorSpace color_space       = ColorSpace::Lab;       ///< Color space used for matching.
+    int color_layers             = PrintProfile::kDefaultColorLayers; ///< Number of color layers.
+    ColorSpace color_space       = ColorSpace::Lab; ///< Color space used for matching.
     int k_candidates             = 1; ///< Number of candidate colors to consider per pixel.
     ClusterMethod cluster_method = ClusterMethod::KMeans; ///< Non-dither clustering method.
     int cluster_count            = 0;     ///< 0 = auto-detect, 1 = per-pixel, >= 2 = manual.
@@ -176,6 +176,10 @@ struct MatchRasterResult {
     bool generate_source_mask = true;
 
     std::size_t EstimateBytes() const;
+
+    /// Upgrade both recipe_map and profile to a higher color_layers count,
+    /// padding with base material. Ensures recipe_map.color_layers == profile.color_layers.
+    void UpgradeColorLayers(int new_color_layers);
 };
 
 /// Raster matching phase: loads resources, preprocesses image, matches colors.
@@ -207,7 +211,7 @@ struct ConvertVectorRequest {
     float target_width_mm  = 0.0f; ///< 0 = use SVG original size.
     float target_height_mm = 0.0f; ///< 0 = use SVG original size.
 
-    PrintMode print_mode   = PrintMode::Mode0p08x5;
+    int color_layers       = PrintProfile::kDefaultColorLayers; ///< Number of color layers.
     ColorSpace color_space = ColorSpace::Lab;
     int k_candidates       = 1;
     bool model_enable      = true;
@@ -261,6 +265,10 @@ struct MatchVectorResult {
     bool generate_source_mask = true;
 
     std::size_t EstimateBytes() const;
+
+    /// Upgrade both recipe_map and profile to a higher color_layers count,
+    /// padding with base material. Ensures recipe_map.color_layers == profile.color_layers.
+    void UpgradeColorLayers(int new_color_layers);
 };
 
 /// Vector matching phase: loads resources, preprocesses SVG, matches colors.

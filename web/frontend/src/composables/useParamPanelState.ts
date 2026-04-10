@@ -56,7 +56,7 @@ export function useParamPanelState() {
   ]
 
   const translatedTooltips = {
-    print_mode: t('param.tooltips.print_mode'),
+    color_layers: t('param.tooltips.color_layers'),
     color_space: t('param.tooltips.color_space'),
     max_width: t('param.tooltips.max_width'),
     max_height: t('param.tooltips.max_height'),

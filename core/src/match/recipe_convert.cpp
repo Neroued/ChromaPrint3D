@@ -32,31 +32,48 @@ bool ConvertRecipeToProfile(const Entry& entry, const PreparedDB& prepared_db,
 
     if (db.layer_height_mm <= 0.0f || profile.layer_height_mm <= 0.0f) { return false; }
 
+    const int pad_channel = db.base_channel_idx;
+
+    // Pad recipe to target length at the bottom (near base plate).
+    auto PadToTarget = [&](std::vector<int>& recipe, int target) {
+        const int current = static_cast<int>(recipe.size());
+        if (current >= target) return;
+        const int delta = target - current;
+        if (profile.layer_order == LayerOrder::Top2Bottom) {
+            recipe.insert(recipe.end(), delta, pad_channel);
+        } else {
+            recipe.insert(recipe.begin(), delta, pad_channel);
+        }
+    };
+
     std::vector<int> profile_layers_recipe;
     profile_layers_recipe.reserve(static_cast<std::size_t>(profile.color_layers));
 
     if (NearlyEqual(db.layer_height_mm, profile.layer_height_mm)) {
-        if (static_cast<int>(ordered_recipe.size()) != profile.color_layers) { return false; }
+        const int src_layers = static_cast<int>(ordered_recipe.size());
+        if (src_layers > profile.color_layers) { return false; }
         profile_layers_recipe = std::move(ordered_recipe);
+        PadToTarget(profile_layers_recipe, profile.color_layers);
     } else if (db.layer_height_mm > profile.layer_height_mm) {
         const float ratio_f = db.layer_height_mm / profile.layer_height_mm;
         const int ratio     = static_cast<int>(std::lround(ratio_f));
         if (ratio <= 0 || !NearlyEqual(ratio_f, static_cast<float>(ratio))) { return false; }
-        if (static_cast<int>(ordered_recipe.size()) * ratio != profile.color_layers) {
-            return false;
-        }
+        const int expanded_layers = static_cast<int>(ordered_recipe.size()) * ratio;
+        if (expanded_layers > profile.color_layers) { return false; }
         for (int channel_idx : ordered_recipe) {
             for (int i = 0; i < ratio; ++i) { profile_layers_recipe.push_back(channel_idx); }
         }
+        PadToTarget(profile_layers_recipe, profile.color_layers);
     } else {
         const float ratio_f = profile.layer_height_mm / db.layer_height_mm;
         const int ratio     = static_cast<int>(std::lround(ratio_f));
         if (ratio <= 0 || !NearlyEqual(ratio_f, static_cast<float>(ratio))) { return false; }
-        if (static_cast<int>(ordered_recipe.size()) != profile.color_layers * ratio) {
-            return false;
-        }
+        const int src_layers = static_cast<int>(ordered_recipe.size());
+        if (src_layers % ratio != 0) { return false; }
+        const int merged_layers = src_layers / ratio;
+        if (merged_layers > profile.color_layers) { return false; }
 
-        for (int i = 0; i < profile.color_layers; ++i) {
+        for (int i = 0; i < merged_layers; ++i) {
             const int begin = i * ratio;
             const int ref   = ordered_recipe[static_cast<std::size_t>(begin)];
             for (int j = 1; j < ratio; ++j) {
@@ -64,6 +81,7 @@ bool ConvertRecipeToProfile(const Entry& entry, const PreparedDB& prepared_db,
             }
             profile_layers_recipe.push_back(ref);
         }
+        PadToTarget(profile_layers_recipe, profile.color_layers);
     }
 
     out_recipe.resize(static_cast<std::size_t>(profile.color_layers), 0);

@@ -19,24 +19,11 @@
 namespace ChromaPrint3D {
 namespace detail {
 
-constexpr float kTargetColorThicknessMm = 0.4f;
-constexpr float kLayerHeight08          = 0.08f;
-constexpr float kLayerHeight04          = 0.04f;
-constexpr int kColorLayers5             = 5;
-constexpr int kColorLayers10            = 10;
-constexpr float kFloatEps               = 1e-3f;
+constexpr float kLayerHeight08 = 0.08f;
+constexpr float kLayerHeight04 = 0.04f;
+constexpr float kFloatEps      = 1e-3f;
 
 inline bool NearlyEqual(float a, float b, float eps = kFloatEps) { return std::fabs(a - b) <= eps; }
-
-inline std::pair<float, int> ModeSpec(PrintMode mode) {
-    switch (mode) {
-    case PrintMode::Mode0p08x5:
-        return {kLayerHeight08, kColorLayers5};
-    case PrintMode::Mode0p04x10:
-        return {kLayerHeight04, kColorLayers10};
-    }
-    throw FormatError("Unsupported PrintMode");
-}
 
 inline std::string NormalizeLabel(const std::string& s) {
     std::string out;
@@ -57,16 +44,6 @@ inline std::string NormalizeChannelKeyString(const std::string& value) {
 
 inline std::string BuildChannelKey(const Channel& channel) {
     return NormalizeChannelKeyString(channel.color + "|" + channel.material);
-}
-
-inline PrintMode ParsePrintModeString(const std::string& value) {
-    if (value == "0.08x5" || value == "0p08x5" || value == "Mode0p08x5") {
-        return PrintMode::Mode0p08x5;
-    }
-    if (value == "0.04x10" || value == "0p04x10" || value == "Mode0p04x10") {
-        return PrintMode::Mode0p04x10;
-    }
-    throw FormatError("Unsupported print mode string: " + value);
 }
 
 inline LayerOrder ParseLayerOrderValue(const nlohmann::json& value, LayerOrder fallback) {

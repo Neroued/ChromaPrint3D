@@ -4,6 +4,8 @@
 #include "chromaprint3d/error.h"
 #include "detail/match_utils.h"
 
+#include <spdlog/spdlog.h>
+
 
 
 #include <algorithm>
@@ -22,8 +24,6 @@
 namespace ChromaPrint3D {
 
 using detail::BuildChannelKey;
-using detail::kTargetColorThicknessMm;
-using detail::ModeSpec;
 using detail::NearlyEqual;
 using detail::NormalizeChannelKeyString;
 
@@ -59,15 +59,10 @@ void PrintProfile::Validate() const {
     if (layer_height_mm <= 0.0f) {
         throw ConfigError("PrintProfile layer_height_mm must be positive");
     }
-    if (!NearlyEqual(max_color_thickness_mm, kTargetColorThicknessMm)) {
-        throw ConfigError("PrintProfile max_color_thickness_mm must be 0.4");
-    }
-    if (!NearlyEqual(layer_height_mm * static_cast<float>(color_layers), max_color_thickness_mm)) {
-        throw ConfigError("PrintProfile layer_height_mm * color_layers must equal 0.4");
-    }
-    const auto [mode_layer_height, mode_layers] = ModeSpec(mode);
-    if (!NearlyEqual(layer_height_mm, mode_layer_height) || color_layers != mode_layers) {
-        throw ConfigError("PrintProfile mode does not match layer_height_mm/color_layers");
+    if (color_layers > kSoftMaxColorLayers) {
+        spdlog::warn("PrintProfile: color_layers={} exceeds soft max ({}), printing may be slow or "
+                     "produce thick output",
+                     color_layers, kSoftMaxColorLayers);
     }
     if (line_width_mm <= 0.0f) { throw ConfigError("PrintProfile line_width_mm must be positive"); }
     if (base_layers < 0) { throw ConfigError("PrintProfile base_layers must be >= 0"); }
@@ -90,14 +85,14 @@ ColorDB PrintProfile::ToColorDB(const std::string& name) const {
     return out;
 }
 
-PrintProfile PrintProfile::BuildFromColorDBs(std::span<const ColorDB> dbs, PrintMode mode,
-                                             const FilamentConfig* config) {
+PrintProfile PrintProfile::BuildFromColorDBs(std::span<const ColorDB> dbs, int color_layers,
+                                             float layer_height_mm, const FilamentConfig* config) {
     if (dbs.empty()) { throw InputError("BuildFromColorDBs requires at least one ColorDB"); }
 
     PrintProfile profile;
-    profile.mode                                            = mode;
-    profile.max_color_thickness_mm                          = kTargetColorThicknessMm;
-    std::tie(profile.layer_height_mm, profile.color_layers) = ModeSpec(mode);
+    profile.color_layers = color_layers;
+    profile.layer_height_mm =
+        (layer_height_mm > 0.0f) ? layer_height_mm : dbs.front().layer_height_mm;
 
     profile.base_layers   = dbs.front().base_layers;
     profile.line_width_mm = (dbs.front().line_width_mm > 0.0f) ? dbs.front().line_width_mm : 0.42f;

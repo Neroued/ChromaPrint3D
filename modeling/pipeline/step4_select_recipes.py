@@ -40,7 +40,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--stage-b", type=Path, default=DEFAULT_STAGE_B)
     parser.add_argument("--db", type=Path, required=True)
-    parser.add_argument("--mode", choices=("0.04x10", "0.08x5"), default="0.04x10")
+    parser.add_argument("--mode", type=str, default=None,
+                        help="Legacy mode string (0.08x5 or 0.04x10). Prefer --color-layers + --layer-height-mm.")
     parser.add_argument("--layer-height-mm", type=float, default=None)
     parser.add_argument("--color-layers", type=int, default=None)
     parser.add_argument("--micro-layer-height", type=float, default=0.04)
@@ -214,9 +215,23 @@ def main() -> int:
     args = parse_args()
     np.random.seed(args.seed)
 
-    default_layers, default_height = (10, 0.04) if args.mode == "0.04x10" else (5, 0.08)
-    color_layers = args.color_layers if args.color_layers is not None else default_layers
-    layer_height_mm = args.layer_height_mm if args.layer_height_mm is not None else default_height
+    if args.color_layers is not None:
+        color_layers = args.color_layers
+    elif args.mode == "0.04x10":
+        color_layers = 10
+    elif args.mode == "0.08x5":
+        color_layers = 5
+    else:
+        color_layers = 5
+
+    if args.layer_height_mm is not None:
+        layer_height_mm = args.layer_height_mm
+    elif args.mode == "0.04x10":
+        layer_height_mm = 0.04
+    elif args.mode == "0.08x5":
+        layer_height_mm = 0.08
+    else:
+        layer_height_mm = 0.08
     if args.prefilter_size < args.count:
         raise ValueError("--prefilter-size must be >= --count")
 

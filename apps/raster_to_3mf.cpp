@@ -27,7 +27,8 @@ struct Options {
     ColorSpace color_space           = ColorSpace::Lab;
     int k_candidates                 = 1;
     int cluster_count                = 0;
-    PrintMode print_mode             = PrintMode::Mode0p08x5;
+    int color_layers                 = 5;
+    float color_layer_height_mm      = 0.0f;
     bool flip_y                      = true;
     NozzleSize nozzle_size           = NozzleSize::N04;
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
@@ -120,9 +121,17 @@ ColorSpace ParseColorSpace(const std::string& value) {
     throw std::runtime_error("Invalid color-space: " + value);
 }
 
-PrintMode ParsePrintMode(const std::string& value) {
-    if (value == "0.08x5" || value == "0p08x5") { return PrintMode::Mode0p08x5; }
-    if (value == "0.04x10" || value == "0p04x10") { return PrintMode::Mode0p04x10; }
+void ParseMode(const std::string& value, int& color_layers, float& layer_height_mm) {
+    if (value == "0.08x5" || value == "0p08x5") {
+        color_layers    = 5;
+        layer_height_mm = 0.08f;
+        return;
+    }
+    if (value == "0.04x10" || value == "0p04x10") {
+        color_layers    = 10;
+        layer_height_mm = 0.04f;
+        return;
+    }
     throw std::runtime_error("Invalid --mode value: " + value);
 }
 
@@ -229,7 +238,7 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             continue;
         }
         if (arg == "--mode" && i + 1 < argc) {
-            opt.print_mode = ParsePrintMode(argv[++i]);
+            ParseMode(argv[++i], opt.color_layers, opt.color_layer_height_mm);
             continue;
         }
         if (arg == "--k" && i + 1 < argc) {
@@ -369,13 +378,14 @@ int main(int argc, char** argv) {
 
     try {
         ConvertRasterRequest req;
-        req.image_path       = opt.image_path;
-        req.db_paths         = opt.db_paths;
-        req.model_pack_path  = opt.model_pack_path;
-        req.scale            = opt.request_scale;
-        req.max_width        = opt.max_width;
-        req.max_height       = opt.max_height;
-        req.print_mode       = opt.print_mode;
+        req.image_path      = opt.image_path;
+        req.db_paths        = opt.db_paths;
+        req.model_pack_path = opt.model_pack_path;
+        req.scale           = opt.request_scale;
+        req.max_width       = opt.max_width;
+        req.max_height      = opt.max_height;
+        req.color_layers    = opt.color_layers;
+        if (opt.color_layer_height_mm > 0.0f) req.layer_height_mm = opt.color_layer_height_mm;
         req.color_space      = opt.color_space;
         req.k_candidates     = opt.k_candidates;
         req.cluster_count    = opt.cluster_count;

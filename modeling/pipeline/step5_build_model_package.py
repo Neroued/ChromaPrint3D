@@ -36,7 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build Phase A model package json.")
     parser.add_argument("--stage", type=Path, required=True)
     parser.add_argument("--db", type=Path, default=None)
-    parser.add_argument("--modes", type=str, default="0.08x5,0.04x10")
+    parser.add_argument("--modes", type=str, default="0.08x5,0.04x10",
+                        help="Comma-separated layer configs. Legacy: '0.08x5,0.04x10'. New: '5:0.08,10:0.04'.")
     parser.add_argument("--candidate-count", type=int, default=65536)
     parser.add_argument("--material", type=str, default="PLA Basic")
     parser.add_argument("--layer-order", choices=("Top2Bottom", "Bottom2Top"), default="Top2Bottom")
@@ -62,14 +63,27 @@ def build_channel_key(color: str, material: str) -> str:
 
 
 def parse_modes(modes_text: str) -> List[Tuple[str, float, int]]:
+    """Parse mode specifications.
+
+    Supports legacy format: '0.08x5', '0.04x10'
+    And new format: '5:0.08', '10:0.04' (layers:height)
+    """
     out: List[Tuple[str, float, int]] = []
     for raw in modes_text.split(","):
         mode = raw.strip()
+        if not mode:
+            continue
         if mode in ("0.08x5", "0p08x5"):
             out.append(("0.08x5", 0.08, 5))
         elif mode in ("0.04x10", "0p04x10"):
             out.append(("0.04x10", 0.04, 10))
-        elif mode:
+        elif ":" in mode:
+            parts = mode.split(":")
+            layers = int(parts[0])
+            height = float(parts[1])
+            key = f"{layers}_{height}"
+            out.append((key, height, layers))
+        else:
             raise ValueError(f"Unsupported mode: {mode}")
     if not out:
         raise ValueError("No valid modes")
@@ -86,41 +100,63 @@ def resolve_db_paths(db_path: Optional[Path]) -> List[Path]:
     raise FileNotFoundError(f"Invalid db path: {db_path}")
 
 
+def _pad_to_target(
+    layers: List[int], target: int, base_ch: int, layer_order: str,
+) -> Optional[List[int]]:
+    """Pad shorter recipe to target length with base channel.
+
+    Top2Bottom: append base at end (bottom).
+    Bottom2Top: insert base at beginning (bottom).
+    """
+    if len(layers) > target:
+        return None
+    if len(layers) == target:
+        return layers
+    pad_count = target - len(layers)
+    if layer_order == "Top2Bottom":
+        return layers + [base_ch] * pad_count
+    return [base_ch] * pad_count + layers
+
+
 def expand_recipe_to_mode(
     recipe: Sequence[int], db_layer_height: float, db_layer_order: str,
     target_layer_height: float, target_layers: int, target_layer_order: str,
+    base_channel_idx: int = 0,
 ) -> Optional[List[int]]:
     recipe_list = list(recipe)
     if db_layer_order != target_layer_order:
         recipe_list = list(reversed(recipe_list))
     eps = 1e-3
     if abs(db_layer_height - target_layer_height) <= eps:
-        return recipe_list if len(recipe_list) == target_layers else None
+        return _pad_to_target(recipe_list, target_layers, base_channel_idx, target_layer_order)
     if db_layer_height > target_layer_height:
         ratio_f = db_layer_height / target_layer_height
         ratio = int(round(ratio_f))
-        if ratio <= 0 or abs(ratio_f - ratio) > eps or len(recipe_list) * ratio != target_layers:
+        if ratio <= 0 or abs(ratio_f - ratio) > eps:
             return None
-        out: List[int] = []
+        expanded: List[int] = []
         for ch in recipe_list:
-            out.extend([int(ch)] * ratio)
-        return out
+            expanded.extend([int(ch)] * ratio)
+        return _pad_to_target(expanded, target_layers, base_channel_idx, target_layer_order)
     ratio_f = target_layer_height / db_layer_height
     ratio = int(round(ratio_f))
-    if ratio <= 0 or abs(ratio_f - ratio) > eps or len(recipe_list) != target_layers * ratio:
+    if ratio <= 0 or abs(ratio_f - ratio) > eps or len(recipe_list) % ratio != 0:
         return None
-    out = []
-    for i in range(target_layers):
-        begin = i * ratio; ref = int(recipe_list[begin])
+    merged: List[int] = []
+    merged_count = len(recipe_list) // ratio
+    for i in range(merged_count):
+        begin = i * ratio
+        ref = int(recipe_list[begin])
         if any(int(recipe_list[begin + j]) != ref for j in range(1, ratio)):
             return None
-        out.append(ref)
-    return out
+        merged.append(ref)
+    return _pad_to_target(merged, target_layers, base_channel_idx, target_layer_order)
 
 
 def collect_seed_recipes(
     db_paths: Sequence[Path], stage_key_to_idx: Dict[str, int],
     target_layer_height: float, target_layers: int, target_layer_order: str,
+    base_channel_idx: int = 0,
 ) -> Set[Tuple[int, ...]]:
     recipes: Set[Tuple[int, ...]] = set()
     for path in db_paths:
@@ -151,6 +187,7 @@ def collect_seed_recipes(
             converted = expand_recipe_to_mode(
                 stage_recipe, db_layer_height, db_layer_order,
                 target_layer_height, target_layers, target_layer_order,
+                base_channel_idx,
             )
             if converted is not None:
                 recipes.add(tuple(converted))
@@ -213,6 +250,7 @@ def main() -> int:
     for mode_name, layer_height_mm, color_layers in modes:
         seed_recipes = collect_seed_recipes(
             db_paths, stage_key_to_idx, layer_height_mm, color_layers, args.layer_order,
+            base_channel_idx,
         )
         recipes = sample_candidate_recipes(
             seed_recipes, stage_model.E.shape[0], color_layers, args.candidate_count, args.seed + color_layers,

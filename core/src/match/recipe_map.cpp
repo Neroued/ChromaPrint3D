@@ -173,4 +173,33 @@ void RecipeMap::ReplaceRecipeInRegions(const RasterRegionMap& region_map,
     }
 }
 
+void RecipeMap::UpgradeColorLayers(int new_color_layers, uint8_t pad_channel) {
+    if (new_color_layers <= color_layers) return;
+    const int old_layers    = color_layers;
+    const int delta         = new_color_layers - old_layers;
+    const std::size_t total = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    std::vector<uint8_t> new_recipes(total * static_cast<std::size_t>(new_color_layers));
+
+    for (std::size_t i = 0; i < total; ++i) {
+        const std::size_t src_off = i * static_cast<std::size_t>(old_layers);
+        const std::size_t dst_off = i * static_cast<std::size_t>(new_color_layers);
+        if (layer_order == LayerOrder::Top2Bottom) {
+            std::copy_n(recipes.begin() + static_cast<std::ptrdiff_t>(src_off),
+                        static_cast<std::size_t>(old_layers),
+                        new_recipes.begin() + static_cast<std::ptrdiff_t>(dst_off));
+            std::fill_n(new_recipes.begin() + static_cast<std::ptrdiff_t>(dst_off + old_layers),
+                        static_cast<std::size_t>(delta), pad_channel);
+        } else {
+            std::fill_n(new_recipes.begin() + static_cast<std::ptrdiff_t>(dst_off),
+                        static_cast<std::size_t>(delta), pad_channel);
+            std::copy_n(recipes.begin() + static_cast<std::ptrdiff_t>(src_off),
+                        static_cast<std::size_t>(old_layers),
+                        new_recipes.begin() + static_cast<std::ptrdiff_t>(dst_off + delta));
+        }
+    }
+
+    recipes      = std::move(new_recipes);
+    color_layers = new_color_layers;
+}
+
 } // namespace ChromaPrint3D

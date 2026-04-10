@@ -102,6 +102,11 @@ struct RecipeMap {
                                 const std::vector<int>& target_region_ids,
                                 const std::vector<uint8_t>& new_recipe, const Lab& new_mapped_color,
                                 bool new_from_model);
+
+    /// Upgrade the recipe buffer to a higher color_layers count by padding
+    /// each pixel's recipe with \p pad_channel at the bottom (near base plate).
+    /// No-op if \p new_color_layers <= current color_layers.
+    void UpgradeColorLayers(int new_color_layers, uint8_t pad_channel);
 };
 
 } // namespace ChromaPrint3D

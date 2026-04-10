@@ -240,4 +240,17 @@ void VectorRecipeMap::ReplaceRecipeForEntries(const std::vector<int>& entry_indi
     }
 }
 
+void VectorRecipeMap::UpgradeColorLayers(int new_color_layers, uint8_t pad_channel) {
+    if (new_color_layers <= color_layers) return;
+    const int delta = new_color_layers - color_layers;
+    for (auto& entry : entries) {
+        if (layer_order == LayerOrder::Top2Bottom) {
+            entry.recipe.insert(entry.recipe.end(), delta, pad_channel);
+        } else {
+            entry.recipe.insert(entry.recipe.begin(), delta, pad_channel);
+        }
+    }
+    color_layers = new_color_layers;
+}
+
 } // namespace ChromaPrint3D

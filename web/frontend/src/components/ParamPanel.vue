@@ -383,24 +383,22 @@ watch(canEnableTransparentLayer, (can) => {
           />
         </NFormItem>
 
-        <!-- 打印模式暂不使用，先注释掉选择控件 -->
-        <!--
-        <NFormItem v-if="!isRaster" label-placement="left" :label-width="simpleLabelWidth">
+        <NFormItem label-placement="left" :label-width="simpleLabelWidth">
           <template #label>
             <NTooltip>
               <template #trigger>
-                <span class="tip-label">打印模式</span>
+                <span class="tip-label">{{ t('param.colorLayers') }}</span>
               </template>
-              {{ tooltips.print_mode }}
+              {{ tooltips.color_layers }}
             </NTooltip>
           </template>
-          <NSelect
-            :value="modelValue.print_mode"
-            :options="printModeOptions"
-            @update:value="(v: string) => update({ print_mode: v })"
+          <NInputNumber
+            :value="modelValue.color_layers"
+            :min="1"
+            :max="20"
+            @update:value="(v: number | null) => update({ color_layers: v ?? 5 })"
           />
         </NFormItem>
-        -->
 
         <ColorDBSelector
           :material="selectedMaterial"
@@ -906,24 +904,22 @@ watch(canEnableTransparentLayer, (can) => {
         <!-- Color matching group -->
         <NCollapse default-expanded-names="matching" style="margin-bottom: 8px">
           <NCollapseItem :title="t('param.colorMatching')" name="matching">
-            <!-- 打印模式暂不使用，先注释掉选择控件 -->
-            <!--
             <NFormItem>
               <template #label>
                 <NTooltip>
                   <template #trigger>
-                    <span class="tip-label">打印模式</span>
+                    <span class="tip-label">{{ t('param.colorLayers') }}</span>
                   </template>
-                  {{ tooltips.print_mode }}
+                  {{ tooltips.color_layers }}
                 </NTooltip>
               </template>
-              <NSelect
-                :value="modelValue.print_mode"
-                :options="printModeOptions"
-                @update:value="(v: string) => update({ print_mode: v })"
+              <NInputNumber
+                :value="modelValue.color_layers"
+                :min="1"
+                :max="20"
+                @update:value="(v: number | null) => update({ color_layers: v ?? 5 })"
               />
             </NFormItem>
-            -->
 
             <NFormItem>
               <template #label>

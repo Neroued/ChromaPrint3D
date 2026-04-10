@@ -16,7 +16,7 @@ export type FaceOrientation = 'faceup' | 'facedown'
 
 export interface ConvertRasterParams {
   db_names?: string[]
-  print_mode?: string // "0.08x5" | "0.04x10"
+  color_layers?: number
   color_space?: string // "lab" | "rgb"
   max_width?: number
   max_height?: number
@@ -53,7 +53,7 @@ export interface ConvertRasterParams {
 
 export interface ConvertVectorParams {
   db_names?: string[]
-  print_mode?: string
+  color_layers?: number
   color_space?: string
   target_width_mm?: number
   target_height_mm?: number
@@ -353,7 +353,7 @@ export interface DefaultConfig {
   max_height: number
   target_width_mm: number
   target_height_mm: number
-  print_mode: string
+  color_layers: number
   color_space: string
   k_candidates: number
   cluster_method: string

@@ -140,6 +140,7 @@ export default {
     layerHeightMm: 'Layer Height (mm)',
     flipY: 'Flip Vertical',
     colorMatching: 'Color Matching',
+    colorLayers: 'Color Layers',
     colorSpace: 'Color Space',
     kCandidates: 'K Candidates',
     iterations: 'Iterations',
@@ -165,8 +166,8 @@ export default {
     sessionSuffix: ' (custom)',
     loadConfigFailed: 'Failed to load configuration',
     tooltips: {
-      print_mode:
-        'Determines color layers and layer height. 0.08mm x 5 layers or 0.04mm x 10 layers. Both have the same total color thickness (0.4mm)',
+      color_layers:
+        'Number of color layers. Default 5. More layers can improve light color reproduction (e.g. skin tones), but increase printing time and thickness',
       color_space:
         'Color space for matching. Lab is perceptually uniform (recommended); RGB uses direct distance',
       max_width: 'Max width in pixels after scaling. Smaller values process faster',

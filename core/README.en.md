@@ -204,8 +204,7 @@ The non-dither main loop, cluster sample preparation, and cluster label writebac
 | `RecipeMap` | Matching result: per-pixel recipes + mapped colors + source mask |
 | `MatchConfig` | Matching parameters (candidate count, color space, clustering method, SLIC/K-Means knobs) |
 | `MatchStats` | Matching statistics (total clusters, DB hits, model fallbacks, etc.) |
-| `PrintProfile` | Print configuration (mode, layer height, color layers, palette) |
-| `PrintMode` | Print mode enum (0.08mm x 5 layers / 0.04mm x 10 layers) |
+| `PrintProfile` | Print configuration (layer height, color layers, palette) |
 | `ModelPackage` | ML model package with precomputed candidate recipes and predicted Lab values |
 | `ModelGateConfig` | Model gate configuration (threshold, margin, enable flags) |
 

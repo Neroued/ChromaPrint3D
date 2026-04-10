@@ -342,7 +342,7 @@ python -m modeling.pipeline.step3_fit_stage_b \
 python -m modeling.pipeline.step4_select_recipes \
     --stage-b modeling/output/params/stage_B_retrained.json \
     --db modeling/dbs \
-    --mode 0.04x10 \
+    --color-layers 10 --layer-height-mm 0.04 \
     --count 1024 \
     --output modeling/output/recipes/recipes_0p04_10L.json
 ```
@@ -360,7 +360,9 @@ python -m modeling.pipeline.step4_select_recipes \
 |------|--------|------|
 | `--stage-b` | `output/params/stage_B_retrained.json` | Stage B 参数 |
 | `--db` | (必需) | ColorDB 路径（排除已有配方并获取 palette 信息） |
-| `--mode` | `0.04x10` | 层高×层数模式 (`0.04x10` / `0.08x5`) |
+| `--color-layers` | `5` | 颜色层数（自由指定，如 3、5、7、10） |
+| `--layer-height-mm` | `0.08` | 层高（mm） |
+| `--mode` | (legacy) | 旧格式兼容：`0.04x10` / `0.08x5`，优先使用 `--color-layers` + `--layer-height-mm` |
 | `--count` | `1024` | 选取配方数量 |
 | `--prefilter-size` | `50000` | 候选池大小 |
 | `--layer-order` | (从 DB 推断) | 打印层序 (`Top2Bottom` / `Bottom2Top`) |
@@ -381,7 +383,11 @@ python -m modeling.pipeline.step5_build_model_package \
     --output modeling/output/packages/model_package_phaseA.json
 ```
 
-模型包中包含多种模式（如 0.08×5 和 0.04×10），每种模式预先计算数万条配方的预测 Lab 值。C++ 端在运行时对目标颜色进行 kd-tree 最近邻查找。
+模型包中包含多种层数配置，每种配置预先计算数万条配方的预测 Lab 值。C++ 端在运行时对目标颜色进行 kd-tree 最近邻查找。支持可变颜色层数（如 5 层、7 层、10 层），短配方自动用 base 材料填充。
+
+`--modes` 支持两种格式：
+- 旧格式：`0.08x5,0.04x10`
+- 新格式：`5:0.08,10:0.04,7:0.08`（层数:层高）
 
 **主要参数：**
 
@@ -389,8 +395,8 @@ python -m modeling.pipeline.step5_build_model_package \
 |------|--------|------|
 | `--stage` | (必需) | Stage B 参数 JSON |
 | `--db` | (可选) | ColorDB，用于收集种子配方 |
-| `--modes` | `0.08x5,0.04x10` | 逗号分隔的模式列表 |
-| `--candidate-count` | `65536` | 每种模式的候选配方数 |
+| `--modes` | `0.08x5,0.04x10` | 逗号分隔的层数配置（支持旧格式与新格式） |
+| `--candidate-count` | `65536` | 每种配置的候选配方数 |
 | `--threshold` | `5.0` | C++ 端匹配阈值 (DeltaE) |
 | `--margin` | `0.7` | C++ 端匹配余量 |
 | `--output` | `output/packages/model_package_phaseA.json` | 输出路径 |

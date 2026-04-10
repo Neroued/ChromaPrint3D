@@ -82,7 +82,7 @@ int CountValidPixels(const cv::Mat& mask) {
 TEST(RasterMatch, SlicPathRespectsTransparentMaskPixels) {
     ColorDB db = MakeTwoColorDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
         Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(0, 0, 0),
@@ -112,7 +112,7 @@ TEST(RasterMatch, SlicPathRespectsTransparentMaskPixels) {
 TEST(RasterMatch, SlicTargetSuperpixelsOneFallsBackToPerPixelMatching) {
     ColorDB db = MakeTwoColorDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
         Rgb::FromRgb255(255, 255, 255),
@@ -135,7 +135,7 @@ TEST(RasterMatch, SlicTargetSuperpixelsOneFallsBackToPerPixelMatching) {
 TEST(RasterMatch, KMeansAndSlicBothProduceValidClusterStats) {
     ColorDB db = MakeTwoColorDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
         Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(255, 255, 255),

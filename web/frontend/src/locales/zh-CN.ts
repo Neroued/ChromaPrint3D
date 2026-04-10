@@ -170,6 +170,7 @@ export default {
     layerHeightMm: '层高 (mm)',
     flipY: '垂直翻转',
     colorMatching: '颜色匹配',
+    colorLayers: '叠色层数',
     colorSpace: '色彩空间',
     kCandidates: 'K 候选数',
     iterations: '迭代次数',
@@ -195,8 +196,7 @@ export default {
     sessionSuffix: ' (自定义)',
     loadConfigFailed: '加载配置失败',
     tooltips: {
-      print_mode:
-        '决定色层数和层高。0.08mm x 5 层: 层高 0.08mm，5 层叠色；0.04mm x 10 层: 层高 0.04mm，10 层叠色。两者总叠色厚度相同 (0.4mm)',
+      color_layers: '叠色层数，默认 5 层。更多层可改善浅色（如肤色）表现，但会增加打印时间和厚度',
       color_space: '颜色匹配时使用的色彩空间。Lab 更符合人眼感知（推荐）；RGB 为直接 RGB 距离计算',
       max_width: '图像缩放后的最大宽度（像素），超出时等比缩小。值越小处理越快，输出模型越小',
       max_height: '图像缩放后的最大高度（像素），超出时等比缩小。值越小处理越快，输出模型越小',

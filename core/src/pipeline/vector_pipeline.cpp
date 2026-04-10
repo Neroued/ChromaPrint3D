@@ -76,6 +76,13 @@ std::size_t MatchVectorResult::EstimateBytes() const {
     return bytes;
 }
 
+void MatchVectorResult::UpgradeColorLayers(int new_color_layers) {
+    if (new_color_layers <= recipe_map.color_layers) return;
+    auto pad = static_cast<uint8_t>(profile.base_channel_idx);
+    recipe_map.UpgradeColorLayers(new_color_layers, pad);
+    profile.color_layers = new_color_layers;
+}
+
 MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallback progress) {
     spdlog::info("MatchVector started: svg={}, dbs={}",
                  request.svg_path.empty() ? "(buffer)" : request.svg_path,
@@ -113,8 +120,9 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
         fil_config.emplace(FilamentConfig::LoadFromDir(request.preset_dir));
     }
 
-    PrintProfile profile     = PrintProfile::BuildFromColorDBs(all_dbs, request.print_mode,
-                                                           fil_config ? &*fil_config : nullptr);
+    PrintProfile profile =
+        PrintProfile::BuildFromColorDBs(all_dbs, request.color_layers, request.layer_height_mm,
+                                        fil_config ? &*fil_config : nullptr);
     profile.nozzle_size      = request.nozzle_size;
     profile.face_orientation = request.face_orientation;
 

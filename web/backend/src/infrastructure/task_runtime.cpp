@@ -800,6 +800,10 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
         auto& rmap   = *cp->raster_region_map;
 
         try {
+            const int new_layers = static_cast<int>(new_recipe.size());
+            if (new_layers > mstate.recipe_map.color_layers) {
+                mstate.UpgradeColorLayers(new_layers);
+            }
             mstate.recipe_map.ReplaceRecipeInRegions(rmap, target_region_ids, new_recipe,
                                                      new_mapped_color, new_from_model);
         } catch (const std::exception& e) {
@@ -828,6 +832,10 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
         auto& vstate = *cp->vector_match_state;
 
         try {
+            const int new_layers = static_cast<int>(new_recipe.size());
+            if (new_layers > vstate.recipe_map.color_layers) {
+                vstate.UpgradeColorLayers(new_layers);
+            }
             vstate.recipe_map.ReplaceRecipeForEntries(target_region_ids, new_recipe,
                                                       new_mapped_color, new_from_model);
         } catch (const std::exception& e) {

@@ -14,14 +14,14 @@ namespace ChromaPrint3D {
 
 struct CalibrationRecipeSpec {
     int num_channels       = 4;
-    int color_layers       = 5; // 允许 5 或 10
+    int color_layers       = 5;
     LayerOrder layer_order = LayerOrder::Top2Bottom;
 
-    static constexpr int kMinChannels      = 2;
-    static constexpr int kMaxChannels      = 8;
-    static constexpr int kFixedColorLayers = 5;
-    static constexpr int kAltColorLayers   = 10;
-    static constexpr int kMaxRecipes       = 1024;
+    static constexpr int kMinChannels    = 2;
+    static constexpr int kMaxChannels    = 8;
+    static constexpr int kMinColorLayers = 1;
+    static constexpr int kMaxColorLayers = 20;
+    static constexpr int kMaxRecipes     = 1024;
 
     size_t NumRecipes() const {
         if (num_channels <= 0 || color_layers <= 0) { return 0; }
@@ -31,7 +31,7 @@ struct CalibrationRecipeSpec {
     }
 
     bool IsSupported() const {
-        if (color_layers != kFixedColorLayers && color_layers != kAltColorLayers) { return false; }
+        if (color_layers < kMinColorLayers || color_layers > kMaxColorLayers) { return false; }
         if (num_channels < kMinChannels || num_channels > kMaxChannels) { return false; }
         return true;
     }

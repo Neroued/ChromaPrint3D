@@ -63,14 +63,13 @@ ModelPackage MakeSingleCandidateModel(const PrintProfile& profile, uint8_t recip
         pack.channel_keys.push_back(channel.color + "|" + channel.material);
     }
 
-    ModelModePackage mode;
-    mode.mode            = profile.mode;
-    mode.layer_height_mm = profile.layer_height_mm;
-    mode.color_layers    = profile.color_layers;
-    mode.layer_order     = profile.layer_order;
-    mode.candidate_recipes.assign(static_cast<std::size_t>(profile.color_layers), recipe_channel);
-    mode.pred_lab.push_back(pred_lab);
-    pack.modes.push_back(std::move(mode));
+    ModelLayerPackage lpkg;
+    lpkg.layer_height_mm = profile.layer_height_mm;
+    lpkg.color_layers    = profile.color_layers;
+    lpkg.layer_order     = profile.layer_order;
+    lpkg.candidate_recipes.assign(static_cast<std::size_t>(profile.color_layers), recipe_channel);
+    lpkg.pred_lab.push_back(pred_lab);
+    pack.layer_packages.push_back(std::move(lpkg));
     return pack;
 }
 
@@ -79,7 +78,7 @@ ModelPackage MakeSingleCandidateModel(const PrintProfile& profile, uint8_t recip
 TEST(VectorMatch, RemapsRecipeToProfilePaletteOrder) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
     VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(255, 255, 255));
 
     MatchConfig cfg;
@@ -98,7 +97,7 @@ TEST(VectorMatch, RemapsRecipeToProfilePaletteOrder) {
 TEST(VectorMatch, ModelOnlyUsesModelRecipeForVectorSolidColor) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
     VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(255, 255, 255));
 
     const int black_idx = FindChannelIndexByName(profile, "Black");
@@ -125,7 +124,7 @@ TEST(VectorMatch, ModelOnlyUsesModelRecipeForVectorSolidColor) {
 TEST(VectorMatch, ThresholdFallbackUsesModelWhenEnabled) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
     VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(128, 128, 128));
 
     const int black_idx = FindChannelIndexByName(profile, "Black");
@@ -156,7 +155,7 @@ TEST(VectorMatch, ThresholdFallbackUsesModelWhenEnabled) {
 TEST(VectorMatch, HighThresholdKeepsDbResultWithoutModelQuery) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
-    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, PrintMode::Mode0p08x5);
+    PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
     VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(128, 128, 128));
 
     const int black_idx = FindChannelIndexByName(profile, "Black");

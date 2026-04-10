@@ -63,7 +63,6 @@ int main(int argc, char* argv[]) {
     }
 
     PrintProfile profile;
-    profile.mode             = PrintMode::Mode0p08x5;
     profile.layer_height_mm  = 0.08f;
     profile.color_layers     = 5;
     profile.line_width_mm    = 0.42f;

@@ -27,7 +27,7 @@ describe('convert flow smoke', () => {
     appStore.setInputType('raster')
     appStore.setParams({
       db_names: ['db-a'],
-      print_mode: '0.08x5',
+      color_layers: 5,
       color_space: 'lab',
       target_width_mm: 120,
       target_height_mm: 100,

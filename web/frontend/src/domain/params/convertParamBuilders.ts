@@ -2,7 +2,7 @@ import type { ConvertAnyParams, ConvertRasterParams, ConvertVectorParams } from 
 
 const RASTER_FIELDS: Array<keyof ConvertRasterParams> = [
   'db_names',
-  'print_mode',
+  'color_layers',
   'color_space',
   'max_width',
   'max_height',
@@ -33,7 +33,7 @@ const RASTER_FIELDS: Array<keyof ConvertRasterParams> = [
 
 const VECTOR_FIELDS: Array<keyof ConvertVectorParams> = [
   'db_names',
-  'print_mode',
+  'color_layers',
   'color_space',
   'target_width_mm',
   'target_height_mm',

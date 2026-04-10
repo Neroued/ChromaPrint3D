@@ -5,7 +5,7 @@ import type { ConvertAnyParams } from '../../types'
 describe('convertParamBuilders', () => {
   const input: ConvertAnyParams = {
     db_names: ['db-a'],
-    print_mode: '0.08x5',
+    color_layers: 5,
     color_space: 'lab',
     max_width: 512,
     max_height: 512,

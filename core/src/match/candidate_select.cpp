@@ -118,9 +118,8 @@ std::optional<PreparedModel> PrepareModel(const ModelPackage* model_package,
                                           const ModelGateConfig& model_gate,
                                           const PrintProfile& profile) {
     if (!model_package || (!model_gate.enable && !model_gate.model_only)) { return std::nullopt; }
-    const ModelModePackage* mode = model_package->FindMode(profile.mode);
+    const ModelLayerPackage* mode = model_package->FindByColorLayers(profile.color_layers);
     if (!mode) { return std::nullopt; }
-    if (mode->color_layers != profile.color_layers) { return std::nullopt; }
     if (!NearlyEqual(mode->layer_height_mm, profile.layer_height_mm)) { return std::nullopt; }
     if (mode->layer_order != profile.layer_order) { return std::nullopt; }
     if (mode->NumCandidates() == 0) { return std::nullopt; }

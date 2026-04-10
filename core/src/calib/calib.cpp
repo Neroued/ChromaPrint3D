@@ -36,6 +36,11 @@ constexpr uint16_t kInvalidRecipeIdx = 0xFFFF;
 
 static void ValidateConfig(const CalibrationBoardConfig& cfg) {
     if (!cfg.recipe.IsSupported()) { throw ConfigError("Calibration recipe is not supported"); }
+    if (cfg.recipe.NumRecipes() > CalibrationRecipeSpec::kMaxRecipes) {
+        throw ConfigError("Recipe count (" + std::to_string(cfg.recipe.NumRecipes()) +
+                          ") exceeds maximum (" +
+                          std::to_string(CalibrationRecipeSpec::kMaxRecipes) + ")");
+    }
     if (!cfg.palette.empty() && static_cast<int>(cfg.palette.size()) != cfg.recipe.num_channels) {
         throw ConfigError("Calibration palette size does not match num_channels");
     }

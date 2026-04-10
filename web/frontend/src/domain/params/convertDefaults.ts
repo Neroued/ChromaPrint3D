@@ -16,7 +16,7 @@ export function createInitialConvertParams({
   dbNames,
 }: InitialConvertParamsArgs): ConvertAnyParams {
   return {
-    print_mode: defaults.print_mode,
+    color_layers: defaults.color_layers,
     color_space: defaults.color_space,
     max_width: 0,
     max_height: 0,

@@ -30,12 +30,6 @@ std::string ToLowerAscii(std::string value) {
     return value;
 }
 
-PrintMode ParsePrintMode(const std::string& value) {
-    if (value == "0.08x5" || value == "0p08x5") return PrintMode::Mode0p08x5;
-    if (value == "0.04x10" || value == "0p04x10") return PrintMode::Mode0p04x10;
-    throw std::runtime_error("Invalid print_mode: " + value);
-}
-
 ColorSpace ParseColorSpace(const std::string& value) {
     const std::string lowered = ToLowerAscii(value);
     if (lowered == "lab") return ColorSpace::Lab;
@@ -151,7 +145,7 @@ ServiceResult ServerFacade::ConvertDefaults() const {
                  {"max_height", defaults.max_height},
                  {"target_width_mm", defaults.target_width_mm},
                  {"target_height_mm", defaults.target_height_mm},
-                 {"print_mode", "0.08x5"},
+                 {"color_layers", defaults.color_layers},
                  {"color_space", "lab"},
                  {"k_candidates", defaults.k_candidates},
                  {"cluster_method", ClusterMethodToString(defaults.cluster_method)},
@@ -1340,8 +1334,18 @@ ServiceResult ServerFacade::BuildRasterRequest(const json& params,
         if (params.contains("target_height_mm")) {
             out.target_height_mm = params["target_height_mm"].get<float>();
         }
+        if (params.contains("color_layers")) {
+            out.color_layers = params["color_layers"].get<int>();
+        }
         if (params.contains("print_mode")) {
-            out.print_mode = ParsePrintMode(params["print_mode"].get<std::string>());
+            const std::string pm = params["print_mode"].get<std::string>();
+            if (pm == "0.08x5" || pm == "0p08x5") {
+                out.color_layers    = 5;
+                out.layer_height_mm = 0.08f;
+            } else if (pm == "0.04x10" || pm == "0p04x10") {
+                out.color_layers    = 10;
+                out.layer_height_mm = 0.04f;
+            }
         }
         if (params.contains("color_space")) {
             out.color_space = ParseColorSpace(params["color_space"].get<std::string>());
@@ -1484,8 +1488,18 @@ ServiceResult ServerFacade::BuildVectorRequest(const json& params, const std::ve
         if (params.contains("target_height_mm")) {
             out.target_height_mm = params["target_height_mm"].get<float>();
         }
+        if (params.contains("color_layers")) {
+            out.color_layers = params["color_layers"].get<int>();
+        }
         if (params.contains("print_mode")) {
-            out.print_mode = ParsePrintMode(params["print_mode"].get<std::string>());
+            const std::string pm = params["print_mode"].get<std::string>();
+            if (pm == "0.08x5" || pm == "0p08x5") {
+                out.color_layers    = 5;
+                out.layer_height_mm = 0.08f;
+            } else if (pm == "0.04x10" || pm == "0p04x10") {
+                out.color_layers    = 10;
+                out.layer_height_mm = 0.04f;
+            }
         }
         if (params.contains("color_space")) {
             out.color_space = ParseColorSpace(params["color_space"].get<std::string>());

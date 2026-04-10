@@ -104,6 +104,13 @@ std::size_t MatchRasterResult::EstimateBytes() const {
     return bytes;
 }
 
+void MatchRasterResult::UpgradeColorLayers(int new_color_layers) {
+    if (new_color_layers <= recipe_map.color_layers) return;
+    auto pad = static_cast<uint8_t>(profile.base_channel_idx);
+    recipe_map.UpgradeColorLayers(new_color_layers, pad);
+    profile.color_layers = new_color_layers;
+}
+
 // ── MatchRaster: stages 1-3 (load → preprocess → match) ─────────────────────
 
 MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallback progress) {
@@ -146,8 +153,9 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
         fil_config.emplace(FilamentConfig::LoadFromDir(request.preset_dir));
     }
 
-    PrintProfile profile     = PrintProfile::BuildFromColorDBs(dbs_ref, request.print_mode,
-                                                           fil_config ? &*fil_config : nullptr);
+    PrintProfile profile =
+        PrintProfile::BuildFromColorDBs(dbs_ref, request.color_layers, request.layer_height_mm,
+                                        fil_config ? &*fil_config : nullptr);
     profile.nozzle_size      = request.nozzle_size;
     profile.face_orientation = request.face_orientation;
 
@@ -308,7 +316,7 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
     }
 
     // === Generate layer previews ===
-    result.layer_previews.layers      = mr.profile.color_layers;
+    result.layer_previews.layers      = mr.recipe_map.color_layers;
     result.layer_previews.width       = mr.input_width;
     result.layer_previews.height      = mr.input_height;
     result.layer_previews.layer_order = mr.profile.layer_order;
@@ -318,13 +326,13 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
         result.layer_previews.palette.push_back(
             LayerPreviewChannel{static_cast<int>(i), channel.color, channel.material});
     }
-    result.layer_previews.layer_pngs.resize(static_cast<std::size_t>(mr.profile.color_layers));
+    result.layer_previews.layer_pngs.resize(static_cast<std::size_t>(mr.recipe_map.color_layers));
     std::atomic<bool> has_layer_preview_error{false};
     std::string layer_preview_error_message;
 #ifdef _OPENMP
 #    pragma omp parallel for schedule(dynamic)
 #endif
-    for (int layer_idx = 0; layer_idx < mr.profile.color_layers; ++layer_idx) {
+    for (int layer_idx = 0; layer_idx < mr.recipe_map.color_layers; ++layer_idx) {
         if (has_layer_preview_error.load(std::memory_order_relaxed)) { continue; }
 
         try {

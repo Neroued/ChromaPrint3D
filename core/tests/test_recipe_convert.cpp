@@ -11,14 +11,12 @@ using namespace ChromaPrint3D::detail;
 
 static PrintProfile MakeTestProfile() {
     PrintProfile profile;
-    profile.mode                   = PrintMode::Mode0p08x5;
-    profile.max_color_thickness_mm = 0.4f;
-    profile.layer_height_mm        = 0.08f;
-    profile.color_layers           = 5;
-    profile.line_width_mm          = 0.42f;
-    profile.base_layers            = 3;
-    profile.base_channel_idx       = 0;
-    profile.layer_order            = LayerOrder::Top2Bottom;
+    profile.layer_height_mm  = 0.08f;
+    profile.color_layers     = 5;
+    profile.line_width_mm    = 0.42f;
+    profile.base_layers      = 3;
+    profile.base_channel_idx = 0;
+    profile.layer_order      = LayerOrder::Top2Bottom;
 
     Channel white{"White", "PLA"};
     Channel red{"Red", "PLA"};

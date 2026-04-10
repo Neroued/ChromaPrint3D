@@ -204,8 +204,7 @@ core/
 | `RecipeMap` | 匹配结果：逐像素配方 + 映射色值 + 源掩码 |
 | `MatchConfig` | 匹配参数（候选数、色彩空间、聚类方法、SLIC/KMeans 参数） |
 | `MatchStats` | 匹配统计（聚类总数、DB 命中、模型回退等） |
-| `PrintProfile` | 打印配置（模式、层高、颜色层数、调色板） |
-| `PrintMode` | 打印模式枚举（0.08mm x 5层 / 0.04mm x 10层） |
+| `PrintProfile` | 打印配置（层高、颜色层数、调色板），颜色层数可自由配置（默认 5 层） |
 | `ModelPackage` | ML 模型包，包含预计算的候选配方和预测 Lab 值 |
 | `ModelGateConfig` | 模型门控配置（阈值、边际、启用标志） |
 

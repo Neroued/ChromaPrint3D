@@ -1,7 +1,7 @@
 #pragma once
 
 /// \file print_profile.h
-/// \brief Print mode enumeration and print profile configuration.
+/// \brief Print profile configuration.
 
 #include "common.h"
 #include "color_db.h"
@@ -16,19 +16,13 @@ namespace ChromaPrint3D {
 
 struct FilamentConfig;
 
-/// Supported multi-color print modes.
-enum class PrintMode : uint8_t {
-    Mode0p08x5  = 0, ///< 0.08 mm layer height, 5 color layers.
-    Mode0p04x10 = 1, ///< 0.04 mm layer height, 10 color layers.
-};
-
 /// Describes a complete printing configuration derived from one or more ColorDBs.
 struct PrintProfile {
-    PrintMode mode = PrintMode::Mode0p08x5;
+    static constexpr int kDefaultColorLayers = 5;
+    static constexpr int kSoftMaxColorLayers = 10;
 
-    float max_color_thickness_mm = 0.4f;
-    float layer_height_mm        = 0.08f;
-    int color_layers             = 5;
+    float layer_height_mm = 0.08f;
+    int color_layers      = kDefaultColorLayers;
 
     float line_width_mm = 0.42f;
 
@@ -50,9 +44,12 @@ struct PrintProfile {
     /// Convert this profile into a ColorDB (no entries, metadata only).
     ColorDB ToColorDB(const std::string& name = "PrintProfileDB") const;
 
-    /// Merge multiple ColorDBs into a unified print profile for the given mode.
+    /// Merge multiple ColorDBs into a unified print profile.
+    /// \p color_layers is the user-selected quality parameter (default 5).
+    /// \p layer_height_mm controls the physical layer height (0 = derive from first DB).
     /// If \p config is non-null, uses its color table for hex resolution.
-    static PrintProfile BuildFromColorDBs(std::span<const ColorDB> dbs, PrintMode mode,
+    static PrintProfile BuildFromColorDBs(std::span<const ColorDB> dbs, int color_layers,
+                                          float layer_height_mm        = 0.0f,
                                           const FilamentConfig* config = nullptr);
 
     /// Keep only channels whose normalized key is in \p allowed_keys.
