@@ -67,7 +67,10 @@ watch(patternInput, (val) => {
   if (patternDebounceTimer) clearTimeout(patternDebounceTimer)
   patternDebounceTimer = setTimeout(() => {
     const trimmed = val.trim()
-    if (trimmed && validateRecipePattern(trimmed, props.palette) !== null) return
+    if (trimmed && validateRecipePattern(trimmed, props.palette) !== null) {
+      activePattern.value = ''
+      return
+    }
     activePattern.value = trimmed
   }, 300)
 })

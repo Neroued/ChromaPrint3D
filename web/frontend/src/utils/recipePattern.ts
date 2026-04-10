@@ -49,7 +49,9 @@ export function validateRecipePattern(pattern: string, palette: PaletteChannel[]
       if (!letterMap.has(ch.toUpperCase())) {
         return ch
       }
+      continue
     }
+    return ch
   }
   return null
 }

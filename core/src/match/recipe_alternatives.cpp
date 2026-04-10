@@ -100,20 +100,18 @@ RecipePattern ParseRecipePattern(const std::string& pattern, const std::vector<C
             auto it    = letter_map.find(upper);
             if (it == letter_map.end()) { return {}; }
             result.tokens.push_back({PatternTokenKind::Letter, it->second});
+        } else {
+            return {};
         }
-        // Ignore other characters.
     }
 
     if (result.tokens.empty()) { return result; }
 
-    // Implicit trailing * when pattern has no explicit * and fewer fixed tokens
-    // than color_layers.
     if (!has_multi_wild) {
-        int fixed_count = 0;
-        for (const auto& tok : result.tokens) {
-            if (tok.kind != PatternTokenKind::MultiWild) { ++fixed_count; }
-        }
-        if (fixed_count < color_layers) {
+        int fixed_count = static_cast<int>(result.tokens.size());
+        if (fixed_count > color_layers) {
+            result.tokens.resize(static_cast<std::size_t>(color_layers));
+        } else if (fixed_count < color_layers) {
             result.tokens.push_back({PatternTokenKind::MultiWild, {}});
         }
     }
