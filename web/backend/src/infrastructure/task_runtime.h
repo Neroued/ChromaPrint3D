@@ -169,7 +169,8 @@ public:
     std::optional<nlohmann::json>
     QueryRecipeAlternatives(const std::string& owner, const std::string& id,
                             const ChromaPrint3D::Lab& target_lab, int max_candidates, int offset,
-                            const ChromaPrint3D::ModelPackage* model_pack);
+                            const ChromaPrint3D::ModelPackage* model_pack,
+                            const std::string& recipe_pattern = "");
 
     bool ReplaceRecipe(const std::string& owner, const std::string& id,
                        const std::vector<int>& target_region_ids,

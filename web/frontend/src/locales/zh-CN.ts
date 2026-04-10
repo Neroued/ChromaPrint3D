@@ -756,6 +756,9 @@ export default {
       metricH: '色调差',
       eyeDropper: '从屏幕取色',
       clearCustomColor: '使用选区颜色',
+      patternPlaceholder: '层色搜索',
+      patternTooltip: '按层颜色搜索配方。字母=颜色首字母，?=任意单层，*=任意多层，-=分隔符（可选）',
+      patternInvalidChar: '无法识别的字符：{char}',
     },
   },
 }

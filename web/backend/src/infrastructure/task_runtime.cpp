@@ -693,7 +693,8 @@ std::optional<nlohmann::json> TaskRuntime::GetRecipeEditorSummary(const std::str
 std::optional<nlohmann::json>
 TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string& id,
                                      const ChromaPrint3D::Lab& target_lab, int max_candidates,
-                                     int offset, const ChromaPrint3D::ModelPackage* model_pack) {
+                                     int offset, const ChromaPrint3D::ModelPackage* model_pack,
+                                     const std::string& recipe_pattern) {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
@@ -718,8 +719,20 @@ TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string
             dbs, profile, match_config, model_pack, model_gate_c);
     }
 
-    auto candidates = ChromaPrint3D::FindAlternativeRecipes(target_lab, cp->recipe_search_cache,
-                                                            max_candidates, offset);
+    std::vector<ChromaPrint3D::RecipeCandidate> candidates;
+
+    if (!recipe_pattern.empty()) {
+        auto pattern =
+            ChromaPrint3D::ParseRecipePattern(recipe_pattern, cp->recipe_search_cache.Palette(),
+                                              cp->recipe_search_cache.ColorLayers());
+        if (!pattern.Empty()) {
+            candidates = ChromaPrint3D::FindRecipesByPattern(
+                pattern, target_lab, cp->recipe_search_cache, max_candidates, offset);
+        }
+    } else {
+        candidates = ChromaPrint3D::FindAlternativeRecipes(target_lab, cp->recipe_search_cache,
+                                                           max_candidates, offset);
+    }
 
     it->second.snapshot.completed_at = std::chrono::steady_clock::now();
 

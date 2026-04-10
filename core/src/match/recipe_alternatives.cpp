@@ -4,13 +4,125 @@
 #include "detail/recipe_convert.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace ChromaPrint3D {
+
+// ── RecipePattern ───────────────────────────────────────────────────────────
+
+bool RecipePattern::Matches(const std::vector<uint8_t>& recipe) const {
+    return Matches(recipe.data(), static_cast<int>(recipe.size()));
+}
+
+bool RecipePattern::Matches(const uint8_t* recipe, int color_layers) const {
+    if (tokens.empty() || color_layers <= 0 || !recipe) { return false; }
+
+    const int tn = static_cast<int>(tokens.size());
+    const int rn = color_layers;
+
+    // Glob-style matching via dual-pointer with backtracking.
+    int ti = 0, ri = 0;
+    int star_ti = -1, star_ri = -1;
+
+    while (ri < rn) {
+        if (ti < tn && tokens[static_cast<std::size_t>(ti)].kind == PatternTokenKind::Letter) {
+            const auto& allowed = tokens[static_cast<std::size_t>(ti)].allowed_channels;
+            bool found = std::find(allowed.begin(), allowed.end(), recipe[ri]) != allowed.end();
+            if (found) {
+                ++ti;
+                ++ri;
+                continue;
+            }
+        } else if (ti < tn &&
+                   tokens[static_cast<std::size_t>(ti)].kind == PatternTokenKind::SingleWild) {
+            ++ti;
+            ++ri;
+            continue;
+        } else if (ti < tn &&
+                   tokens[static_cast<std::size_t>(ti)].kind == PatternTokenKind::MultiWild) {
+            star_ti = ti;
+            star_ri = ri;
+            ++ti;
+            continue;
+        }
+
+        if (star_ti >= 0) {
+            ti = star_ti + 1;
+            ++star_ri;
+            ri = star_ri;
+            continue;
+        }
+
+        return false;
+    }
+
+    while (ti < tn && tokens[static_cast<std::size_t>(ti)].kind == PatternTokenKind::MultiWild) {
+        ++ti;
+    }
+    return ti == tn;
+}
+
+RecipePattern ParseRecipePattern(const std::string& pattern, const std::vector<Channel>& palette,
+                                 int color_layers) {
+    RecipePattern result;
+    if (pattern.empty()) { return result; }
+
+    // Build letter → channel indices map (first character of color name, uppercased).
+    std::unordered_map<char, std::vector<uint8_t>> letter_map;
+    for (std::size_t i = 0; i < palette.size(); ++i) {
+        if (palette[i].color.empty()) { continue; }
+        char key = static_cast<char>(std::toupper(static_cast<unsigned char>(palette[i].color[0])));
+        letter_map[key].push_back(static_cast<uint8_t>(i));
+    }
+
+    bool has_multi_wild = false;
+
+    for (char ch : pattern) {
+        if (ch == '-') { continue; }
+
+        if (ch == '*') {
+            has_multi_wild = true;
+            if (!result.tokens.empty() &&
+                result.tokens.back().kind == PatternTokenKind::MultiWild) {
+                continue; // collapse consecutive *
+            }
+            result.tokens.push_back({PatternTokenKind::MultiWild, {}});
+        } else if (ch == '?') {
+            result.tokens.push_back({PatternTokenKind::SingleWild, {}});
+        } else if (std::isalpha(static_cast<unsigned char>(ch))) {
+            char upper = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            auto it    = letter_map.find(upper);
+            if (it == letter_map.end()) { return {}; }
+            result.tokens.push_back({PatternTokenKind::Letter, it->second});
+        }
+        // Ignore other characters.
+    }
+
+    if (result.tokens.empty()) { return result; }
+
+    // Implicit trailing * when pattern has no explicit * and fewer fixed tokens
+    // than color_layers.
+    if (!has_multi_wild) {
+        int fixed_count = 0;
+        for (const auto& tok : result.tokens) {
+            if (tok.kind != PatternTokenKind::MultiWild) { ++fixed_count; }
+        }
+        if (fixed_count < color_layers) {
+            result.tokens.push_back({PatternTokenKind::MultiWild, {}});
+        }
+    }
+
+    return result;
+}
+
+// ── Shared helpers ──────────────────────────────────────────────────────────
+
 namespace {
 
 std::string RecipeToKey(const std::vector<uint8_t>& recipe) {
@@ -151,6 +263,13 @@ RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB> dbs,
 
 bool RecipeSearchCache::IsValid() const { return impl_ && !impl_->prepared_dbs.empty(); }
 
+const std::vector<Channel>& RecipeSearchCache::Palette() const {
+    static const std::vector<Channel> kEmpty;
+    return impl_ ? impl_->profile.palette : kEmpty;
+}
+
+int RecipeSearchCache::ColorLayers() const { return impl_ ? impl_->profile.color_layers : 0; }
+
 // ── FindAlternativeRecipes (uncached) ────────────────────────────────────────
 
 std::vector<RecipeCandidate>
@@ -198,6 +317,94 @@ std::vector<RecipeCandidate> FindAlternativeRecipes(const Lab& target_color,
     }
 
     return CollectAndRank(target_color, raw, max_candidates, offset);
+}
+
+// ── FindRecipesByPattern ────────────────────────────────────────────────────
+
+std::vector<RecipeCandidate> FindRecipesByPattern(const RecipePattern& pattern,
+                                                  const Lab& target_color,
+                                                  const RecipeSearchCache& cache,
+                                                  int max_candidates, int offset) {
+    if (pattern.Empty() || !cache.impl_) { return {}; }
+    const auto& impl       = *cache.impl_;
+    const int color_layers = impl.profile.color_layers;
+
+    std::vector<RawCandidate> raw;
+    std::unordered_set<std::string> seen;
+    raw.reserve(1024);
+
+    // Scan all DB entries.
+    for (const auto& pdb : impl.prepared_dbs) {
+        const ColorDB* search_db = pdb.filtered_db ? pdb.filtered_db.get() : pdb.db;
+        if (!search_db || search_db->entries.empty()) { continue; }
+
+        for (const Entry& entry : search_db->entries) {
+            std::vector<uint8_t> mapped_recipe;
+            if (!detail::ConvertRecipeToProfile(entry, pdb, impl.profile, mapped_recipe)) {
+                continue;
+            }
+            if (!pattern.Matches(mapped_recipe.data(), color_layers)) { continue; }
+
+            std::string key = RecipeToKey(mapped_recipe);
+            if (seen.count(key)) { continue; }
+            seen.insert(std::move(key));
+
+            raw.push_back({std::move(mapped_recipe), entry.lab, false});
+        }
+    }
+
+    // Scan model candidates.
+    if (impl.prepared_model) {
+        const auto& model = *impl.prepared_model;
+        for (std::size_t i = 0; i < model.NumCandidates(); ++i) {
+            const uint8_t* recipe_ptr = model.RecipeAt(i);
+            if (!recipe_ptr) { continue; }
+            if (!pattern.Matches(recipe_ptr, color_layers)) { continue; }
+
+            std::vector<uint8_t> recipe(recipe_ptr, recipe_ptr + color_layers);
+            std::string key = RecipeToKey(recipe);
+            if (seen.count(key)) { continue; }
+            seen.insert(std::move(key));
+
+            raw.push_back({std::move(recipe), model.pred_lab[i], true});
+        }
+    }
+
+    // Rank by DeltaE76 with partial sort for efficiency.
+    const std::size_t needed =
+        static_cast<std::size_t>(std::max(0, offset)) + static_cast<std::size_t>(max_candidates);
+
+    std::vector<RecipeCandidate> candidates;
+    candidates.reserve(raw.size());
+    for (auto& r : raw) {
+        RecipeCandidate c;
+        c.recipe          = std::move(r.recipe);
+        c.predicted_color = r.predicted_color;
+        c.delta_e76       = Lab::DeltaE76(target_color, r.predicted_color);
+        c.lightness_diff  = std::abs(target_color.l() - r.predicted_color.l());
+        c.hue_diff        = ComputeHueDiff(target_color, r.predicted_color);
+        c.from_model      = r.from_model;
+        candidates.push_back(std::move(c));
+    }
+
+    const auto cmp = [](const RecipeCandidate& a, const RecipeCandidate& b) {
+        return a.delta_e76 < b.delta_e76;
+    };
+
+    if (needed < candidates.size()) {
+        std::partial_sort(candidates.begin(),
+                          candidates.begin() + static_cast<std::ptrdiff_t>(needed),
+                          candidates.end(), cmp);
+    } else {
+        std::sort(candidates.begin(), candidates.end(), cmp);
+    }
+
+    const std::size_t start = static_cast<std::size_t>(std::max(0, offset));
+    if (start >= candidates.size()) { return {}; }
+    const std::size_t end =
+        std::min(candidates.size(), start + static_cast<std::size_t>(max_candidates));
+    return {std::make_move_iterator(candidates.begin() + static_cast<std::ptrdiff_t>(start)),
+            std::make_move_iterator(candidates.begin() + static_cast<std::ptrdiff_t>(end))};
 }
 
 } // namespace ChromaPrint3D

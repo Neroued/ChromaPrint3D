@@ -49,7 +49,7 @@
 `POST /api/v1/convert/raster/match-only` 提交 match-only 任务，完成颜色匹配但不生成 3MF。任务完成后通过以下端点进行配方编辑：
 
 - `GET /api/v1/tasks/{id}/recipe-editor/summary`：获取配方摘要（区域列表、唯一配方、调色板）
-- `POST /api/v1/tasks/{id}/recipe-editor/alternatives`：查询候选替代配方
+- `POST /api/v1/tasks/{id}/recipe-editor/alternatives`：查询候选替代配方（支持可选 `recipe_pattern` 参数按层颜色模式过滤）
 - `POST /api/v1/tasks/{id}/recipe-editor/replace`：替换指定区域的配方
 - `POST /api/v1/tasks/{id}/recipe-editor/generate`：异步生成 3MF 模型
 

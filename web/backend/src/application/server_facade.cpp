@@ -629,11 +629,13 @@ ServiceResult ServerFacade::RecipeEditorAlternatives(const std::string& owner,
     int max_candidates = body.value("max_candidates", 10);
     int offset         = body.value("offset", 0);
 
+    std::string recipe_pattern = body.value("recipe_pattern", std::string{});
+
     const ChromaPrint3D::ModelPackage* model_pack = nullptr;
     if (data_.ModelPack().has_value()) { model_pack = &(*data_.ModelPack()); }
 
-    auto result =
-        tasks_.QueryRecipeAlternatives(owner, task_id, target, max_candidates, offset, model_pack);
+    auto result = tasks_.QueryRecipeAlternatives(owner, task_id, target, max_candidates, offset,
+                                                 model_pack, recipe_pattern);
     if (!result) return ServiceResult::Error(404, "not_found", "Alternatives not available");
     return ServiceResult::Success(200, {{"candidates", std::move(*result)}});
 }

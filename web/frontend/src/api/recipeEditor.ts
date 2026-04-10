@@ -42,17 +42,22 @@ export async function fetchRecipeAlternatives(
   targetLab: LabColor,
   maxCandidates = 10,
   offset = 0,
+  recipePattern?: string,
 ): Promise<RecipeCandidate[]> {
+  const payload: Record<string, unknown> = {
+    target_lab: targetLab,
+    max_candidates: maxCandidates,
+    offset,
+  }
+  if (recipePattern) {
+    payload.recipe_pattern = recipePattern
+  }
   const data = await request<{ candidates: RecipeCandidate[] }>(
     `/api/v1/tasks/${taskId}/recipe-editor/alternatives`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        target_lab: targetLab,
-        max_candidates: maxCandidates,
-        offset,
-      }),
+      body: JSON.stringify(payload),
     },
   )
   return data.candidates

@@ -761,6 +761,10 @@ export default {
       metricH: 'Hue',
       eyeDropper: 'Pick color from screen',
       clearCustomColor: 'Use Selection Color',
+      patternPlaceholder: 'Layer pattern',
+      patternTooltip:
+        'Search by layer colors. Letter=color initial, ?=any layer, *=any layers, -=separator (optional)',
+      patternInvalidChar: 'Unrecognized character: {char}',
     },
   },
 }

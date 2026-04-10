@@ -1,10 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NCard, NButton, NSpace, NText, NScrollbar, NSelect, NSpin, NColorPicker } from 'naive-ui'
+import {
+  NCard,
+  NButton,
+  NSpace,
+  NText,
+  NScrollbar,
+  NSelect,
+  NSpin,
+  NColorPicker,
+  NInput,
+  NTooltip,
+} from 'naive-ui'
 import type { RecipeCandidate, LabColor, PaletteChannel } from '../../types'
 import { fetchRecipeAlternatives } from '../../api/recipeEditor'
 import { hexToLab } from '../../utils/colorConvert'
+import { buildPaletteHint, validateRecipePattern } from '../../utils/recipePattern'
 import RecipeLayerBar from './RecipeLayerBar.vue'
 
 const props = defineProps<{
@@ -36,6 +48,40 @@ const effectiveTargetLab = computed<LabColor | null>(() => customTargetLab.value
 
 const PAGE_SIZE = 10
 
+// ── Recipe pattern search ────────────────────────────────────────────────────
+
+const patternInput = ref('')
+const activePattern = ref('')
+let patternDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const paletteHint = computed(() => buildPaletteHint(props.palette))
+
+const patternValidationError = computed(() => {
+  if (!patternInput.value) return null
+  const badChar = validateRecipePattern(patternInput.value, props.palette)
+  if (badChar === null) return null
+  return t('recipeEditor.candidates.patternInvalidChar', { char: badChar })
+})
+
+watch(patternInput, (val) => {
+  if (patternDebounceTimer) clearTimeout(patternDebounceTimer)
+  patternDebounceTimer = setTimeout(() => {
+    const trimmed = val.trim()
+    if (trimmed && validateRecipePattern(trimmed, props.palette) !== null) return
+    activePattern.value = trimmed
+  }, 300)
+})
+
+function onPatternInput() {
+  if (patternInput.value) {
+    customColorHex.value = null
+    customTargetLab.value = null
+    pickerValue.value = props.targetHex ?? '#FFFFFF'
+  }
+}
+
+// ── Color picker / custom color ──────────────────────────────────────────────
+
 const sortOptions = computed(() => [
   { label: t('recipeEditor.candidates.sortDeltaE'), value: 'delta_e76' },
   { label: t('recipeEditor.candidates.sortLightness'), value: 'lightness_diff' },
@@ -52,6 +98,8 @@ const sortedCandidates = computed(() => {
 function applyCustomColor(hex: string) {
   customColorHex.value = hex
   customTargetLab.value = hexToLab(hex)
+  patternInput.value = ''
+  activePattern.value = ''
 }
 
 function handlePickerComplete(hex: string) {
@@ -77,6 +125,8 @@ async function pickColorFromScreen() {
   }
 }
 
+// ── Load candidates ──────────────────────────────────────────────────────────
+
 async function loadCandidates(append = false) {
   const lab = effectiveTargetLab.value
   if (!lab || !props.taskId) return
@@ -84,7 +134,8 @@ async function loadCandidates(append = false) {
   error.value = null
   try {
     const offset = append ? candidates.value.length : 0
-    const result = await fetchRecipeAlternatives(props.taskId, lab, PAGE_SIZE, offset)
+    const pattern = activePattern.value || undefined
+    const result = await fetchRecipeAlternatives(props.taskId, lab, PAGE_SIZE, offset, pattern)
     if (append) {
       candidates.value = [...candidates.value, ...result]
     } else {
@@ -133,7 +184,7 @@ watch(
 )
 
 watch(
-  [effectiveTargetLab, () => props.taskId],
+  [effectiveTargetLab, activePattern, () => props.taskId],
   () => {
     candidates.value = []
     hasMore.value = false
@@ -166,7 +217,7 @@ function handleSelect(candidate: RecipeCandidate) {
       </NSpace>
     </template>
     <div v-if="targetLab" class="candidate-toolbar">
-      <NSpace :size="8" align="center">
+      <NSpace :size="8" align="center" wrap>
         <NColorPicker
           v-model:value="pickerValue"
           size="small"
@@ -203,6 +254,26 @@ function handleSelect(candidate: RecipeCandidate) {
         <NButton v-if="customColorHex" size="tiny" quaternary @click="clearCustomColor">
           {{ t('recipeEditor.candidates.clearCustomColor') }}
         </NButton>
+        <NTooltip :delay="400">
+          <template #trigger>
+            <NInput
+              v-model:value="patternInput"
+              size="small"
+              :placeholder="t('recipeEditor.candidates.patternPlaceholder')"
+              :status="patternValidationError ? 'error' : undefined"
+              clearable
+              style="width: 110px"
+              @input="onPatternInput"
+            />
+          </template>
+          <div style="font-size: 12px; max-width: 260px">
+            <div>{{ t('recipeEditor.candidates.patternTooltip') }}</div>
+            <div style="margin-top: 4px; font-family: monospace">{{ paletteHint }}</div>
+            <div v-if="patternValidationError" style="margin-top: 4px; color: #e88080">
+              {{ patternValidationError }}
+            </div>
+          </div>
+        </NTooltip>
       </NSpace>
     </div>
     <div ref="scrollWrapperRef" class="candidate-scroll-wrapper">
