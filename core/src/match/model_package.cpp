@@ -46,6 +46,13 @@ bool ModelPackage::MatchesScope(const std::string& vendor, const std::string& ma
     return scope.vendor == vendor && scope.material_type == material_type;
 }
 
+void ModelPackage::BuildIndex() {
+    mode_index_.clear();
+    for (size_t i = 0; i < layer_packages.size(); ++i) {
+        mode_index_.emplace(layer_packages[i].color_layers, i);
+    }
+}
+
 ModelPackage ModelPackage::Load(const std::string& path) {
     namespace fs = std::filesystem;
 

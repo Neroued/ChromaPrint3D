@@ -61,6 +61,10 @@ struct ModelPackage {
     /// Whether this package's scope matches the given vendor + material_type.
     bool MatchesScope(const std::string& vendor, const std::string& material_type) const;
 
+    /// Rebuild the internal color_layers → layer_packages index.
+    /// Called automatically by Load(); call manually after programmatic construction.
+    void BuildIndex();
+
 private:
     std::unordered_map<int, size_t> mode_index_; ///< color_layers -> layer_packages index
 };

@@ -70,6 +70,7 @@ ModelPackage MakeSingleCandidateModel(const PrintProfile& profile, uint8_t recip
     lpkg.candidate_recipes.assign(static_cast<std::size_t>(profile.color_layers), recipe_channel);
     lpkg.pred_lab.push_back(pred_lab);
     pack.layer_packages.push_back(std::move(lpkg));
+    pack.BuildIndex();
     return pack;
 }
 
