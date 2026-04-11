@@ -130,7 +130,7 @@ const SUB_TAB_VIRTUAL_URLS: Record<string, Record<string, string>> = {
 }
 
 function trackVirtualPageview(url: string) {
-  window.umami?.track((props) => ({ ...props, url }))
+  window.umami?.track((props: Record<string, unknown>) => ({ ...props, url }))
 }
 
 watch(activeTab, (tab) => {

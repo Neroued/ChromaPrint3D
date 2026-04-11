@@ -123,8 +123,10 @@ declare global {
   interface Window {
     electron?: ElectronRendererApi
     umami?: {
+      track(): void
       track(event: string, data?: Record<string, unknown>): void
       track(callback: () => { name: string; data?: Record<string, unknown> }): void
+      track(callback: (props: Record<string, unknown>) => Record<string, unknown>): void
     }
   }
 
