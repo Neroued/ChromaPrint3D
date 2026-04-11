@@ -34,13 +34,8 @@ namespace {
 
 constexpr uint16_t kInvalidRecipeIdx = 0xFFFF;
 
-static void ValidateConfig(const CalibrationBoardConfig& cfg) {
+static void ValidateConfigBase(const CalibrationBoardConfig& cfg) {
     if (!cfg.recipe.IsSupported()) { throw ConfigError("Calibration recipe is not supported"); }
-    if (cfg.recipe.NumRecipes() > CalibrationRecipeSpec::kMaxRecipes) {
-        throw ConfigError("Recipe count (" + std::to_string(cfg.recipe.NumRecipes()) +
-                          ") exceeds maximum (" +
-                          std::to_string(CalibrationRecipeSpec::kMaxRecipes) + ")");
-    }
     if (!cfg.palette.empty() && static_cast<int>(cfg.palette.size()) != cfg.recipe.num_channels) {
         throw ConfigError("Calibration palette size does not match num_channels");
     }
@@ -323,7 +318,12 @@ static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input, const Calibrati
 } // namespace
 
 CalibrationBoardMeta BuildCalibrationBoardMeta(const CalibrationBoardConfig& cfg) {
-    ValidateConfig(cfg);
+    ValidateConfigBase(cfg);
+    if (cfg.recipe.NumRecipes() > CalibrationRecipeSpec::kMaxRecipes) {
+        throw ConfigError("Recipe count (" + std::to_string(cfg.recipe.NumRecipes()) +
+                          ") exceeds maximum (" +
+                          std::to_string(CalibrationRecipeSpec::kMaxRecipes) + ")");
+    }
 
     CalibrationBoardMeta meta;
     meta.config = cfg;
@@ -354,7 +354,7 @@ CalibrationBoardMeta BuildCalibrationBoardMeta(const CalibrationBoardConfig& cfg
 CalibrationBoardMeta
 BuildCalibrationBoardMetaCustom(const CalibrationBoardConfig& cfg, int grid_rows, int grid_cols,
                                 const std::vector<std::vector<uint8_t>>& custom_recipes) {
-    ValidateConfig(cfg);
+    ValidateConfigBase(cfg);
     if (grid_rows <= 0 || grid_cols <= 0) { throw InputError("grid size must be positive"); }
 
     CalibrationBoardMeta meta;
@@ -583,7 +583,7 @@ struct BoardBuildResult {
 };
 
 static BoardBuildResult BuildBoardModel(const CalibrationBoardMeta& meta) {
-    ValidateConfig(meta.config);
+    ValidateConfigBase(meta.config);
     ValidateMetaRecipes(meta);
 
     const int grid_rows = meta.grid_rows;
