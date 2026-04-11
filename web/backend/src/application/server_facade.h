@@ -26,6 +26,11 @@ class ServerFacade {
 public:
     explicit ServerFacade(ServerConfig cfg);
 
+    ServerFacade(const ServerFacade&)            = delete;
+    ServerFacade& operator=(const ServerFacade&) = delete;
+    ServerFacade(ServerFacade&&)                 = delete;
+    ServerFacade& operator=(ServerFacade&&)      = delete;
+
     const ServerConfig& Config() const { return cfg_; }
 
     bool IsCrossOriginMode() const { return !cfg_.cors_origin.empty(); }

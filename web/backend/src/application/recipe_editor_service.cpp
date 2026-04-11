@@ -5,6 +5,8 @@
 #include "chromaprint3d/forward_color_model.h"
 #include "chromaprint3d/print_profile.h"
 
+#include <nlohmann/json.hpp>
+
 #include <cstdio>
 #include <vector>
 

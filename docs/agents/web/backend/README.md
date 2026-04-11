@@ -49,9 +49,9 @@
 1. 在对应领域的 `*_service.{h,cpp}` 中定义并实现服务方法。
 2. 在 `ServerFacade` 中添加委托方法（如需保持 Controller 不直接依赖子服务）。
 3. 在 `ApiV1Controller` 声明路由与处理函数。
-3. 复用统一 envelope：`{ok,data}` / `{ok,error}`。
-4. 若涉及会话，确认 cookie/header/query 的 token 识别链路不被破坏。
-5. 同步更新 [README.md](../../../../README.md) 与 [docs/development.md](../../../development.md) 的接口说明。
+4. 复用统一 envelope：`{ok,data}` / `{ok,error}`。
+5. 若涉及会话，确认 cookie/header/query 的 token 识别链路不被破坏。
+6. 同步更新 [README.md](../../../../README.md) 与 [docs/development.md](../../../development.md) 的接口说明。
 
 ## Bambu Studio 预设参数
 

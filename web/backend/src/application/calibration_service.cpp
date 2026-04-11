@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
+#include <system_error>
 
 namespace chromaprint3d::backend {
 
