@@ -19,21 +19,54 @@ function parseErrorMessage(payload: ApiErrorPayload | undefined, fallback: strin
   return payload.message ?? payload.code ?? fallback
 }
 
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+
+export function normalizeEndpoint(url: string): string {
+  return url
+    .replace(/^\/api\/v1\//, '')
+    .replace(UUID_RE, ':id')
+    .replace(/\/artifacts\/[^/?]+/, '/artifacts/:key')
+}
+
+export function isAutomatedRequest(url: string, method: string): boolean {
+  if (method === 'GET' && /^\/api\/v1\/tasks\/[^/]+$/.test(url)) return true
+  if (url === '/api/v1/health') return true
+  return false
+}
+
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetchWithSession(url, init)
+  const method = init?.method?.toUpperCase() ?? 'GET'
+  const shouldTrack = !isAutomatedRequest(url, method)
+  const start = shouldTrack ? performance.now() : 0
 
-  let envelope: ApiEnvelope<T> | null = null
+  let success = true
   try {
-    envelope = (await res.json()) as ApiEnvelope<T>
-  } catch {
-    // ignore parse errors, fallback to HTTP status
-  }
+    const res = await fetchWithSession(url, init)
 
-  if (!res.ok) {
-    throw new Error(parseErrorMessage(envelope?.error, `HTTP ${res.status}`))
+    let envelope: ApiEnvelope<T> | null = null
+    try {
+      envelope = (await res.json()) as ApiEnvelope<T>
+    } catch {
+      // ignore parse errors, fallback to HTTP status
+    }
+
+    if (!res.ok) {
+      success = false
+      throw new Error(parseErrorMessage(envelope?.error, `HTTP ${res.status}`))
+    }
+    if (!envelope?.ok) {
+      success = false
+      throw new Error(parseErrorMessage(envelope?.error, 'Request failed'))
+    }
+    return envelope.data as T
+  } catch (err) {
+    success = false
+    throw err
+  } finally {
+    if (shouldTrack) {
+      const duration = Math.round(performance.now() - start)
+      const endpoint = normalizeEndpoint(url)
+      window.umami?.track('api-call', { endpoint, method, success, duration })
+    }
   }
-  if (!envelope?.ok) {
-    throw new Error(parseErrorMessage(envelope?.error, 'Request failed'))
-  }
-  return envelope.data as T
 }

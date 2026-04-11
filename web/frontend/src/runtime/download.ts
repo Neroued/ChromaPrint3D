@@ -27,9 +27,10 @@ export async function downloadFromUrl(url: string, filename: string): Promise<vo
     const electronDownload = getElectronApi()?.download
     if (electronDownload?.saveObjectUrlAs) {
       await electronDownload.saveObjectUrlAs(blobUrl, filename)
-      return
+    } else {
+      clickDownloadLink(blobUrl, filename)
     }
-    clickDownloadLink(blobUrl, filename)
+    window.umami?.track('file-download', { filename })
   } finally {
     revokeBlobUrl(blobUrl)
   }

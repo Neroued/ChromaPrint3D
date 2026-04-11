@@ -478,8 +478,8 @@ server {
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
-    # CSP 中明确允许前端连接家庭 API
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.chromaprint3d.com:9443; connect-src 'self' https://api.chromaprint3d.com:9443;" always;
+    # CSP 中明确允许前端连接家庭 API；script-src 包含 API 域名以加载 Umami 追踪脚本
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://api.chromaprint3d.com:9443; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.chromaprint3d.com:9443; connect-src 'self' https://api.chromaprint3d.com:9443;" always;
 
     # --- 压缩（HTML/CSS/JS/SVG/JSON） ---
     gzip on;
@@ -762,3 +762,103 @@ mkdir -p ~/chromaprint3d-deploy-preview/nginx/conf.d
 ```
 
 两套部署使用不同配置文件，指向不同的 `CLOUD_WEB_ROOT`、`HOME_DEPLOY_DIR`、`VITE_API_BASE`，复用同一个部署脚本。
+
+---
+
+## 8. Umami 访问统计（可选）
+
+自托管 [Umami](https://umami.is/) 提供轻量、隐私友好的网站访问统计。
+
+### 8.1 部署 Umami（家庭主机，一次性）
+
+参考配置见仓库 `docs/deploy/umami/docker-compose.yml`。
+
+```bash
+mkdir -p ~/umami-deploy && cd ~/umami-deploy
+
+# 创建 .env
+cat > .env <<'EOF'
+UMAMI_DB_PASSWORD=<随机密码>
+UMAMI_APP_SECRET=<随机密钥>
+EOF
+
+# 复制 docker-compose.yml（或从仓库 docs/deploy/umami/ 获取）
+# 启动
+docker compose up -d
+```
+
+管理后台：`http://192.168.1.9:3000`（仅局域网可访问），默认账号 `admin` / `umami`，首次登录后修改密码。
+
+### 8.2 Nginx 配置
+
+#### 家庭 Nginx（api.chromaprint3d.com server block）
+
+添加两条精确匹配规则，将数据采集请求代理到 Umami：
+
+```nginx
+location = /stats/script.js {
+    proxy_pass http://192.168.1.9:3000/script.js;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location = /stats/api/send {
+    proxy_pass http://192.168.1.9:3000/api/send;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+预览环境（`api-preview.chromaprint3d.com`）的 server block 添加相同规则。
+
+#### 云 Nginx（chromaprint3d.com server block）
+
+仅更新 CSP 头，允许从 API 域名加载追踪脚本：
+
+```
+script-src 'self' https://api.chromaprint3d.com:9443;
+```
+
+预览站同理添加 `https://api-preview.chromaprint3d.com:9444`。
+
+### 8.3 前端环境变量
+
+在构建环境的 `.env` 文件中添加（与 `VITE_API_BASE` 同级，一次性配置）：
+
+```bash
+# 正式版 (scripts/deploy_split.local.env)
+VITE_UMAMI_HOST=https://api.chromaprint3d.com:9443/stats
+VITE_UMAMI_WEBSITE_ID=<正式版 website-id>
+
+# 预览版 (scripts/deploy_split-preview.local.env)
+VITE_UMAMI_HOST=https://api-preview.chromaprint3d.com:9444/stats
+VITE_UMAMI_WEBSITE_ID=<预览版 website-id>
+```
+
+`website-id` 在 Umami 管理后台添加网站后获取。
+
+### 8.4 备份
+
+```bash
+# 手动备份
+docker compose -f ~/umami-deploy/docker-compose.yml exec -T umami-db \
+  pg_dump -U umami umami > ~/backups/umami-$(date +%Y%m%d).sql
+
+# 自动备份（crontab，每天 3 点，保留 30 天）
+0 3 * * * docker compose -f ~/umami-deploy/docker-compose.yml exec -T umami-db \
+  pg_dump -U umami umami | gzip > ~/backups/umami-$(date +\%Y\%m\%d).sql.gz \
+  && find ~/backups/ -name "umami-*.sql.gz" -mtime +30 -delete
+```
+
+### 8.5 升级
+
+Umami 容器启动时自动执行数据库迁移，升级只需：
+
+```bash
+cd ~/umami-deploy
+docker compose pull && docker compose up -d
+```
+
+升级前建议先执行一次手动备份。

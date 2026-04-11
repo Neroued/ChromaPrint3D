@@ -122,5 +122,14 @@ declare global {
 
   interface Window {
     electron?: ElectronRendererApi
+    umami?: {
+      track(event: string, data?: Record<string, unknown>): void
+      track(callback: () => { name: string; data?: Record<string, unknown> }): void
+    }
+  }
+
+  interface ImportMetaEnv {
+    readonly VITE_UMAMI_HOST?: string
+    readonly VITE_UMAMI_WEBSITE_ID?: string
   }
 }

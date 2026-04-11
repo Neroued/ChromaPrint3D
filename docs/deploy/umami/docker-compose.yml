@@ -1,0 +1,40 @@
+# Umami 访问统计 — 独立 Docker Compose 栈
+#
+# 部署位置：家庭主机 ~/umami-deploy/docker-compose.yml
+# 与 ChromaPrint3D 完全独立，互不影响。
+#
+# 使用方法：
+#   1. 复制本文件到 ~/umami-deploy/docker-compose.yml
+#   2. 创建 ~/umami-deploy/.env（见下方注释）
+#   3. cd ~/umami-deploy && docker compose up -d
+#   4. 浏览器访问 http://192.168.1.9:3000 进入管理后台
+#   5. 默认账号 admin / umami，首次登录后立即修改密码
+#
+# .env 文件内容：
+#   UMAMI_DB_PASSWORD=<随机密码>
+#   UMAMI_APP_SECRET=<随机密钥>
+
+services:
+  umami-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${UMAMI_DB_PASSWORD}
+    volumes:
+      - umami-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    environment:
+      DATABASE_URL: postgresql://umami:${UMAMI_DB_PASSWORD}@umami-db:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET}
+    ports:
+      - "192.168.1.9:3000:3000"
+    depends_on:
+      - umami-db
+    restart: unless-stopped
+
+volumes:
+  umami-db-data:

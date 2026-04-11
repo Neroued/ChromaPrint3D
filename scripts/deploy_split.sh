@@ -90,6 +90,14 @@ if [[ -n "${VITE_PREVIEW_URL:-}" ]]; then
     info "Using VITE_PREVIEW_URL=$VITE_PREVIEW_URL"
     BUILD_ENV+=(VITE_PREVIEW_URL="$VITE_PREVIEW_URL")
 fi
+if [[ -n "${VITE_UMAMI_HOST:-}" ]]; then
+    info "Using VITE_UMAMI_HOST=$VITE_UMAMI_HOST"
+    BUILD_ENV+=(VITE_UMAMI_HOST="$VITE_UMAMI_HOST")
+fi
+if [[ -n "${VITE_UMAMI_WEBSITE_ID:-}" ]]; then
+    info "Using VITE_UMAMI_WEBSITE_ID=$VITE_UMAMI_WEBSITE_ID"
+    BUILD_ENV+=(VITE_UMAMI_WEBSITE_ID="$VITE_UMAMI_WEBSITE_ID")
+fi
 if (( ${#BUILD_ENV[@]} > 0 )); then
     (cd "$ROOT_DIR/web/frontend" && env "${BUILD_ENV[@]}" npm run build)
 else
