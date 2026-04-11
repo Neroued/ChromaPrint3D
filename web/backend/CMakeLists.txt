@@ -54,6 +54,15 @@ set(CHROMAPRINT3D_BACKEND_LIBRARY_SOURCES
     src/infrastructure/spillable_artifact.cpp
     src/infrastructure/data_repository.cpp
     src/infrastructure/board_runtime_cache.cpp
+    src/application/request_parsing.cpp
+    src/application/json_serialization.cpp
+    src/application/colordb_resolution.cpp
+    src/application/color_db_service.cpp
+    src/application/task_service.cpp
+    src/application/calibration_service.cpp
+    src/application/convert_service.cpp
+    src/application/matting_vectorize_service.cpp
+    src/application/recipe_editor_service.cpp
     src/application/server_facade.cpp
     src/presentation/backend_runtime.cpp
     src/presentation/cors_advice.cpp

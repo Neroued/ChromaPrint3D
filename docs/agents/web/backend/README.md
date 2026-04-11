@@ -14,8 +14,20 @@
   - 任务运行时：`task_runtime.*`
   - 数据加载：`data_repository.*`
   - 校准板缓存：`board_runtime_cache.*`
-- 应用层：`web/backend/src/application/server_facade.*`
-  - 聚合业务流程并返回统一 `ServiceResult`
+- 应用层：`web/backend/src/application/`
+  - 轻量协调器：`server_facade.*`（持有子服务实例，委托调用）
+  - 统一 DTO：`service_result.h`
+  - 领域服务：
+    - `color_db_service.*` — ColorDB 列表与会话库 CRUD
+    - `task_service.*` — 任务列表/查询/删除/artifact 下载
+    - `convert_service.*` — 光栅/矢量转换任务提交与请求构建
+    - `matting_vectorize_service.*` — 抠图与矢量化任务
+    - `recipe_editor_service.*` — 配方编辑器（摘要/候选/替换/生成/预测）
+    - `calibration_service.*` — 校准板生成/定位/ColorDB 构建
+  - 共享内核：
+    - `request_parsing.*` — 请求解析与校验工具
+    - `json_serialization.*` — JSON 序列化辅助函数
+    - `colordb_resolution.*` — ColorDB 解析与通道键归一化
 - 表现层：`web/backend/src/presentation/`
   - 路由与请求处理：`api_v1_controller.*`
   - 运行时注册：`backend_runtime.*`
@@ -26,7 +38,7 @@
 | 目标 | 入口文件 |
 |---|---|
 | 新增 API 路由 | `src/presentation/api_v1_controller.h/.cpp` |
-| 新增业务能力 | `src/application/server_facade.h/.cpp` |
+| 新增业务能力 | 对应领域的 `src/application/*_service.{h,cpp}`（非 `server_facade`） |
 | 新增服务启动参数 | `src/config/server_config.h/.cpp` + `server_main.cpp` |
 | 调整任务并发/TTL/内存预算 | `src/infrastructure/task_runtime.h/.cpp` |
 | 调整会话策略与 token 行为 | `src/infrastructure/session_store.h/.cpp` |
@@ -34,15 +46,16 @@
 
 ## API 修改建议流程
 
-1. 在 `ServerFacade` 定义并实现服务方法。
-2. 在 `ApiV1Controller` 声明路由与处理函数。
+1. 在对应领域的 `*_service.{h,cpp}` 中定义并实现服务方法。
+2. 在 `ServerFacade` 中添加委托方法（如需保持 Controller 不直接依赖子服务）。
+3. 在 `ApiV1Controller` 声明路由与处理函数。
 3. 复用统一 envelope：`{ok,data}` / `{ok,error}`。
 4. 若涉及会话，确认 cookie/header/query 的 token 识别链路不被破坏。
 5. 同步更新 [README.md](../../../../README.md) 与 [docs/development.md](../../../development.md) 的接口说明。
 
 ## Bambu Studio 预设参数
 
-校准板生成端点（`POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`）、定位端点（`POST /api/v1/calibration/locate`）和图像转换端点（`POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`）支持 `nozzle_size` 与 `face_orientation` 参数；转换端点另外支持 `base_layers` 与 `double_sided`。后端在 `server_facade.cpp` 解析后传递给核心库：`face_orientation=facedown` 会触发导出几何绕 Y 轴旋转 180°，`base_layers` 可覆盖底板层数，`double_sided=true` 会启用双面镜像色层，并在预设选择阶段强制使用 `facedown` 预设文件。`flip_y` 仍保持图像/坐标系适配语义，不等价于 `face_orientation`。
+校准板生成端点（`POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`）、定位端点（`POST /api/v1/calibration/locate`）和图像转换端点（`POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`）支持 `nozzle_size` 与 `face_orientation` 参数；转换端点另外支持 `base_layers` 与 `double_sided`。后端在 `convert_service.cpp` / `calibration_service.cpp` 解析后传递给核心库：`face_orientation=facedown` 会触发导出几何绕 Y 轴旋转 180°，`base_layers` 可覆盖底板层数，`double_sided=true` 会启用双面镜像色层，并在预设选择阶段强制使用 `facedown` 预设文件。`flip_y` 仍保持图像/坐标系适配语义，不等价于 `face_orientation`。
 
 ## 模型包元数据
 
@@ -62,7 +75,7 @@
 
 约束：仅支持 `dither=None` 的 Raster 流水线，唯一配方数 ≤128。
 
-核心实现：`task_runtime.h/.cpp`（`SubmitConvertRasterMatchOnly`、`GetRecipeEditorSummary`、`QueryRecipeAlternatives`、`ReplaceRecipe`、`SubmitGenerateModel`、`GetTaskPrintProfile`、`GetTaskColorDbNames`）、`server_facade.cpp`（`RecipeEditorSummary`、`RecipeEditorAlternatives`、`RecipeEditorReplace`、`RecipeEditorGenerate`、`RecipeEditorPredict`）。
+核心实现：`task_runtime.h/.cpp`（`SubmitConvertRasterMatchOnly`、`GetRecipeEditorSummary`、`QueryRecipeAlternatives`、`ReplaceRecipe`、`SubmitGenerateModel`、`GetTaskPrintProfile`、`GetTaskColorDbNames`）、`recipe_editor_service.cpp`（`RecipeEditorSummary`、`RecipeEditorAlternatives`、`RecipeEditorReplace`、`RecipeEditorGenerate`、`RecipeEditorPredict`）。
 
 ## 前向色彩模型
 

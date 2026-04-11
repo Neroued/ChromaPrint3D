@@ -1,5 +1,12 @@
 #pragma once
 
+#include "application/calibration_service.h"
+#include "application/color_db_service.h"
+#include "application/convert_service.h"
+#include "application/matting_vectorize_service.h"
+#include "application/recipe_editor_service.h"
+#include "application/service_result.h"
+#include "application/task_service.h"
 #include "config/server_config.h"
 #include "infrastructure/board_runtime_cache.h"
 #include "infrastructure/data_repository.h"
@@ -14,17 +21,6 @@
 #include <vector>
 
 namespace chromaprint3d::backend {
-
-struct ServiceResult {
-    bool ok         = false;
-    int status_code = 500;
-    std::string code;
-    std::string message;
-    nlohmann::json data = nlohmann::json::object();
-
-    static ServiceResult Success(int status, nlohmann::json d);
-    static ServiceResult Error(int status, std::string c, std::string m);
-};
 
 class ServerFacade {
 public:
@@ -101,38 +97,18 @@ public:
                                const std::string& corners_json = "");
 
 private:
-    static nlohmann::json ColorDbInfoToJson(const ChromaPrint3D::ColorDB& db,
-                                            const std::string& material_type = "",
-                                            const std::string& vendor        = "");
-    static nlohmann::json ColorDbBuildResultToJson(const ChromaPrint3D::ColorDB& db);
-    static nlohmann::json TaskToJson(const TaskSnapshot& task);
-    static const char* ConvertStageToString(ChromaPrint3D::ConvertStage stage);
-
-    ServiceResult ParseJsonObject(const std::optional<std::string>& raw, nlohmann::json& out) const;
-    ServiceResult ValidateDecodedImage(const std::vector<uint8_t>& image) const;
-    ServiceResult ResolveSelectedColorDbs(
-        const nlohmann::json& params, const std::optional<SessionSnapshot>& session,
-        std::vector<const ChromaPrint3D::ColorDB*>& out_dbs,
-        std::vector<std::shared_ptr<const ChromaPrint3D::ColorDB>>& session_owned,
-        std::string& common_vendor, std::string& common_material) const;
-
-    ServiceResult BuildRasterRequest(const nlohmann::json& params,
-                                     const std::vector<uint8_t>& image,
-                                     const std::string& image_name,
-                                     const std::optional<SessionSnapshot>& session,
-                                     ChromaPrint3D::ConvertRasterRequest& out) const;
-    ServiceResult BuildVectorRequest(const nlohmann::json& params, const std::vector<uint8_t>& svg,
-                                     const std::string& svg_name,
-                                     const std::optional<SessionSnapshot>& session,
-                                     ChromaPrint3D::ConvertVectorRequest& out) const;
-    ServiceResult BuildVectorizeConfig(const nlohmann::json& params,
-                                       neroued::vectorizer::VectorizerConfig& out) const;
-
     ServerConfig cfg_;
     DataRepository data_;
     SessionStore sessions_;
     TaskRuntime tasks_;
     BoardRuntimeCache boards_;
+
+    ColorDbService color_db_svc_;
+    TaskService task_svc_;
+    ConvertService convert_svc_;
+    MattingVectorizeService matting_svc_;
+    RecipeEditorService recipe_svc_;
+    CalibrationService calib_svc_;
 };
 
 } // namespace chromaprint3d::backend
