@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import {
@@ -109,6 +109,44 @@ if (
   activeCalibrationTab.value = activeTab.value
   activeTab.value = 'calibration-tools'
 }
+
+const TAB_VIRTUAL_URLS: Record<string, string> = {
+  convert: '/convert',
+  preprocess: '/preprocess',
+  'calibration-tools': '/calibration-tools',
+  'colordb-upload': '/colordb-upload',
+}
+
+const SUB_TAB_VIRTUAL_URLS: Record<string, Record<string, string>> = {
+  preprocess: {
+    vectorize: '/preprocess/vectorize',
+    matting: '/preprocess/matting',
+  },
+  'calibration-tools': {
+    calibration: '/calibration-tools/calibration',
+    'calibration-8color': '/calibration-tools/calibration-8color',
+    'colordb-build': '/calibration-tools/colordb-build',
+  },
+}
+
+function trackVirtualPageview(url: string) {
+  window.umami?.track((props) => ({ ...props, url }))
+}
+
+watch(activeTab, (tab) => {
+  const url = TAB_VIRTUAL_URLS[tab]
+  if (url) trackVirtualPageview(url)
+})
+
+watch(activePreprocessTab, (sub) => {
+  const url = SUB_TAB_VIRTUAL_URLS['preprocess']?.[sub]
+  if (url) trackVirtualPageview(url)
+})
+
+watch(activeCalibrationTab, (sub) => {
+  const url = SUB_TAB_VIRTUAL_URLS['calibration-tools']?.[sub]
+  if (url) trackVirtualPageview(url)
+})
 
 useAppLifecycle()
 

@@ -61,6 +61,9 @@ const {
 } = useAsyncTask<TaskStatus>(submitCurrentTask, fetchConvertTaskStatus, {
   onCompleted(s) {
     appStore.setCompletedTask(s)
+    window.umami?.track('convert-complete', {
+      has3mf: Boolean(s.result?.has_3mf),
+    })
   },
   onFailed() {
     appStore.markTaskFailed()
@@ -137,6 +140,7 @@ const download3mfFilename = computed(() => {
 
 async function handleConvert() {
   if (!selectedFile.value) return
+  window.umami?.track('convert-start', { inputType: inputType.value })
   appStore.markTaskStarted()
   await submitTask()
 }
@@ -156,6 +160,7 @@ const {
   onCompleted(s) {
     appStore.setCompletedTask(s)
     appStore.setRecipeEditorTaskId(s.id)
+    window.umami?.track('recipe-editor-open')
   },
   onFailed() {
     appStore.markTaskFailed()
@@ -194,6 +199,7 @@ async function handleMatchPreview() {
 async function handleDownload3MF() {
   if (!canDownload3mf.value || isDownloading3mf.value) return
   isDownloading3mf.value = true
+  window.umami?.track('download-3mf')
   try {
     await downloadByUrl(getResultPath(completedTaskId.value), download3mfFilename.value)
   } catch {

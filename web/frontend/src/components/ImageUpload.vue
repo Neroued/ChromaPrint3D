@@ -75,6 +75,8 @@ async function handleChange(options: { fileList: UploadFileInfo[] }) {
     }
     uploadError.value = null
     appStore.setSelectedFile(rawFile)
+    const type: InputType = isSvgFile(rawFile) ? 'vector' : 'raster'
+    window.umami?.track('image-select', { type })
   }
 }
 

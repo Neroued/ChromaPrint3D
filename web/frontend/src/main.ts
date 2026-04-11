@@ -13,6 +13,8 @@ if (umamiHost && umamiWebsiteId) {
   script.defer = true
   script.src = `${umamiHost}/script.js`
   script.dataset.websiteId = umamiWebsiteId
+  script.dataset.domains = window.location.hostname
+  script.dataset.performance = 'true'
   document.head.appendChild(script)
 }
 
