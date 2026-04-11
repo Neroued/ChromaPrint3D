@@ -44,6 +44,10 @@
 
 校准板生成端点（`POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`）、定位端点（`POST /api/v1/calibration/locate`）和图像转换端点（`POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`）支持 `nozzle_size` 与 `face_orientation` 参数；转换端点另外支持 `base_layers` 与 `double_sided`。后端在 `server_facade.cpp` 解析后传递给核心库：`face_orientation=facedown` 会触发导出几何绕 Y 轴旋转 180°，`base_layers` 可覆盖底板层数，`double_sided=true` 会启用双面镜像色层，并在预设选择阶段强制使用 `facedown` 预设文件。`flip_y` 仍保持图像/坐标系适配语义，不等价于 `face_orientation`。
 
+## 模型包元数据
+
+`GET /api/v1/model-pack/info` 返回所有已加载模型包的元数据（名称、schema 版本、scope、可用 mode 列表）。前端用此接口判断当前 ColorDB 组合是否有匹配的模型包。实现在 `ServerFacade::GetModelPackInfo()` → `ApiV1Controller::ModelPackInfo`。
+
 ## 配方编辑器
 
 `POST /api/v1/convert/raster/match-only` 提交 match-only 任务，完成颜色匹配但不生成 3MF。任务完成后通过以下端点进行配方编辑：

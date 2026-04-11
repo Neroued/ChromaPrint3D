@@ -87,6 +87,7 @@ public:
                                        const std::string& artifact, TaskArtifact& out);
 
     ServiceResult MattingMethods() const;
+    nlohmann::json GetModelPackInfo() const;
 
     ServiceResult GenerateBoard(const nlohmann::json& body);
     ServiceResult Generate8ColorBoard(const nlohmann::json& body);
@@ -111,7 +112,7 @@ private:
         const nlohmann::json& params, const std::optional<SessionSnapshot>& session,
         std::vector<const ChromaPrint3D::ColorDB*>& out_dbs,
         std::vector<std::shared_ptr<const ChromaPrint3D::ColorDB>>& session_owned,
-        bool& has_bambu_pla) const;
+        std::string& common_vendor, std::string& common_material) const;
 
     ServiceResult BuildRasterRequest(const nlohmann::json& params,
                                      const std::vector<uint8_t>& image,

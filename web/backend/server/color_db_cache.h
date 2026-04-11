@@ -14,7 +14,7 @@ using namespace ChromaPrint3D;
 struct ColorDBEntry {
     ColorDB db;
     std::string material_type; // "PLA", "PETG", ... (from directory structure)
-    std::string vendor;        // "BambooLab", "Aliz", ... (from directory structure)
+    std::string vendor;        // "BambuLab", "Aliz", ... (from directory structure)
 };
 
 struct ColorDBCache {

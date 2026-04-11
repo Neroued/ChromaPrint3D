@@ -305,9 +305,14 @@ function assertPreparedResources() {
     fail(`Missing backend executable: ${backendBinary}`)
   }
 
-  const modelPack = path.join(dataTargetDir, 'model_pack', 'model_package.json')
-  if (!existsSync(modelPack)) {
-    fail(`Missing required model pack metadata: ${modelPack}`)
+  const modelPackDir = path.join(dataTargetDir, 'model_packs')
+  if (existsSync(modelPackDir)) {
+    const msgpackFiles = readdirSync(modelPackDir).filter(f => f.endsWith('.msgpack'))
+    if (msgpackFiles.length === 0) {
+      console.warn('model_packs/ directory exists but contains no .msgpack files')
+    }
+  } else {
+    console.warn('model_packs/ directory not found; model matching will be unavailable')
   }
 
   const dbRoot = path.join(dataTargetDir, 'dbs')

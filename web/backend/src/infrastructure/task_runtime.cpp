@@ -864,8 +864,7 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
     return true;
 }
 
-SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const std::string& id,
-                                              const ChromaPrint3D::ModelPackage* /*model_pack*/) {
+SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const std::string& id) {
     {
         std::lock_guard<std::mutex> lock(task_mtx_);
         auto it = tasks_.find(id);

@@ -15,6 +15,7 @@
 #include <cctype>
 #include <filesystem>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace chromaprint3d::backend {
 
@@ -90,6 +91,19 @@ json LayerPreviewsToJson(const LayerPreviewResult& layer_previews) {
         {"palette", std::move(palette)},
         {"artifacts", std::move(artifacts)},
     };
+}
+
+std::vector<std::string> BuildProfileChannelKeys(const std::vector<const ColorDB*>& dbs) {
+    std::unordered_set<std::string> keys;
+    for (const auto* db : dbs) {
+        for (const auto& ch : db->palette) {
+            std::string key = ch.color + "|" + ch.material;
+            std::transform(key.begin(), key.end(), key.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            keys.insert(std::move(key));
+        }
+    }
+    return {keys.begin(), keys.end()};
 }
 
 } // namespace
@@ -626,7 +640,11 @@ ServiceResult ServerFacade::RecipeEditorAlternatives(const std::string& owner,
     std::string recipe_pattern = body.value("recipe_pattern", std::string{});
 
     const ChromaPrint3D::ModelPackage* model_pack = nullptr;
-    if (data_.ModelPack().has_value()) { model_pack = &(*data_.ModelPack()); }
+    if (!data_.ModelPackRegistry().Empty()) {
+        // For recipe alternatives, pick the first available pack as a best-effort match.
+        // A more precise selection would require per-task vendor/material tracking.
+        model_pack = &data_.ModelPackRegistry().All().front();
+    }
 
     auto result = tasks_.QueryRecipeAlternatives(owner, task_id, target, max_candidates, offset,
                                                  model_pack, recipe_pattern);
@@ -679,10 +697,7 @@ ServiceResult ServerFacade::RecipeEditorGenerate(const std::string& owner,
                                                  const std::string& task_id) {
     if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
 
-    const ChromaPrint3D::ModelPackage* model_pack = nullptr;
-    if (data_.ModelPack().has_value()) { model_pack = &(*data_.ModelPack()); }
-
-    auto submit = tasks_.SubmitGenerateModel(owner, task_id, model_pack);
+    auto submit = tasks_.SubmitGenerateModel(owner, task_id);
     if (!submit.ok) {
         return ServiceResult::Error(submit.status_code, "generate_failed", submit.message);
     }
@@ -721,6 +736,29 @@ ServiceResult ServerFacade::DownloadTaskArtifact(const std::string& owner, const
     if (!data) return ServiceResult::Error(status, "artifact_error", message);
     out = std::move(*data);
     return ServiceResult::Success(200, json::object());
+}
+
+json ServerFacade::GetModelPackInfo() const {
+    json packs = json::array();
+    for (const auto& pack : data_.ModelPackRegistry().All()) {
+        json modes = json::array();
+        for (const auto& lp : pack.layer_packages) {
+            modes.push_back({
+                {"color_layers", lp.color_layers},
+                {"layer_height_mm", lp.layer_height_mm},
+                {"num_candidates", lp.NumCandidates()},
+            });
+        }
+        packs.push_back({
+            {"name", pack.name},
+            {"schema_version", ModelPackage::kSchemaVersion},
+            {"scope", {{"vendor", pack.scope.vendor}, {"material_type", pack.scope.material_type}}},
+            {"channel_keys", pack.channel_keys},
+            {"modes", std::move(modes)},
+            {"defaults", {{"threshold", pack.default_threshold}, {"margin", pack.default_margin}}},
+        });
+    }
+    return {{"packs", std::move(packs)}};
 }
 
 ServiceResult ServerFacade::MattingMethods() const {
@@ -1255,12 +1293,21 @@ ServiceResult ServerFacade::ValidateDecodedImage(const std::vector<uint8_t>& ima
 ServiceResult ServerFacade::ResolveSelectedColorDbs(
     const json& params, const std::optional<SessionSnapshot>& session,
     std::vector<const ColorDB*>& out_dbs,
-    std::vector<std::shared_ptr<const ColorDB>>& session_owned, bool& has_bambu_pla) const {
+    std::vector<std::shared_ptr<const ColorDB>>& session_owned, std::string& common_vendor,
+    std::string& common_material) const {
     out_dbs.clear();
-    has_bambu_pla = false;
+    common_vendor.clear();
+    common_material.clear();
+
+    struct DbWithMeta {
+        const ColorDB* db;
+        std::string vendor;
+        std::string material_type;
+    };
+
+    std::vector<DbWithMeta> selected;
 
     if (params.contains("db_names") && params["db_names"].is_array()) {
-        std::vector<const ColorDB*> selected;
         selected.reserve(params["db_names"].size());
         for (const auto& name_val : params["db_names"]) {
             if (!name_val.is_string()) {
@@ -1269,11 +1316,11 @@ ServiceResult ServerFacade::ResolveSelectedColorDbs(
             }
             const std::string name = name_val.get<std::string>();
             const ColorDB* db      = nullptr;
+            std::string vendor, material;
             if (const auto* entry = data_.ColorDbCache().FindEntryByName(name)) {
-                db = &entry->db;
-                if (entry->material_type == "PLA" && entry->vendor == "BambooLab") {
-                    has_bambu_pla = true;
-                }
+                db       = &entry->db;
+                vendor   = entry->vendor;
+                material = entry->material_type;
             }
             if (!db && session) {
                 auto it = session->color_dbs.find(name);
@@ -1286,22 +1333,36 @@ ServiceResult ServerFacade::ResolveSelectedColorDbs(
             if (!db) {
                 return ServiceResult::Error(400, "invalid_params", "ColorDB not found: " + name);
             }
-            selected.push_back(db);
+            selected.push_back({db, vendor, material});
         }
         if (selected.empty()) {
             return ServiceResult::Error(400, "invalid_params", "No valid ColorDB names provided");
         }
-        out_dbs = std::move(selected);
-        return ServiceResult::Success(200, json::object());
-    }
-
-    out_dbs = data_.ColorDbCache().GetAll();
-    for (const auto& entry : data_.ColorDbCache().databases) {
-        if (entry.material_type == "PLA" && entry.vendor == "BambooLab") {
-            has_bambu_pla = true;
-            break;
+    } else {
+        selected.reserve(data_.ColorDbCache().databases.size());
+        for (const auto& entry : data_.ColorDbCache().databases) {
+            selected.push_back({&entry.db, entry.vendor, entry.material_type});
         }
     }
+
+    out_dbs.reserve(selected.size());
+    for (const auto& s : selected) { out_dbs.push_back(s.db); }
+
+    if (!selected.empty()) {
+        const auto& first_v = selected.front().vendor;
+        const auto& first_m = selected.front().material_type;
+        bool all_same       = !first_v.empty() && !first_m.empty();
+        for (size_t i = 1; i < selected.size() && all_same; ++i) {
+            if (selected[i].vendor != first_v || selected[i].material_type != first_m) {
+                all_same = false;
+            }
+        }
+        if (all_same) {
+            common_vendor   = first_v;
+            common_material = first_m;
+        }
+    }
+
     return ServiceResult::Success(200, json::object());
 }
 
@@ -1316,13 +1377,15 @@ ServiceResult ServerFacade::BuildRasterRequest(const json& params,
     auto presets_path = std::filesystem::path(cfg_.data_dir) / "presets";
     if (std::filesystem::is_directory(presets_path)) { out.preset_dir = presets_path.string(); }
 
-    bool has_bambu_pla = false;
-    auto selected      = ResolveSelectedColorDbs(params, session, out.preloaded_dbs,
-                                                 out.session_owned_dbs, has_bambu_pla);
+    std::string common_vendor, common_material;
+    auto selected = ResolveSelectedColorDbs(params, session, out.preloaded_dbs,
+                                            out.session_owned_dbs, common_vendor, common_material);
     if (!selected.ok) return selected;
 
-    if (data_.ModelPack().has_value() && has_bambu_pla) {
-        out.preloaded_model_pack = &data_.ModelPack().value();
+    if (!common_vendor.empty() && !common_material.empty()) {
+        auto profile_keys = BuildProfileChannelKeys(out.preloaded_dbs);
+        out.preloaded_model_pack =
+            data_.ModelPackRegistry().Select(common_vendor, common_material, profile_keys);
     }
 
     try {
@@ -1476,13 +1539,16 @@ ServiceResult ServerFacade::BuildVectorRequest(const json& params, const std::ve
     auto vpresets = std::filesystem::path(cfg_.data_dir) / "presets";
     if (std::filesystem::is_directory(vpresets)) { out.preset_dir = vpresets.string(); }
 
-    bool has_bambu_pla = false;
-    auto selected      = ResolveSelectedColorDbs(params, session, out.preloaded_dbs,
-                                                 out.session_owned_dbs, has_bambu_pla);
+    std::string vec_common_vendor, vec_common_material;
+    auto selected =
+        ResolveSelectedColorDbs(params, session, out.preloaded_dbs, out.session_owned_dbs,
+                                vec_common_vendor, vec_common_material);
     if (!selected.ok) return selected;
 
-    if (data_.ModelPack().has_value() && has_bambu_pla) {
-        out.preloaded_model_pack = &data_.ModelPack().value();
+    if (!vec_common_vendor.empty() && !vec_common_material.empty()) {
+        auto profile_keys = BuildProfileChannelKeys(out.preloaded_dbs);
+        out.preloaded_model_pack =
+            data_.ModelPackRegistry().Select(vec_common_vendor, vec_common_material, profile_keys);
     }
 
     try {

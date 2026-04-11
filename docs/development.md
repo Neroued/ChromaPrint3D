@@ -32,7 +32,7 @@ ChromaPrint3D/
 ├── modeling/              # Python 建模管线
 ├── scripts/               # 发布、部署、CI 打包、模型下载/上传脚本
 ├── tools/                 # 辅助工具（npy_to_colordb.py 等）
-├── data/                  # 运行时数据（db/model_pack/models 等）
+├── data/                  # 运行时数据（db/model_packs/models 等）
 └── docs/                  # 文档
 ```
 
@@ -57,7 +57,7 @@ python scripts/download_models.py
 ```bash
 ./build/bin/chromaprint3d_server \
   --data ./data \
-  --model-pack ./data/model_pack/model_package.json \
+  --model-pack ./data/model_packs \
   --port 8080 \
   --http-threads 4 \
   --max-tasks 4 \
@@ -66,6 +66,7 @@ python scripts/download_models.py
 
 说明：
 
+- `--model-pack` 接受目录（自动发现所有 `.msgpack` 文件）或单个 `.msgpack` 文件。默认路径为 `{data}/model_packs/`。
 - 开发模式通常不传 `--web`，静态资源由 Vite 提供。
 - `--http-threads` 控制 HTTP 线程；`--max-tasks` 控制异步任务线程。
 - 生产跨域部署建议额外传入 `--cors-origin <https-origin>` 与 `--require-cors-origin 1`，避免误开放来源。
@@ -150,7 +151,7 @@ npm run dev
 
 - `CHROMAPRINT3D_BACKEND_PATH`：指定后端二进制路径
 - `CHROMAPRINT3D_DATA_DIR`：指定后端 `--data` 目录（打包态默认使用 `<userData>/data`）
-- `CHROMAPRINT3D_MODEL_PACK_PATH`：指定后端 `--model-pack` 路径
+- `CHROMAPRINT3D_MODEL_PACK_PATH`：指定后端 `--model-pack` 路径（目录或单个 `.msgpack` 文件）
 - `CHROMAPRINT3D_BACKEND_PORT`：指定后端优先端口
 - `CHROMAPRINT3D_RENDERER_URL`：指定前端地址（默认 `http://127.0.0.1:5173`）
 - `VITE_UPLOAD_MAX_MB` / `VITE_UPLOAD_MAX_PIXELS`：前端上传预校验上限
@@ -173,7 +174,7 @@ npm run dev
 
 | 分组 | 代表接口 |
 |---|---|
-| 健康与默认参数 | `GET /api/v1/health`、`GET /api/v1/convert/defaults`、`GET /api/v1/vectorize/defaults` |
+| 健康与默认参数 | `GET /api/v1/health`、`GET /api/v1/convert/defaults`、`GET /api/v1/vectorize/defaults`、`GET /api/v1/model-pack/info` |
 | 数据库管理 | `GET /api/v1/databases`、`GET /api/v1/session/databases`、`POST /api/v1/session/databases/upload` |
 | 异步任务提交 | `POST /api/v1/convert/raster`、`POST /api/v1/convert/raster/match-only`、`POST /api/v1/convert/vector`、`POST /api/v1/convert/vector/match-only`、`POST /api/v1/matting/tasks`、`POST /api/v1/vectorize/tasks` |
 | 矢量分析 | `POST /api/v1/convert/vector/analyze-width` |

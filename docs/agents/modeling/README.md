@@ -16,7 +16,9 @@
   - `step2_fit_stage_a.py`
   - `step3_fit_stage_b.py`
   - `step4_select_recipes.py`
-  - `step5_build_model_package.py`
+  - `step5_build_model_package.py`（输出 `.msgpack` 二进制格式，含 `scope` 元数据）
+- 工具：`modeling/tools/`
+  - `dump_model_package.py`（msgpack → 可读 JSON，调试用）
 - 评估：`modeling/eval/`
 
 ## 常见改动落点
@@ -29,6 +31,7 @@
 | 调整 Stage B 损失/正则 | `modeling/pipeline/step3_fit_stage_b.py` |
 | 调整代表性配方选取 | `modeling/pipeline/step4_select_recipes.py` |
 | 调整模型包内容与阈值 | `modeling/pipeline/step5_build_model_package.py` |
+| 检查/调试 msgpack 模型包 | `modeling/tools/dump_model_package.py` |
 
 ## 数据与产物约定
 
@@ -36,8 +39,9 @@
 - 关键输出目录：
   - `modeling/output/params/`
   - `modeling/output/recipes/`
-  - `modeling/output/packages/`
+  - `modeling/output/packages/`（`.msgpack` 模型包）
   - `modeling/output/reports/`
+- 依赖：`msgpack`（Python 包，step5 和 dump 工具需要）
 
 ## 最小验证
 

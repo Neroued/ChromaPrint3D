@@ -178,8 +178,7 @@ public:
                        const ChromaPrint3D::Lab& new_mapped_color, bool new_from_model,
                        int& status_code, std::string& message, nlohmann::json& out_summary);
 
-    SubmitResult SubmitGenerateModel(const std::string& owner, const std::string& id,
-                                     const ChromaPrint3D::ModelPackage* model_pack);
+    SubmitResult SubmitGenerateModel(const std::string& owner, const std::string& id);
 
     std::vector<TaskSnapshot> ListTasks(const std::string& owner) const;
     std::optional<TaskSnapshot> FindTask(const std::string& owner, const std::string& id);

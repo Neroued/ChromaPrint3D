@@ -132,6 +132,8 @@ export default {
       '当前输入为矢量图 (SVG{sizeInfo})，路径较多的复杂矢量图转换耗时可能较长，请耐心等待。',
     warnings: {
       model_assist_unavailable: '模型辅助匹配不支持当前层数配置，颜色匹配质量可能有所下降。',
+      model_layer_height_mismatch: '模型包层高与当前配置不一致，预测精度可能降低。',
+      model_layer_order_mismatch: '模型包叠色顺序与当前配置不一致，预测精度可能降低。',
     },
   },
 
@@ -167,7 +169,10 @@ export default {
     compactness: '紧凑度',
     halftone: '半色调抖动',
     enableModel: '启用模型',
-    modelOnlyHint: '仅 BambooLab PLA 数据库支持模型增强',
+    modelPackNoMatch: '当前所选颜色数据库无匹配的模型包',
+    modelPackUnavailable: '服务端未加载模型包',
+    modelPackNoMode: '模型包不支持 {n} 层匹配',
+    modelPackAvailableModes: '可用层数：{modes} 层',
     ditherStrength: '抖动强度',
     imageProcessing: '图像处理',
     sizeSettings: '尺寸设置',

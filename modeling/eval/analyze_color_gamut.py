@@ -10,18 +10,18 @@ Supports three progressive analysis modes:
 Examples:
   # Single DB
   python -m modeling.eval.analyze_color_gamut \\
-    --db data/dbs/PLA/BambooLab/RYBW_008_5L.json
+    --db data/dbs/PLA/BambuLab/RYBW_008_5L.json
 
   # Multiple DBs, each analyzed individually + merged
   python -m modeling.eval.analyze_color_gamut \\
-    --db data/dbs/PLA/BambooLab/RYBW_008_5L.json \\
-    --db data/dbs/PLA/BambooLab/CMYW_008_5L.json \\
-    --db data/dbs/PLA/BambooLab/RYBWCMKG_008_5L_001.json \\
+    --db data/dbs/PLA/BambuLab/RYBW_008_5L.json \\
+    --db data/dbs/PLA/BambuLab/CMYW_008_5L.json \\
+    --db data/dbs/PLA/BambuLab/RYBWCMKG_008_5L_001.json \\
     --merge
 
   # DB + ModelPack joint
   python -m modeling.eval.analyze_color_gamut \\
-    --db data/dbs/PLA/BambooLab/RYBWCMKG_008_5L_001.json \\
+    --db data/dbs/PLA/BambuLab/RYBWCMKG_008_5L_001.json \\
     --model-pack data/model_pack/model_package.json --merge
 """
 

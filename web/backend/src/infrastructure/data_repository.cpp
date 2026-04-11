@@ -22,13 +22,6 @@ ColorDBCache LoadColorDBs(const std::filesystem::path& data_root) {
     return cache;
 }
 
-std::optional<ChromaPrint3D::ModelPackage> TryLoadModelPack(const std::string& path) {
-    if (path.empty()) return std::nullopt;
-    auto pack = ChromaPrint3D::ModelPackage::LoadFromJson(path);
-    spdlog::info("Loaded model package: {}", pack.name);
-    return pack;
-}
-
 EightColorRecipeStore TryLoadRecipes(const std::filesystem::path& data_root) {
     auto recipe_path = data_root / "recipes" / "8color_boards.json";
     if (!std::filesystem::is_regular_file(recipe_path)) {
@@ -87,8 +80,16 @@ void LogMattingProviders(const ChromaPrint3D::MattingRegistry& registry) {
 DataRepository::DataRepository(const ServerConfig& cfg) {
     auto data_root = std::filesystem::path(cfg.data_dir);
     db_cache_      = LoadColorDBs(data_root);
-    model_pack_    = TryLoadModelPack(cfg.model_pack_path);
-    recipe_store_  = TryLoadRecipes(data_root);
+
+    if (cfg.model_pack_path.empty()) {
+        model_packs_.LoadFromDirectory((data_root / "model_packs").string());
+    } else if (std::filesystem::is_directory(cfg.model_pack_path)) {
+        model_packs_.LoadFromDirectory(cfg.model_pack_path);
+    } else {
+        model_packs_.LoadSingle(cfg.model_pack_path);
+    }
+
+    recipe_store_ = TryLoadRecipes(data_root);
 
     matting_registry_.Register("opencv",
                                std::make_shared<ChromaPrint3D::ThresholdMattingProvider>());

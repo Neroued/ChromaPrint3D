@@ -124,7 +124,7 @@ services:
       - "--data"
       - "/app/data"
       - "--model-pack"
-      - "/app/model_pack/model_package.json"
+      - "/app/model_packs"
       - "--port"
       - "8080"
       - "--cors-origin"

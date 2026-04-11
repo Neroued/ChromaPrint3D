@@ -3,7 +3,7 @@
 #include "detail/recipe_convert.h"
 #include "chromaprint3d/error.h"
 
-
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cmath>
@@ -120,10 +120,28 @@ std::optional<PreparedModel> PrepareModel(const ModelPackage* model_package,
     if (!model_package || (!model_gate.enable && !model_gate.model_only)) { return std::nullopt; }
     const ModelLayerPackage* mode = model_package->FindByColorLayers(profile.color_layers);
     if (!mode) { return std::nullopt; }
-    if (!NearlyEqual(mode->layer_height_mm, profile.layer_height_mm)) { return std::nullopt; }
-    if (mode->layer_order != profile.layer_order) { return std::nullopt; }
     if (mode->NumCandidates() == 0) { return std::nullopt; }
     if (model_package->channel_keys.empty()) { return std::nullopt; }
+
+    PreparedModel prepared;
+    prepared.threshold    = std::max(0.0f, model_gate.threshold);
+    prepared.margin       = std::max(0.0f, model_gate.margin);
+    prepared.color_layers = profile.color_layers;
+    prepared.layer_order  = profile.layer_order;
+
+    if (!NearlyEqual(mode->layer_height_mm, profile.layer_height_mm)) {
+        spdlog::warn("ModelPackage layer_height_mm mismatch: pack={}, profile={}; "
+                     "prediction accuracy may be reduced",
+                     mode->layer_height_mm, profile.layer_height_mm);
+        prepared.warnings.emplace_back("model_layer_height_mismatch");
+    }
+    if (mode->layer_order != profile.layer_order) {
+        spdlog::warn("ModelPackage layer_order mismatch: pack={}, profile={}; "
+                     "prediction accuracy may be reduced",
+                     ToLayerOrderString(mode->layer_order),
+                     ToLayerOrderString(profile.layer_order));
+        prepared.warnings.emplace_back("model_layer_order_mismatch");
+    }
 
     std::unordered_map<std::string, int> key_to_profile_channel;
     key_to_profile_channel.reserve(profile.palette.size());
@@ -138,49 +156,86 @@ std::optional<PreparedModel> PrepareModel(const ModelPackage* model_package,
         if (it != key_to_profile_channel.end()) { model_to_profile[i] = it->second; }
     }
 
-    PreparedModel prepared;
-    prepared.threshold    = std::max(0.0f, model_gate.threshold);
-    prepared.margin       = std::max(0.0f, model_gate.margin);
-    prepared.color_layers = profile.color_layers;
-    prepared.layer_order  = profile.layer_order;
-    prepared.pred_lab.reserve(mode->NumCandidates());
-    prepared.mapped_recipes.reserve(mode->candidate_recipes.size());
-
-    for (size_t i = 0; i < mode->NumCandidates(); ++i) {
-        const uint8_t* src_recipe = mode->RecipeAt(i);
-        if (!src_recipe) { continue; }
-        const std::size_t write_base = prepared.mapped_recipes.size();
-        bool valid_recipe            = true;
-        for (int l = 0; l < prepared.color_layers; ++l) {
-            const std::size_t src_ch = static_cast<std::size_t>(src_recipe[l]);
-            if (src_ch >= model_to_profile.size()) {
-                valid_recipe = false;
+    // Identity shortcut: if mapping is 1:1 positional and all candidates are
+    // valid, reference the original data via spans instead of copying.
+    bool is_identity = true;
+    for (std::size_t i = 0; i < model_to_profile.size(); ++i) {
+        if (model_to_profile[i] != static_cast<int>(i)) {
+            is_identity = false;
+            break;
+        }
+    }
+    if (is_identity && model_package->channel_keys.size() <= profile.palette.size()) {
+        bool all_valid = true;
+        for (size_t i = 0; i < mode->NumCandidates(); ++i) {
+            const uint8_t* src = mode->RecipeAt(i);
+            if (!src) {
+                all_valid = false;
                 break;
             }
-            const int mapped_ch = model_to_profile[src_ch];
-            if (mapped_ch < 0 || static_cast<std::size_t>(mapped_ch) >= profile.NumChannels()) {
-                valid_recipe = false;
-                break;
+            for (int l = 0; l < prepared.color_layers; ++l) {
+                const auto ch = static_cast<std::size_t>(src[l]);
+                if (ch >= model_to_profile.size() || model_to_profile[ch] < 0 ||
+                    static_cast<std::size_t>(model_to_profile[ch]) >= profile.NumChannels()) {
+                    all_valid = false;
+                    break;
+                }
             }
-            prepared.mapped_recipes.push_back(static_cast<uint8_t>(mapped_ch));
+            if (!all_valid) { break; }
         }
-        if (!valid_recipe) {
-            prepared.mapped_recipes.resize(write_base);
-            continue;
+        if (all_valid) {
+            prepared.owns_data     = false;
+            prepared.pred_lab_view = std::span<const Lab>(mode->pred_lab);
+            prepared.recipes_view  = std::span<const uint8_t>(mode->candidate_recipes);
+            goto build_trees;
         }
-        prepared.pred_lab.push_back(mode->pred_lab[i]);
     }
 
-    if (prepared.pred_lab.empty()) { return std::nullopt; }
-    if (prepared.mapped_recipes.size() !=
-        prepared.pred_lab.size() * static_cast<std::size_t>(prepared.color_layers)) {
-        throw InputError("PreparedModel recipe/lab size mismatch");
+    {
+        prepared.owns_data = true;
+        prepared.pred_lab_owned.reserve(mode->NumCandidates());
+        prepared.recipes_owned.reserve(mode->candidate_recipes.size());
+
+        for (size_t i = 0; i < mode->NumCandidates(); ++i) {
+            const uint8_t* src_recipe = mode->RecipeAt(i);
+            if (!src_recipe) { continue; }
+            const std::size_t write_base = prepared.recipes_owned.size();
+            bool valid_recipe            = true;
+            for (int l = 0; l < prepared.color_layers; ++l) {
+                const std::size_t src_ch = static_cast<std::size_t>(src_recipe[l]);
+                if (src_ch >= model_to_profile.size()) {
+                    valid_recipe = false;
+                    break;
+                }
+                const int mapped_ch = model_to_profile[src_ch];
+                if (mapped_ch < 0 || static_cast<std::size_t>(mapped_ch) >= profile.NumChannels()) {
+                    valid_recipe = false;
+                    break;
+                }
+                prepared.recipes_owned.push_back(static_cast<uint8_t>(mapped_ch));
+            }
+            if (!valid_recipe) {
+                prepared.recipes_owned.resize(write_base);
+                continue;
+            }
+            prepared.pred_lab_owned.push_back(mode->pred_lab[i]);
+        }
+
+        if (prepared.pred_lab_owned.empty()) { return std::nullopt; }
+        if (prepared.recipes_owned.size() !=
+            prepared.pred_lab_owned.size() * static_cast<std::size_t>(prepared.color_layers)) {
+            throw InputError("PreparedModel recipe/lab size mismatch");
+        }
+
+        prepared.pred_lab_view = std::span<const Lab>(prepared.pred_lab_owned);
+        prepared.recipes_view  = std::span<const uint8_t>(prepared.recipes_owned);
     }
 
-    prepared.kd_indices.resize(prepared.pred_lab.size());
+build_trees:
+    prepared.kd_indices.resize(prepared.pred_lab_view.size());
     for (std::size_t i = 0; i < prepared.kd_indices.size(); ++i) { prepared.kd_indices[i] = i; }
 
-    const auto points  = std::span<const Lab>(prepared.pred_lab);
+    const auto points  = prepared.pred_lab_view;
     const auto indices = std::span<const std::size_t>(prepared.kd_indices);
     prepared.lab_tree.Reset(points, indices, ModelLabProj{});
     prepared.rgb_tree.Reset(points, indices, ModelRgbProj{});
@@ -210,7 +265,7 @@ CandidateResult FindBestModelCandidate(const cv::Vec3f& target_color, bool use_l
     if (!recipe) { return best; }
 
     best.valid      = true;
-    best.mapped_lab = model.pred_lab[idx];
+    best.mapped_lab = model.pred_lab_view[idx];
     best.recipe.assign(recipe, recipe + model.color_layers);
     best.score_dist2 = score_d2;
     best.lab_dist2   = Dist2(best.mapped_lab, target_lab);

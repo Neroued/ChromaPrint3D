@@ -22,7 +22,7 @@ public:
 
     const ColorDBCache& ColorDbCache() const { return db_cache_; }
 
-    const std::optional<ChromaPrint3D::ModelPackage>& ModelPack() const { return model_pack_; }
+    const ChromaPrint3D::ModelPackageRegistry& ModelPackRegistry() const { return model_packs_; }
 
     const EightColorRecipeStore& RecipeStore() const { return recipe_store_; }
 
@@ -30,7 +30,7 @@ public:
 
 private:
     ColorDBCache db_cache_;
-    std::optional<ChromaPrint3D::ModelPackage> model_pack_;
+    ChromaPrint3D::ModelPackageRegistry model_packs_;
     EightColorRecipeStore recipe_store_;
     ChromaPrint3D::MattingRegistry matting_registry_;
 #if defined(CHROMAPRINT3D_HAS_INFER) && CHROMAPRINT3D_HAS_INFER

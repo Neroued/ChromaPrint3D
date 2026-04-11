@@ -269,6 +269,10 @@ void ApiV1Controller::AnalyzeVectorWidth(const drogon::HttpRequestPtr& req, Call
     ReplyJson(std::move(cb), Facade().AnalyzeVectorWidth(ToBytes(*svg), params));
 }
 
+void ApiV1Controller::ModelPackInfo(const drogon::HttpRequestPtr& /*req*/, Callback&& cb) {
+    ReplyJson(std::move(cb), ServiceResult::Success(200, Facade().GetModelPackInfo()));
+}
+
 void ApiV1Controller::MattingMethods(const drogon::HttpRequestPtr& /*req*/, Callback&& cb) {
     ReplyJson(std::move(cb), Facade().MattingMethods());
 }

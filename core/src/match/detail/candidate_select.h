@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
+#include <string>
 #include <vector>
 
 namespace ChromaPrint3D {
@@ -47,19 +49,29 @@ struct PreparedModel {
     float margin           = 0.7f;
     int color_layers       = 0;
     LayerOrder layer_order = LayerOrder::Top2Bottom;
-    std::vector<Lab> pred_lab;
-    std::vector<uint8_t> mapped_recipes;
+
+    // When owns_data == false, the span views reference ModelLayerPackage data
+    // held by the ModelPackageRegistry (process-lifetime). The PreparedModel is
+    // request-scoped and must not outlive the registry.
+    bool owns_data = true;
+    std::span<const Lab> pred_lab_view;
+    std::span<const uint8_t> recipes_view;
+    std::vector<Lab> pred_lab_owned;
+    std::vector<uint8_t> recipes_owned;
+
     std::vector<std::size_t> kd_indices;
     ModelLabTree lab_tree;
     ModelRgbTree rgb_tree;
 
-    size_t NumCandidates() const { return pred_lab.size(); }
+    std::vector<std::string> warnings;
+
+    size_t NumCandidates() const { return pred_lab_view.size(); }
 
     const uint8_t* RecipeAt(size_t idx) const {
         if (idx >= NumCandidates() || color_layers <= 0) { return nullptr; }
         const size_t offset = idx * static_cast<size_t>(color_layers);
-        if (offset + static_cast<size_t>(color_layers) > mapped_recipes.size()) { return nullptr; }
-        return &mapped_recipes[offset];
+        if (offset + static_cast<size_t>(color_layers) > recipes_view.size()) { return nullptr; }
+        return &recipes_view[offset];
     }
 };
 

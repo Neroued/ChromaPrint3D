@@ -13,6 +13,7 @@ import {
   type PaletteChannel,
 } from '../types'
 import { fetchAvailableColorDBs, fetchParamPanelBootstrap } from '../services/paramService'
+import { fetchModelPackInfo, type ModelPackInfo } from '../api/modelPack'
 
 interface ChannelOption {
   key: string
@@ -108,7 +109,8 @@ export function useParamPanelState() {
   const defaults = ref<DefaultConfig | null>(null)
   const mode = ref<'simple' | 'advanced'>('simple')
   const selectedMaterial = ref('PLA')
-  const selectedVendor = ref('BambooLab')
+  const selectedVendor = ref('BambuLab')
+  const modelPacks = ref<ModelPackInfo[]>([])
   const targetWidthMm = ref(200)
   const targetHeightMm = ref(200)
   const selectedPixelPresetIndex = ref(2)
@@ -427,13 +429,17 @@ export function useParamPanelState() {
   )
 
   const isLuminaPreset = computed(
-    () => !(selectedMaterial.value === 'PLA' && selectedVendor.value === 'BambooLab'),
+    () => !(selectedMaterial.value === 'PLA' && selectedVendor.value === 'BambuLab'),
   )
 
   const filteredDBOptions = computed<SelectOption[]>(() => buildDBOptions(filteredDBs.value))
-  const modelPackAvailable = computed(
-    () => selectedMaterial.value === 'PLA' && selectedVendor.value === 'BambooLab',
+  const matchingModelPack = computed(() =>
+    modelPacks.value.find(
+      (p) =>
+        p.scope.vendor === selectedVendor.value && p.scope.material_type === selectedMaterial.value,
+    ),
   )
+  const modelPackAvailable = computed(() => !!matchingModelPack.value)
 
   function selectAllFilteredDBs() {
     update({ db_names: filteredDBs.value.map((db) => db.name) })
@@ -515,8 +521,8 @@ export function useParamPanelState() {
             .filter(Boolean),
         ),
       ]
-      if (vendors.includes('BambooLab')) {
-        selectedVendor.value = 'BambooLab'
+      if (vendors.includes('BambuLab')) {
+        selectedVendor.value = 'BambuLab'
       } else if (vendors.length > 0) {
         selectedVendor.value = vendors[0]!
       }
@@ -531,6 +537,13 @@ export function useParamPanelState() {
           dbNames: initialDbNames,
         }),
       )
+      fetchModelPackInfo()
+        .then((info) => {
+          modelPacks.value = info.packs
+        })
+        .catch((e) => {
+          console.warn('Failed to fetch model pack info:', e)
+        })
     } catch (nextError: unknown) {
       error.value = nextError instanceof Error ? nextError.message : t('param.loadConfigFailed')
     } finally {

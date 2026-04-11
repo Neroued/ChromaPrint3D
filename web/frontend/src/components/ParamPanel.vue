@@ -502,7 +502,7 @@ watch(canEnableTransparentLayer, (can) => {
                 <template #trigger>
                   <span class="tip-label">{{ t('param.enableModel') }}</span>
                 </template>
-                {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
+                {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
               </NTooltip>
             </template>
             <NSwitch
@@ -524,7 +524,7 @@ watch(canEnableTransparentLayer, (can) => {
               <template #trigger>
                 <span class="tip-label">{{ t('param.enableModel') }}</span>
               </template>
-              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
+              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
             </NTooltip>
           </template>
           <NSwitch
@@ -544,7 +544,7 @@ watch(canEnableTransparentLayer, (can) => {
               <template #trigger>
                 <span class="tip-label">{{ t('param.enableModel') }}</span>
               </template>
-              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
+              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
             </NTooltip>
           </template>
           <NSwitch
@@ -1073,7 +1073,7 @@ watch(canEnableTransparentLayer, (can) => {
                   <template #trigger>
                     <span class="tip-label">{{ t('param.enableModel') }}</span>
                   </template>
-                  {{ modelPackAvailable ? tooltips.model_enable : t('param.modelOnlyHint') }}
+                  {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
                 </NTooltip>
               </template>
               <NSwitch

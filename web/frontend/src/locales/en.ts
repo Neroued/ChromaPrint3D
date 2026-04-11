@@ -105,6 +105,10 @@ export default {
     warnings: {
       model_assist_unavailable:
         'Model-assisted matching is unavailable for the current layer count; color matching quality may be reduced.',
+      model_layer_height_mismatch:
+        'Model pack layer height differs from profile; prediction accuracy may be reduced.',
+      model_layer_order_mismatch:
+        'Model pack layer order differs from profile; prediction accuracy may be reduced.',
     },
   },
 
@@ -140,7 +144,10 @@ export default {
     compactness: 'Compactness',
     halftone: 'Halftone Dither',
     enableModel: 'Enable Model',
-    modelOnlyHint: 'Model enhancement only available for BambooLab PLA databases',
+    modelPackNoMatch: 'No model pack matches the selected databases',
+    modelPackUnavailable: 'No model pack loaded on the server',
+    modelPackNoMode: 'Model pack does not support {n}-layer matching',
+    modelPackAvailableModes: 'Available: {modes}-layer',
     ditherStrength: 'Dither Strength',
     imageProcessing: 'Image Processing',
     sizeSettings: 'Size Settings',

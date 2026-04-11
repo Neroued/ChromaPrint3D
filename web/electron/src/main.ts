@@ -179,7 +179,7 @@ function backendBinaryPath(root: string): string {
 function backendModelPackPath(dataDir: string): string {
   return (
     process.env.CHROMAPRINT3D_MODEL_PACK_PATH?.trim() ||
-    path.join(dataDir, 'model_pack', 'model_package.json')
+    path.join(dataDir, 'model_packs')
   )
 }
 
@@ -407,7 +407,7 @@ async function startBackend(root: string, dataDir: string): Promise<void> {
     throw new Error(`Backend data directory not found: ${dataDir}`)
   }
   if (!fs.existsSync(modelPackPath)) {
-    throw new Error(`Backend model pack file not found: ${modelPackPath}`)
+    console.warn(`Model pack path not found: ${modelPackPath}; model matching will be unavailable`)
   }
 
   const preferredPort = parsePort(process.env.CHROMAPRINT3D_BACKEND_PORT, DEFAULT_BACKEND_PORT)

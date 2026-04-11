@@ -228,7 +228,7 @@ void SearchModel(const Lab& target_color, const detail::PreparedModel& model, bo
         if (seen.count(key)) { continue; }
         seen.insert(std::move(key));
 
-        raw.push_back({std::move(recipe), model.pred_lab[idx], true});
+        raw.push_back({std::move(recipe), model.pred_lab_view[idx], true});
     }
 }
 
@@ -364,7 +364,7 @@ std::vector<RecipeCandidate> FindRecipesByPattern(const RecipePattern& pattern,
             if (seen.count(key)) { continue; }
             seen.insert(std::move(key));
 
-            raw.push_back({std::move(recipe), model.pred_lab[i], true});
+            raw.push_back({std::move(recipe), model.pred_lab_view[i], true});
         }
     }
 

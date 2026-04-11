@@ -48,10 +48,12 @@ function validateResourcesStructure() {
   assertPathExists(path.join(resourcesRoot, 'frontend-dist', 'index.html'), 'frontend-dist/index.html')
   assertPathExists(path.join(resourcesRoot, 'backend'), 'backend directory')
   assertPathExists(path.join(resourcesRoot, 'data'), 'data directory')
-  assertPathExists(
-    path.join(resourcesRoot, 'data', 'model_pack', 'model_package.json'),
-    'data/model_pack/model_package.json',
-  )
+  const modelPackDir = path.join(resourcesRoot, 'data', 'model_packs')
+  if (existsSync(modelPackDir)) {
+    console.log('✅ data/model_packs/ exists')
+  } else {
+    console.warn('⚠️  data/model_packs/ not found; model matching will be unavailable')
+  }
   const dbRoot = path.join(resourcesRoot, 'data', 'dbs')
   assertPathExists(dbRoot, 'data/dbs')
   if (!hasAnyColorDbJson(dbRoot)) {
@@ -121,7 +123,7 @@ function resolveLaunchCommand() {
 async function runElectronStartupCheck() {
   const backendBinary = backendLaunchPath()
   const frontendEntry = path.join(resourcesRoot, 'frontend-dist', 'index.html')
-  const modelPackPath = path.join(resourcesRoot, 'data', 'model_pack', 'model_package.json')
+  const modelPackPath = path.join(resourcesRoot, 'data', 'model_packs')
   const smokeExitMs = process.env.CHROMAPRINT3D_ELECTRON_SMOKE_TIMEOUT_MS?.trim() || '4000'
   const timeoutMs = Number(process.env.CHROMAPRINT3D_ELECTRON_SMOKE_TOTAL_TIMEOUT_MS ?? '30000')
   const rendererUrl = pathToFileURL(frontendEntry).toString()

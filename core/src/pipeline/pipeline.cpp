@@ -9,6 +9,7 @@
 #include "chromaprint3d/recipe_map.h"
 #include "chromaprint3d/print_profile.h"
 #include "chromaprint3d/error.h"
+#include "match/detail/match_utils.h"
 
 #include <spdlog/spdlog.h>
 
@@ -167,7 +168,7 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     std::optional<ModelPackage> owned_model_pack;
     const ModelPackage* model_pack_ptr = request.preloaded_model_pack;
     if (!model_pack_ptr && !request.model_pack_path.empty()) {
-        owned_model_pack.emplace(ModelPackage::LoadFromJson(request.model_pack_path));
+        owned_model_pack.emplace(ModelPackage::Load(request.model_pack_path));
         model_pack_ptr = &owned_model_pack.value();
     }
 
@@ -249,8 +250,16 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
 
     std::vector<std::string> warnings;
     if (model_pack_ptr && (model_gate.enable || model_gate.model_only)) {
-        if (!model_pack_ptr->FindByColorLayers(request.color_layers)) {
+        const auto* mode = model_pack_ptr->FindByColorLayers(request.color_layers);
+        if (!mode) {
             warnings.emplace_back("model_assist_unavailable");
+        } else {
+            if (!detail::NearlyEqual(mode->layer_height_mm, profile.layer_height_mm)) {
+                warnings.emplace_back("model_layer_height_mismatch");
+            }
+            if (mode->layer_order != profile.layer_order) {
+                warnings.emplace_back("model_layer_order_mismatch");
+            }
         }
     }
 

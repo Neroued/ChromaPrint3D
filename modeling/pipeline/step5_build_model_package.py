@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-Build Phase A model package for runtime model fallback.
+Build v2 model package (MessagePack binary format) for runtime model fallback.
 
 Example:
   python -m modeling.pipeline.step5_build_model_package \
     --stage modeling/output/params/stage_B_retrained.json \
     --db modeling/dbs \
-    --output modeling/output/packages/model_package_phaseA.json
+    --output modeling/output/packages/pla_basic.msgpack
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+import msgpack
 import numpy as np
 
 from modeling.core.color_space import linear_rgb_to_opencv_lab_batch
@@ -31,13 +31,15 @@ from modeling.core.io_utils import load_json, normalize_label, parse_layer_order
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+DEFAULT_MODES = "2:0.08,3:0.08,4:0.08,5:0.08,6:0.04,7:0.04,8:0.04,9:0.04,10:0.04"
+
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build Phase A model package json.")
+    parser = argparse.ArgumentParser(description="Build v2 model package (msgpack).")
     parser.add_argument("--stage", type=Path, required=True)
     parser.add_argument("--db", type=Path, default=None)
-    parser.add_argument("--modes", type=str, default="0.08x5,0.04x10",
-                        help="Comma-separated layer configs. Legacy: '0.08x5,0.04x10'. New: '5:0.08,10:0.04'.")
+    parser.add_argument("--modes", type=str, default=DEFAULT_MODES,
+                        help="Comma-separated layer configs: '5:0.08,10:0.04'.")
     parser.add_argument("--candidate-count", type=int, default=65536)
     parser.add_argument("--material", type=str, default="PLA Basic")
     parser.add_argument("--layer-order", choices=("Top2Bottom", "Bottom2Top"), default="Top2Bottom")
@@ -46,8 +48,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--margin", type=float, default=0.7)
     parser.add_argument("--micro-layer-height", type=float, default=None)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--vendor", type=str, default="BambuLab")
+    parser.add_argument("--material-type", type=str, default="PLA")
+    parser.add_argument("--name", type=str, default=None)
     parser.add_argument("--output", type=Path,
-                        default=REPO_ROOT / "modeling" / "output" / "packages" / "model_package_phaseA.json")
+                        default=REPO_ROOT / "modeling" / "output" / "packages" / "pla_basic.msgpack")
     return parser.parse_args()
 
 
@@ -62,29 +67,20 @@ def build_channel_key(color: str, material: str) -> str:
     return normalize_channel_key(f"{color}|{material}")
 
 
-def parse_modes(modes_text: str) -> List[Tuple[str, float, int]]:
-    """Parse mode specifications.
-
-    Supports legacy format: '0.08x5', '0.04x10'
-    And new format: '5:0.08', '10:0.04' (layers:height)
-    """
-    out: List[Tuple[str, float, int]] = []
+def parse_modes(modes_text: str) -> List[Tuple[float, int]]:
+    """Parse mode specifications: '5:0.08,10:0.04' (layers:height)."""
+    out: List[Tuple[float, int]] = []
     for raw in modes_text.split(","):
         mode = raw.strip()
         if not mode:
             continue
-        if mode in ("0.08x5", "0p08x5"):
-            out.append(("0.08x5", 0.08, 5))
-        elif mode in ("0.04x10", "0p04x10"):
-            out.append(("0.04x10", 0.04, 10))
-        elif ":" in mode:
+        if ":" in mode:
             parts = mode.split(":")
             layers = int(parts[0])
             height = float(parts[1])
-            key = f"{layers}_{height}"
-            out.append((key, height, layers))
+            out.append((height, layers))
         else:
-            raise ValueError(f"Unsupported mode: {mode}")
+            raise ValueError(f"Unsupported mode format: {mode} (use 'layers:height')")
     if not out:
         raise ValueError("No valid modes")
     return out
@@ -103,11 +99,6 @@ def resolve_db_paths(db_path: Optional[Path]) -> List[Path]:
 def _pad_to_target(
     layers: List[int], target: int, base_ch: int, layer_order: str,
 ) -> Optional[List[int]]:
-    """Pad shorter recipe to target length with base channel.
-
-    Top2Bottom: append base at end (bottom).
-    Bottom2Top: insert base at beginning (bottom).
-    """
     if len(layers) > target:
         return None
     if len(layers) == target:
@@ -245,33 +236,50 @@ def main() -> int:
     db_paths = resolve_db_paths(args.db)
     substrate_idx = resolve_substrate_idx(stage_model, db_paths, base_channel_idx)
     substrate_source = substrate_source_for_idx(stage_model, substrate_idx)
-    output_modes: Dict[str, Dict[str, object]] = {}
 
-    for mode_name, layer_height_mm, color_layers in modes:
+    pack_name = args.name or f"{args.vendor}_{args.material_type}_ModelPackage"
+    modes_list: List[dict] = []
+
+    for layer_height_mm, color_layers in modes:
         seed_recipes = collect_seed_recipes(
             db_paths, stage_key_to_idx, layer_height_mm, color_layers, args.layer_order,
             base_channel_idx,
         )
         recipes = sample_candidate_recipes(
-            seed_recipes, stage_model.E.shape[0], color_layers, args.candidate_count, args.seed + color_layers,
+            seed_recipes, stage_model.E.shape[0], color_layers, args.candidate_count,
+            args.seed + color_layers,
         )
         linear_rgb = predict_with_stage_model(
-            recipes, stage_model, layer_height_mm, micro_h, base_channel_idx, args.layer_order, substrate_idx,
+            recipes, stage_model, layer_height_mm, micro_h, base_channel_idx,
+            args.layer_order, substrate_idx,
         )
         pred_lab = linear_rgb_to_opencv_lab_batch(linear_rgb)
-        output_modes[mode_name] = {
-            "layer_height_mm": layer_height_mm, "color_layers": color_layers,
-            "layer_order": args.layer_order, "base_channel_key": base_channel_key,
-            "substrate_idx": int(substrate_idx), "substrate_source_db": substrate_source,
-            "candidate_recipes": recipes.astype(np.int32).tolist(),
-            "pred_lab": pred_lab.astype(np.float32).tolist(),
-        }
-        print(f"[{mode_name}] db_seed={len(seed_recipes)} candidates={recipes.shape[0]}")
+
+        recipes_bin = recipes.astype(np.uint8).tobytes()
+        pred_lab_bin = pred_lab.astype("<f4").tobytes()
+
+        modes_list.append({
+            "color_layers": color_layers,
+            "layer_height_mm": layer_height_mm,
+            "layer_order": args.layer_order,
+            "base_channel_key": base_channel_key,
+            "num_candidates": int(recipes.shape[0]),
+            "candidate_recipes": recipes_bin,
+            "pred_lab": pred_lab_bin,
+        })
+        print(f"[{color_layers}L/{layer_height_mm}mm] "
+              f"db_seed={len(seed_recipes)} candidates={recipes.shape[0]}")
 
     output = {
-        "name": "PhaseA_ModelPackage",
+        "schema_version": 2,
+        "name": pack_name,
+        "scope": {
+            "vendor": args.vendor,
+            "material_type": args.material_type,
+        },
+        "channel_keys": channel_keys,
+        "defaults": {"threshold": float(args.threshold), "margin": float(args.margin)},
         "meta": {
-            "schema_version": "1.0",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "generated_from": str(args.stage),
             "dbs": [str(p) for p in db_paths],
@@ -282,14 +290,13 @@ def main() -> int:
             "substrate_idx": int(substrate_idx),
             "substrate_source_db": substrate_source,
         },
-        "channel_keys": channel_keys,
-        "defaults": {"threshold": float(args.threshold), "margin": float(args.margin)},
-        "modes": output_modes,
+        "modes": modes_list,
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(output, indent=2, ensure_ascii=True), encoding="utf-8")
-    print(f"Saved model package to {args.output}")
+    packed = msgpack.packb(output, use_bin_type=True)
+    args.output.write_bytes(packed)
+    print(f"Saved v2 model package ({len(packed)} bytes) to {args.output}")
     return 0
 
 
