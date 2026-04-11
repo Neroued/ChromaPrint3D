@@ -1132,6 +1132,7 @@ json ServerFacade::TaskToJson(const TaskSnapshot& task) {
         j["progress"]   = cp->progress;
         j["match_only"] = cp->match_only;
         if (!cp->generate_error.empty()) { j["generate_error"] = cp->generate_error; }
+        if (!cp->result.warnings.empty()) { j["warnings"] = cp->result.warnings; }
         if (task.status == RuntimeTaskStatus::Completed) {
             j["result"] = {
                 {"input_width", cp->result.input_width},
@@ -1423,6 +1424,9 @@ ServiceResult ServerFacade::BuildRasterRequest(const json& params,
         return ServiceResult::Error(400, "invalid_params", e.what());
     }
 
+    if (out.color_layers < 1 || out.color_layers > 20) {
+        return ServiceResult::Error(400, "invalid_params", "color_layers must be between 1 and 20");
+    }
     if (out.scale <= 0.0f) return ServiceResult::Error(400, "invalid_params", "scale must be > 0");
     if (out.max_width < 0 || out.max_height < 0) {
         return ServiceResult::Error(400, "invalid_params", "max dimensions must be >= 0");
@@ -1550,6 +1554,9 @@ ServiceResult ServerFacade::BuildVectorRequest(const json& params, const std::ve
         return ServiceResult::Error(400, "invalid_params", e.what());
     }
 
+    if (out.color_layers < 1 || out.color_layers > 20) {
+        return ServiceResult::Error(400, "invalid_params", "color_layers must be between 1 and 20");
+    }
     if (out.k_candidates < 1) {
         return ServiceResult::Error(400, "invalid_params", "k_candidates must be >= 1");
     }

@@ -144,6 +144,7 @@ export interface TaskStatus {
   result: TaskResult | null
   match_only?: boolean
   generate_error?: string
+  warnings?: string[]
 }
 
 // ---- ColorDB info (matches backend ColorDBInfoToJson) ----

@@ -14,6 +14,7 @@ import {
   NSpace,
   NSpin,
   NSwitch,
+  NText,
   NTooltip,
 } from 'naive-ui'
 import { computed, ref, watch } from 'vue'
@@ -86,6 +87,11 @@ const widthAnalyzing = ref(false)
 const nozzleDiameterMm = computed(() => {
   const ns = modelValue.value.nozzle_size
   return ns === 'n02' ? 0.2 : 0.4
+})
+
+const showColorLayersHint = computed(() => {
+  const layers = modelValue.value.color_layers
+  return layers !== undefined && layers !== 5 && layers !== 10
 })
 
 async function handleAnalyzeWidth() {
@@ -399,6 +405,9 @@ watch(canEnableTransparentLayer, (can) => {
             @update:value="(v: number | null) => update({ color_layers: v ?? 5 })"
           />
         </NFormItem>
+        <NText v-if="showColorLayersHint" depth="3" style="font-size: 12px">
+          {{ t('param.colorLayersHint') }}
+        </NText>
 
         <ColorDBSelector
           :material="selectedMaterial"
@@ -920,6 +929,9 @@ watch(canEnableTransparentLayer, (can) => {
                 @update:value="(v: number | null) => update({ color_layers: v ?? 5 })"
               />
             </NFormItem>
+            <NText v-if="showColorLayersHint" depth="3" style="font-size: 12px">
+              {{ t('param.colorLayersHint') }}
+            </NText>
 
             <NFormItem>
               <template #label>

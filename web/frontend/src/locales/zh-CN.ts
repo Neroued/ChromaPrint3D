@@ -55,6 +55,14 @@ export default {
     videoTutorial: '视频教程',
   },
 
+  taskErrors: {
+    noCompatibleDbEntries: '当前层数没有兼容的颜色配方，请尝试使用 5 层或 10 层。',
+    colorLayersMustBePositive: '叠色层数必须为正数。',
+    colorLayersOutOfRange: '叠色层数必须在 1 到 20 之间。',
+    modelOnlyRequiresPackage: '纯模型模式需要与当前层数兼容的模型包。',
+    paletteEmpty: '调色板为空，请选择有效的颜色数据库。',
+  },
+
   app: {
     tabs: {
       convert: '叠色模型生成',
@@ -122,6 +130,9 @@ export default {
     uploadFirst: '请先上传文件',
     svgInputHint:
       '当前输入为矢量图 (SVG{sizeInfo})，路径较多的复杂矢量图转换耗时可能较长，请耐心等待。',
+    warnings: {
+      model_assist_unavailable: '模型辅助匹配不支持当前层数配置，颜色匹配质量可能有所下降。',
+    },
   },
 
   param: {
@@ -195,6 +206,7 @@ export default {
     dbOptionLabel: '{name} ({entries} 色, {channels} 通道)',
     sessionSuffix: ' (自定义)',
     loadConfigFailed: '加载配置失败',
+    colorLayersHint: '非标准层数：建议使用 5 层或 10 层以获得最佳颜色匹配质量',
     tooltips: {
       color_layers: '叠色层数，默认 5 层。更多层可改善浅色（如肤色）表现，但会增加打印时间和厚度',
       color_space: '颜色匹配时使用的色彩空间。Lab 更符合人眼感知（推荐）；RGB 为直接 RGB 距离计算',

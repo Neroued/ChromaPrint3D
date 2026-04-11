@@ -70,6 +70,11 @@ VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span
     if (model_only && !prepared_model.has_value()) {
         throw ConfigError("Model-only matching requires a compatible model package");
     }
+    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
+        throw ConfigError("No compatible ColorDB entries for color_layers=" +
+                          std::to_string(profile.color_layers) +
+                          "; try using the default layer count (5 or 10)");
+    }
 
     std::vector<int> shape_to_unique_idx(result.shapes.size(), -1);
     std::vector<Rgb> unique_colors;

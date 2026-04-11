@@ -247,6 +247,13 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
             (request.model_margin >= 0.0f) ? request.model_margin : model_pack_ptr->default_margin;
     }
 
+    std::vector<std::string> warnings;
+    if (model_pack_ptr && (model_gate.enable || model_gate.model_only)) {
+        if (!model_pack_ptr->FindByColorLayers(request.color_layers)) {
+            warnings.emplace_back("model_assist_unavailable");
+        }
+    }
+
     MatchStats match_stats;
     RecipeMap recipe_map = RecipeMap::MatchFromRaster(img, dbs_ref, profile, match_cfg,
                                                       model_pack_ptr, model_gate, &match_stats);
@@ -264,6 +271,7 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     result.recipe_map        = std::move(recipe_map);
     result.profile           = std::move(profile);
     result.stats             = match_stats;
+    result.warnings          = std::move(warnings);
     result.resolved_pixel_mm = resolved_pixel_mm;
     result.layer_height_mm =
         (request.layer_height_mm > 0.0f)
@@ -304,6 +312,7 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
     result.stats        = mr.stats;
     result.input_width  = mr.input_width;
     result.input_height = mr.input_height;
+    result.warnings     = std::move(mr.warnings);
 
     // === Generate preview and source mask ===
     if (mr.generate_preview) {

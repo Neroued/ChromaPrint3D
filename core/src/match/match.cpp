@@ -181,6 +181,11 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
     if (model_only && !prepared_model.has_value()) {
         throw ConfigError("Model-only matching requires a compatible model package");
     }
+    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
+        throw ConfigError("No compatible ColorDB entries for color_layers=" +
+                          std::to_string(profile.color_layers) +
+                          "; try using the default layer count (5 or 10)");
+    }
 
     int stat_total_queries   = 0;
     int stat_db_only         = 0;

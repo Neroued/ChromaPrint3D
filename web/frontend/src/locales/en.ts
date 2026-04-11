@@ -25,6 +25,16 @@ export default {
     videoTutorial: 'Video Tutorial',
   },
 
+  taskErrors: {
+    noCompatibleDbEntries:
+      'No compatible color recipes for the current layer count. Try using 5 or 10 layers.',
+    colorLayersMustBePositive: 'Color layers must be a positive number.',
+    colorLayersOutOfRange: 'Color layers must be between 1 and 20.',
+    modelOnlyRequiresPackage:
+      'Model-only mode requires a compatible model package for the current layer count.',
+    paletteEmpty: 'The color palette is empty. Please select a valid Color Database.',
+  },
+
   app: {
     tabs: {
       convert: 'Color Model Generation',
@@ -92,6 +102,10 @@ export default {
     uploadFirst: 'Please upload a file first',
     svgInputHint:
       'Current input is a vector image (SVG{sizeInfo}). Complex SVGs with many paths may take longer to convert.',
+    warnings: {
+      model_assist_unavailable:
+        'Model-assisted matching is unavailable for the current layer count; color matching quality may be reduced.',
+    },
   },
 
   param: {
@@ -165,6 +179,8 @@ export default {
     dbOptionLabel: '{name} ({entries} colors, {channels} ch)',
     sessionSuffix: ' (custom)',
     loadConfigFailed: 'Failed to load configuration',
+    colorLayersHint:
+      'Non-standard layer count: 5 or 10 layers are recommended for best color matching quality',
     tooltips: {
       color_layers:
         'Number of color layers. Default 5. More layers can improve light color reproduction (e.g. skin tones), but increase printing time and thickness',

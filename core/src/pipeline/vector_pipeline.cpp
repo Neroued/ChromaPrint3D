@@ -184,6 +184,13 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
             (request.model_margin >= 0.0f) ? request.model_margin : model_pack_ptr->default_margin;
     }
 
+    std::vector<std::string> warnings;
+    if (model_pack_ptr && (model_gate.enable || model_gate.model_only)) {
+        if (!model_pack_ptr->FindByColorLayers(request.color_layers)) {
+            warnings.emplace_back("model_assist_unavailable");
+        }
+    }
+
     MatchStats match_stats;
     VectorRecipeMap recipe_map = VectorRecipeMap::Match(vimg, all_dbs, profile, match_cfg,
                                                         model_pack_ptr, model_gate, &match_stats);
@@ -197,6 +204,7 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     mr.proc_result          = std::move(vimg);
     mr.profile              = std::move(profile);
     mr.stats                = match_stats;
+    mr.warnings             = std::move(warnings);
     mr.layer_height_mm      = request.layer_height_mm;
     mr.base_layers          = request.base_layers;
     mr.custom_base_layers   = (request.base_layers >= 0);
@@ -273,6 +281,7 @@ ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progre
 
     ConvertResult result;
     result.stats              = mr.stats;
+    result.warnings           = std::move(mr.warnings);
     result.physical_width_mm  = vimg.width_mm;
     result.physical_height_mm = vimg.height_mm;
 

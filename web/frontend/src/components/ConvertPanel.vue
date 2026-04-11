@@ -11,6 +11,7 @@ import {
   submitMatchOnlyTask,
 } from '../services/convertService'
 import { getResultPath } from '../services/resultService'
+import { mapTaskError } from '../domain/error/taskErrorMapping'
 import { useAppStore } from '../stores/app'
 import ProgressActionGroup from './common/ProgressActionGroup.vue'
 import type { TaskStatus } from '../types'
@@ -66,6 +67,8 @@ const {
   },
 })
 
+const displayError = computed(() => (error.value ? mapTaskError(error.value, t) : null))
+
 watch(selectedFile, () => {
   resetTask()
 })
@@ -101,6 +104,7 @@ const canSubmit = computed(() => {
   return selectedFile.value !== null && !loading.value
 })
 
+const taskWarnings = computed(() => completedTask.value?.warnings ?? [])
 const result = computed(() => completedTask.value?.result ?? null)
 const completedTaskId = computed(() => completedTask.value?.id ?? '')
 const isDownloading3mf = ref(false)
@@ -157,6 +161,10 @@ const {
     appStore.markTaskFailed()
   },
 })
+
+const displayMatchError = computed(() =>
+  matchError.value ? mapTaskError(matchError.value, t) : null,
+)
 
 watch(selectedFile, () => {
   resetMatch()
@@ -241,11 +249,14 @@ async function handleDownload3MF() {
         }}
       </NAlert>
 
-      <NAlert v-if="error" type="error" closable @close="error = null">
-        {{ error }}
+      <NAlert v-if="displayError" type="error" closable @close="error = null">
+        {{ displayError }}
       </NAlert>
-      <NAlert v-if="matchError" type="error" closable @close="matchError = null">
-        {{ matchError }}
+      <NAlert v-if="displayMatchError" type="error" closable @close="matchError = null">
+        {{ displayMatchError }}
+      </NAlert>
+      <NAlert v-for="w in taskWarnings" :key="w" type="warning" closable>
+        {{ t(`convert.warnings.${w}`, t(`convert.warnings.${w}`)) }}
       </NAlert>
     </NSpace>
   </NCard>

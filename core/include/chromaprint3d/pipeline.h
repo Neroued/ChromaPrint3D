@@ -129,6 +129,8 @@ struct ConvertResult {
     std::vector<uint8_t> preview_png;     ///< Preview PNG image data.
     std::vector<uint8_t> source_mask_png; ///< Source mask PNG image data.
     LayerPreviewResult layer_previews;    ///< Per-layer preview images and metadata.
+
+    std::vector<std::string> warnings; ///< Non-fatal warnings for the user.
 };
 
 /// Conversion pipeline stage (shared by raster and vector pipelines).
@@ -174,6 +176,8 @@ struct MatchRasterResult {
 
     bool generate_preview     = true;
     bool generate_source_mask = true;
+
+    std::vector<std::string> warnings; ///< Non-fatal warnings for the user.
 
     std::size_t EstimateBytes() const;
 
@@ -263,6 +267,8 @@ struct MatchVectorResult {
 
     bool generate_preview     = true;
     bool generate_source_mask = true;
+
+    std::vector<std::string> warnings; ///< Non-fatal warnings for the user.
 
     std::size_t EstimateBytes() const;
 
