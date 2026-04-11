@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NCard, NButton, NSpace, NText, NAlert, NSwitch, NTooltip, useMessage } from 'naive-ui'
+import {
+  NCard,
+  NButton,
+  NSpace,
+  NText,
+  NAlert,
+  NSwitch,
+  NTooltip,
+  NTabs,
+  NTabPane,
+  useMessage,
+} from 'naive-ui'
 import type { RecipeEditorSummary, RecipeCandidate, LabColor, RecipeInfo } from '../../types'
 import {
   fetchRecipeEditorSummary,
@@ -15,6 +26,7 @@ import { useAppStore } from '../../stores/app'
 import RecipeSummaryPanel from './RecipeSummaryPanel.vue'
 import RecipeCandidatePanel from './RecipeCandidatePanel.vue'
 import CustomRecipeDialog from './CustomRecipeDialog.vue'
+import CustomRecipeListPanel from './CustomRecipeListPanel.vue'
 import RegionOverlayCanvas from './RegionOverlayCanvas.vue'
 import ZoomableImageViewport from '../common/ZoomableImageViewport.vue'
 import { fetchBlobWithSession } from '../../runtime/protectedRequest'
@@ -346,6 +358,11 @@ async function handleUndo() {
 
 const canUndo = computed(() => undoStack.value.length > 0)
 
+// ── Custom recipe tab & history ──────────────────────────────────────────────
+
+const rightTab = ref<'alternatives' | 'custom'>('alternatives')
+const customRecipes = ref<RecipeCandidate[]>([])
+
 // ── Custom recipe dialog ────────────────────────────────────────────────────
 
 const showCustomRecipeDialog = ref(false)
@@ -385,6 +402,15 @@ async function handleCustomRecipeConfirm(payload: {
     hue_diff: 0,
     from_model: payload.fromModel,
   }
+
+  const key = candidate.recipe.join('-')
+  const existIdx = customRecipes.value.findIndex((c) => c.recipe.join('-') === key)
+  if (existIdx >= 0) {
+    customRecipes.value.splice(existIdx, 1)
+  }
+  customRecipes.value.unshift(candidate)
+
+  rightTab.value = 'custom'
   await handleCandidateSelect(candidate)
 }
 
@@ -590,18 +616,30 @@ onUnmounted(() => {
           @select-recipe="handleSelectRecipe"
         />
         <div class="candidate-panel-wrapper">
-          <div class="candidate-panel-toolbar">
-            <NButton size="small" :disabled="!hasSelection" @click="openCustomRecipeDialog">
-              {{ t('recipeEditor.customRecipe.button') }}
-            </NButton>
-          </div>
-          <RecipeCandidatePanel
-            :task-id="taskId"
-            :target-lab="targetLab"
-            :target-hex="targetHex"
-            :palette="summary.palette"
-            @select="handleCandidateSelect"
-          />
+          <NTabs v-model:value="rightTab" type="line" size="small" class="candidate-tabs">
+            <NTabPane
+              name="alternatives"
+              :tab="t('recipeEditor.tabs.alternatives')"
+              class="candidate-tab-pane"
+            >
+              <RecipeCandidatePanel
+                :task-id="taskId"
+                :target-lab="targetLab"
+                :target-hex="targetHex"
+                :palette="summary.palette"
+                @select="handleCandidateSelect"
+              />
+            </NTabPane>
+            <NTabPane name="custom" :tab="t('recipeEditor.tabs.custom')" class="candidate-tab-pane">
+              <CustomRecipeListPanel
+                :items="customRecipes"
+                :palette="summary.palette"
+                :has-selection="hasSelection"
+                @select="handleCandidateSelect"
+                @create="openCustomRecipeDialog"
+              />
+            </NTabPane>
+          </NTabs>
         </div>
       </div>
 
@@ -736,13 +774,31 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 6px;
 }
 
-.candidate-panel-toolbar {
+.candidate-tabs {
+  height: 100%;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+}
+
+.candidate-tabs :deep(.n-tabs-nav) {
   flex-shrink: 0;
+}
+
+.candidate-tabs :deep(.n-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.candidate-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+}
+
+.candidate-tab-pane {
+  height: 100%;
 }
 
 @media (max-width: 720px) {

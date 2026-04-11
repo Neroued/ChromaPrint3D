@@ -773,6 +773,10 @@ export default {
       pixels: '{count} px',
       stats: '{recipes} recipes · {regions} regions',
     },
+    tabs: {
+      alternatives: 'Alternatives',
+      custom: 'Custom',
+    },
     candidates: {
       title: 'Alternative Recipes',
       empty: 'Select a recipe to see alternatives',
@@ -809,6 +813,8 @@ export default {
       predicting: 'Predicting…',
       predictFailed: 'Color prediction failed',
       noForwardModel: 'No forward model available for current material',
+      createNew: 'New Custom Recipe',
+      emptyHistory: 'No custom recipes yet',
     },
   },
 }

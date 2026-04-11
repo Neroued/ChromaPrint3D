@@ -761,6 +761,10 @@ export default {
       pixels: '{count} 像素',
       stats: '{recipes} 种配方 · {regions} 区域',
     },
+    tabs: {
+      alternatives: '替代配方',
+      custom: '自定义配方',
+    },
     candidates: {
       title: '替代配方',
       empty: '选择一个配方查看替代方案',
@@ -796,6 +800,8 @@ export default {
       predicting: '正在预测…',
       predictFailed: '颜色预测失败',
       noForwardModel: '当前材质无可用的前向模型',
+      createNew: '新建自定义配方',
+      emptyHistory: '尚未创建自定义配方',
     },
   },
 }
