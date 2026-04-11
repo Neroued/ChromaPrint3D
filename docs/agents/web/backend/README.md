@@ -56,12 +56,17 @@
 - `POST /api/v1/tasks/{id}/recipe-editor/alternatives`：查询候选替代配方（支持可选 `recipe_pattern` 参数按层颜色模式过滤）
 - `POST /api/v1/tasks/{id}/recipe-editor/replace`：替换指定区域的配方
 - `POST /api/v1/tasks/{id}/recipe-editor/generate`：异步生成 3MF 模型
+- `POST /api/v1/tasks/{id}/recipe-editor/predict`：使用前向模型预测自定义配方的颜色（请求 `{"recipe":[...]}`，返回 `predicted_lab`/`hex`；无匹配模型时 501）
 
 `region-map` artifact 通过 `GET /api/v1/tasks/{id}/artifacts/region-map` 下载。
 
 约束：仅支持 `dither=None` 的 Raster 流水线，唯一配方数 ≤128。
 
-核心实现：`task_runtime.h/.cpp`（`SubmitConvertRasterMatchOnly`、`GetRecipeEditorSummary`、`QueryRecipeAlternatives`、`ReplaceRecipe`、`SubmitGenerateModel`）、`server_facade.cpp`（`RecipeEditorSummary`、`RecipeEditorAlternatives`、`RecipeEditorReplace`、`RecipeEditorGenerate`）。
+核心实现：`task_runtime.h/.cpp`（`SubmitConvertRasterMatchOnly`、`GetRecipeEditorSummary`、`QueryRecipeAlternatives`、`ReplaceRecipe`、`SubmitGenerateModel`、`GetTaskPrintProfile`、`GetTaskColorDbNames`）、`server_facade.cpp`（`RecipeEditorSummary`、`RecipeEditorAlternatives`、`RecipeEditorReplace`、`RecipeEditorGenerate`、`RecipeEditorPredict`）。
+
+## 前向色彩模型
+
+`DataRepository` 启动时从 `data/models/forward/` 加载 `ForwardModelRegistry`（C++ core 实现），通过 `ForwardModels()` 暴露访问。`RecipeEditorPredict` 根据 task 使用的 ColorDB 确定 vendor/material，调用 `ForwardModelRegistry::Select` 匹配前向模型，将 palette 通道映射为 stage 通道后调用 `ForwardColorModel::PredictLab`。作用域匹配逻辑与 `ModelPackageRegistry::Select` 完全一致。
 
 ## 矢量色块宽度分析
 

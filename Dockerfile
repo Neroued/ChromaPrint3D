@@ -27,7 +27,7 @@ COPY data/dbs/        /app/data/dbs/
 COPY data/recipes/    /app/data/recipes/
 COPY data/models/     /app/data/models/
 COPY data/presets/    /app/data/presets/
-COPY data/model_pack/ /app/model_pack/
+COPY data/model_packs/ /app/data/model_packs/
 
 RUN chown -R chromaprint3d:chromaprint3d /app
 
@@ -46,7 +46,7 @@ FROM base AS api
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:8080/api/v1/health || exit 1
 
-CMD ["--data", "/app/data", "--model-pack", "/app/model_pack/model_package.json", "--port", "8080"]
+CMD ["--data", "/app/data", "--port", "8080"]
 
 # ── allinone: frontend + backend in one image ─────────────────────────────────
 #   docker build --target allinone -t neroued/chromaprint3d:latest .
@@ -57,4 +57,4 @@ COPY --chown=chromaprint3d:chromaprint3d web/frontend/dist/ /app/web/
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:8080/api/v1/health || exit 1
 
-CMD ["--data", "/app/data", "--web", "/app/web", "--model-pack", "/app/model_pack/model_package.json", "--port", "8080"]
+CMD ["--data", "/app/data", "--web", "/app/web", "--port", "8080"]

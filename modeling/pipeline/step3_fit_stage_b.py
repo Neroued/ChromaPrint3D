@@ -34,8 +34,13 @@ from modeling.core.color_space import (
     lab_grad_from_linear_batch,
     linear_rgb_to_opencv_lab,
     linear_rgb_to_opencv_lab_batch,
+    linear_to_srgb,
 )
 from modeling.core.io_utils import load_json, normalize_label, parse_layer_order, resolve_db_paths
+
+
+def _build_channel_key(color: str, material: str) -> str:
+    return f"{normalize_label(color)}|{normalize_label(material)}"
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -123,6 +128,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height-ref-mm", type=float, default=0.04)
     parser.add_argument("--disable-learn-c0", action="store_true")
     parser.add_argument("--disable-height-scale", action="store_true")
+    parser.add_argument("--vendor", type=str, default="BambuLab",
+                        help="Vendor name for scope matching (e.g. BambuLab)")
+    parser.add_argument("--material-type", type=str, default="PLA",
+                        help="Material type for scope matching (e.g. PLA)")
+    parser.add_argument("--material", type=str, default="PLA Basic",
+                        help="Material name for channel_keys generation (e.g. PLA Basic)")
     return parser.parse_args()
 
 
@@ -662,6 +673,107 @@ def group_entries_by_layer_height(entries):
 
 
 # ---------------------------------------------------------------------------
+# Sanity checks
+# ---------------------------------------------------------------------------
+
+_C0_DRIFT_THRESHOLD = 0.15
+_WHITE_E_MIN = 0.8
+_BLACK_E_MAX = 0.2
+_SMOKE_TEST_LAYERS = [2, 3]
+_SMOKE_TEST_LAYER_HEIGHT = 0.08
+
+
+def _run_sanity_checks(
+    E: np.ndarray, k: np.ndarray, c0: np.ndarray, c0_anchor: np.ndarray,
+    gamma: np.ndarray, delta: np.ndarray,
+    channel_names: List[str], config: OptimConfig,
+    substrate_defs: List[Dict[str, object]],
+) -> List[str]:
+    """Post-fit sanity checks; returns warning strings."""
+    warns: List[str] = []
+    num_channels = E.shape[0]
+
+    # 1) C0 drift
+    for info in substrate_defs:
+        sidx = int(info["substrate_idx"])
+        if sidx >= c0.shape[0] or sidx >= c0_anchor.shape[0]:
+            continue
+        drift = float(np.linalg.norm(c0[sidx] - c0_anchor[sidx]))
+        if drift > _C0_DRIFT_THRESHOLD:
+            msg = (f"WARNING: substrate {sidx} C0 drift = {drift:.4f} "
+                   f"(threshold {_C0_DRIFT_THRESHOLD}). "
+                   f"Anchor={c0_anchor[sidx].tolist()}, "
+                   f"Fitted={c0[sidx].tolist()}")
+            print(f"  [sanity] {msg}")
+            warns.append(msg)
+
+    # 2) E value plausibility
+    for idx, name in enumerate(channel_names):
+        norm_name = normalize_label(name)
+        e_mean = float(np.mean(E[idx]))
+        if "white" in norm_name and e_mean < _WHITE_E_MIN:
+            msg = (f"WARNING: channel '{name}' (white) has low E mean = "
+                   f"{e_mean:.4f} (expected >= {_WHITE_E_MIN})")
+            print(f"  [sanity] {msg}")
+            warns.append(msg)
+        if "black" in norm_name and e_mean > _BLACK_E_MAX:
+            msg = (f"WARNING: channel '{name}' (black) has high E mean = "
+                   f"{e_mean:.4f} (expected <= {_BLACK_E_MAX})")
+            print(f"  [sanity] {msg}")
+            warns.append(msg)
+
+    # 3) Pure-color smoke test (few-layer single-color predictions)
+    base_stage_idx = 0
+    substrate_idx = 0
+    if substrate_defs:
+        first = substrate_defs[0]
+        base_stage_idx = int(first.get("base_channel_stage_idx", 0))
+        substrate_idx = int(first.get("substrate_idx", 0))
+
+    print("  [sanity] Pure-color smoke test:")
+    for n_layers in _SMOKE_TEST_LAYERS:
+        for ch_idx in range(num_channels):
+            recipe = np.full((1, n_layers), ch_idx, dtype=np.int32)
+            pred = forward_predict_batch(
+                _expand_recipe_micro(recipe, _SMOKE_TEST_LAYER_HEIGHT,
+                                     config.micro_layer_height),
+                np.array([base_stage_idx], dtype=np.int32),
+                np.array([substrate_idx], dtype=np.int32),
+                np.array([_SMOKE_TEST_LAYER_HEIGHT], dtype=np.float32),
+                E, k, c0, gamma, delta, config.micro_layer_height,
+                config.substrate_mode, config.height_ref_mm,
+                config.enable_height_scale,
+            )
+            srgb = np.clip(linear_to_srgb(np.clip(pred[0], 0.0, 1.0)), 0.0, 1.0)
+            r, g, b = int(round(srgb[0] * 255)), int(round(srgb[1] * 255)), int(round(srgb[2] * 255))
+            hex_color = f"#{r:02X}{g:02X}{b:02X}"
+            name = channel_names[ch_idx]
+            norm_name = normalize_label(name)
+            print(f"    {n_layers}L {name}: {hex_color}")
+            if "white" in norm_name and (r < 180 or g < 180 or b < 180):
+                msg = (f"WARNING: {n_layers}-layer pure white predicts "
+                       f"{hex_color} (too dark, min channel < 180)")
+                print(f"  [sanity] {msg}")
+                warns.append(msg)
+            if "black" in norm_name and (r > 100 or g > 100 or b > 100):
+                msg = (f"WARNING: {n_layers}-layer pure black predicts "
+                       f"{hex_color} (too bright, max channel > 100)")
+                print(f"  [sanity] {msg}")
+                warns.append(msg)
+    return warns
+
+
+def _expand_recipe_micro(
+    recipes: np.ndarray, layer_height: float, micro_height: float,
+) -> np.ndarray:
+    """Expand recipe layers → micro-layers for batch forward (Bottom2Top)."""
+    ratio = int(round(layer_height / micro_height))
+    if ratio <= 1:
+        return recipes
+    return np.repeat(recipes, ratio, axis=1)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -822,6 +934,13 @@ def main() -> int:
             st = per_base_channel_stats[bk]
             print(f"  base={bk} ({st['base_color']}): mean={st['mean_delta_e']:.4f}, p90={st['p90_delta_e']:.4f}, max={st['max_delta_e']:.4f}")
 
+    # Sanity checks
+    sanity_warnings = _run_sanity_checks(
+        E_fit, k_fit, c0_fit, c0_anchor, gamma, delta, stage.names,
+        config, substrate_defs,
+    )
+    warnings.extend(sanity_warnings)
+
     # Output
     output_channels = []
     for idx, color_name in enumerate(stage.names):
@@ -852,6 +971,15 @@ def main() -> int:
     }
 
     output = {
+        "param_type": "stage_B",
+        "scope": {
+            "vendor": args.vendor,
+            "material_type": args.material_type,
+        },
+        "channel_keys": [
+            _build_channel_key(name, args.material)
+            for name in stage.names
+        ],
         "meta": {
             "schema_version": "1.0",
             "generated_at": datetime.now(timezone.utc).isoformat(),

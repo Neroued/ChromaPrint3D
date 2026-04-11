@@ -690,6 +690,40 @@ std::optional<nlohmann::json> TaskRuntime::GetRecipeEditorSummary(const std::str
     return GetRecipeEditorSummaryLocked(it->second);
 }
 
+std::optional<ChromaPrint3D::PrintProfile>
+TaskRuntime::GetTaskPrintProfile(const std::string& owner, const std::string& id) {
+    std::lock_guard<std::mutex> lock(task_mtx_);
+    auto it = tasks_.find(id);
+    if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
+    if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+
+    const auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+    if (!cp || !cp->match_only) return std::nullopt;
+
+    if (cp->raster_match_state) return cp->raster_match_state->profile;
+    if (cp->vector_match_state) return cp->vector_match_state->profile;
+    return std::nullopt;
+}
+
+std::optional<std::vector<std::string>> TaskRuntime::GetTaskColorDbNames(const std::string& owner,
+                                                                         const std::string& id) {
+    std::lock_guard<std::mutex> lock(task_mtx_);
+    auto it = tasks_.find(id);
+    if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
+    if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+
+    const auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+    if (!cp || !cp->match_only) return std::nullopt;
+
+    const auto& dbs = cp->raster_match_state   ? cp->raster_match_state->dbs
+                      : cp->vector_match_state ? cp->vector_match_state->dbs
+                                               : std::vector<ChromaPrint3D::ColorDB>{};
+    std::vector<std::string> names;
+    names.reserve(dbs.size());
+    for (const auto& db : dbs) { names.push_back(db.name); }
+    return names;
+}
+
 std::optional<nlohmann::json>
 TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string& id,
                                      const ChromaPrint3D::Lab& target_lab, int max_candidates,
@@ -803,6 +837,13 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             const int new_layers = static_cast<int>(new_recipe.size());
             if (new_layers > mstate.recipe_map.color_layers) {
                 mstate.UpgradeColorLayers(new_layers);
+                cp->recipe_search_cache = {};
+                auto pad                = static_cast<uint8_t>(mstate.profile.base_channel_idx);
+                for (auto& reg : rmap.regions) {
+                    if (static_cast<int>(reg.recipe.size()) < new_layers) {
+                        reg.recipe.resize(static_cast<std::size_t>(new_layers), pad);
+                    }
+                }
             }
             mstate.recipe_map.ReplaceRecipeInRegions(rmap, target_region_ids, new_recipe,
                                                      new_mapped_color, new_from_model);
@@ -835,6 +876,7 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             const int new_layers = static_cast<int>(new_recipe.size());
             if (new_layers > vstate.recipe_map.color_layers) {
                 vstate.UpgradeColorLayers(new_layers);
+                cp->recipe_search_cache = {};
             }
             vstate.recipe_map.ReplaceRecipeForEntries(target_region_ids, new_recipe,
                                                       new_mapped_color, new_from_model);

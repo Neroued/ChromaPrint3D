@@ -120,11 +120,10 @@ services:
       # 示例：4 核 / 4 worker = 1；16 核 / 6 worker ≈ 3
       - OMP_NUM_THREADS=1
     # 跨域模式：限制 CORS 只允许云主机前端域名
+    # model_packs/ 已包含在 --data 指向的数据目录中，无需单独指定 --model-pack
     command:
       - "--data"
       - "/app/data"
-      - "--model-pack"
-      - "/app/model_packs"
       - "--port"
       - "8080"
       - "--cors-origin"

@@ -88,6 +88,20 @@ export async function submitGenerateModel(taskId: string): Promise<{ task_id: st
   })
 }
 
+export async function predictRecipeColor(
+  taskId: string,
+  recipe: number[],
+): Promise<{ predicted_lab: LabColor; hex: string; from_model: boolean }> {
+  return request<{ predicted_lab: LabColor; hex: string; from_model: boolean }>(
+    `/api/v1/tasks/${taskId}/recipe-editor/predict`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipe }),
+    },
+  )
+}
+
 export function getRegionMapPath(taskId: string): string {
   return `/api/v1/tasks/${taskId}/artifacts/region-map`
 }

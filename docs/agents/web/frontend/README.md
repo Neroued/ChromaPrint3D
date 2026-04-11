@@ -25,6 +25,7 @@
 | 调整任务轮询与状态处理 | `src/composables/useAsyncTask.ts` + `src/services/convertService.ts` |
 | 调整分层预览行为 | `src/domain/result/layerPreview.ts` + `src/components/ResultPanel.vue` |
 | 调整配方编辑器 | `src/components/recipeEditor/*.vue` + `src/api/recipeEditor.ts` + `src/composables/useRegionMap.ts` |
+| 调整自定义配方与颜色预测 | `src/components/recipeEditor/CustomRecipeDialog.vue` + `src/api/recipeEditor.ts`（`predictRecipeColor`） |
 | 调整 Browser/Electron 行为差异 | `src/runtime/*.ts` + `src/electron.d.ts` |
 
 ## 分层边界（强约束）

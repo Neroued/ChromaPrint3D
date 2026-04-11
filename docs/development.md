@@ -178,7 +178,7 @@ npm run dev
 | 数据库管理 | `GET /api/v1/databases`、`GET /api/v1/session/databases`、`POST /api/v1/session/databases/upload` |
 | 异步任务提交 | `POST /api/v1/convert/raster`、`POST /api/v1/convert/raster/match-only`、`POST /api/v1/convert/vector`、`POST /api/v1/convert/vector/match-only`、`POST /api/v1/matting/tasks`、`POST /api/v1/vectorize/tasks` |
 | 矢量分析 | `POST /api/v1/convert/vector/analyze-width` |
-| 配方编辑器 | `GET /api/v1/tasks/{id}/recipe-editor/summary`、`POST /api/v1/tasks/{id}/recipe-editor/alternatives`、`POST /api/v1/tasks/{id}/recipe-editor/replace`、`POST /api/v1/tasks/{id}/recipe-editor/generate` |
+| 配方编辑器 | `GET /api/v1/tasks/{id}/recipe-editor/summary`、`POST /api/v1/tasks/{id}/recipe-editor/alternatives`、`POST /api/v1/tasks/{id}/recipe-editor/replace`、`POST /api/v1/tasks/{id}/recipe-editor/generate`、`POST /api/v1/tasks/{id}/recipe-editor/predict` |
 | 任务查询与产物 | `GET /api/v1/tasks`、`GET /api/v1/tasks/{id}`、`GET /api/v1/tasks/{id}/artifacts/{artifact}` |
 | 校准链路 | `POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`、`POST /api/v1/calibration/locate`、`POST /api/v1/calibration/colordb` |
 

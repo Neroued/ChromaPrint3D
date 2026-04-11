@@ -180,6 +180,11 @@ public:
 
     SubmitResult SubmitGenerateModel(const std::string& owner, const std::string& id);
 
+    std::optional<ChromaPrint3D::PrintProfile> GetTaskPrintProfile(const std::string& owner,
+                                                                   const std::string& id);
+    std::optional<std::vector<std::string>> GetTaskColorDbNames(const std::string& owner,
+                                                                const std::string& id);
+
     std::vector<TaskSnapshot> ListTasks(const std::string& owner) const;
     std::optional<TaskSnapshot> FindTask(const std::string& owner, const std::string& id);
     bool DeleteTask(const std::string& owner, const std::string& id, int& status_code,

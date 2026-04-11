@@ -79,6 +79,8 @@ public:
     ServiceResult RecipeEditorReplace(const std::string& owner, const std::string& task_id,
                                       const std::string& body_json);
     ServiceResult RecipeEditorGenerate(const std::string& owner, const std::string& task_id);
+    ServiceResult RecipeEditorPredict(const std::string& owner, const std::string& task_id,
+                                      const std::string& body_json);
 
     ServiceResult ListTasks(const std::string& owner) const;
     ServiceResult GetTask(const std::string& owner, const std::string& id);

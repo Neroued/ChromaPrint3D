@@ -712,6 +712,112 @@ ServiceResult ServerFacade::RecipeEditorGenerate(const std::string& owner,
     return ServiceResult::Success(202, {{"task_id", submit.task_id}});
 }
 
+ServiceResult ServerFacade::RecipeEditorPredict(const std::string& owner,
+                                                const std::string& task_id,
+                                                const std::string& body_json) {
+    if (owner.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
+
+    json body;
+    try {
+        body = json::parse(body_json);
+    } catch (...) { return ServiceResult::Error(400, "invalid_json", "Cannot parse request body"); }
+    if (!body.contains("recipe") || !body["recipe"].is_array()) {
+        return ServiceResult::Error(400, "invalid_params", "Missing recipe array");
+    }
+
+    std::vector<int> palette_recipe;
+    for (const auto& v : body["recipe"]) {
+        if (!v.is_number_integer()) {
+            return ServiceResult::Error(400, "invalid_params", "Recipe must be array of integers");
+        }
+        palette_recipe.push_back(v.get<int>());
+    }
+    if (palette_recipe.empty()) {
+        return ServiceResult::Error(400, "invalid_params", "Recipe cannot be empty");
+    }
+
+    auto profile_opt = tasks_.GetTaskPrintProfile(owner, task_id);
+    if (!profile_opt) {
+        return ServiceResult::Error(404, "not_found", "Task not found or not in recipe-edit mode");
+    }
+    const auto& profile = *profile_opt;
+
+    auto db_names_opt = tasks_.GetTaskColorDbNames(owner, task_id);
+    std::string common_vendor, common_material;
+    if (db_names_opt) {
+        bool all_same = true;
+        for (const auto& name : *db_names_opt) {
+            const auto* entry = data_.ColorDbCache().FindEntryByName(name);
+            if (!entry) continue;
+            if (common_vendor.empty()) {
+                common_vendor   = entry->vendor;
+                common_material = entry->material_type;
+            } else if (entry->vendor != common_vendor || entry->material_type != common_material) {
+                all_same = false;
+                break;
+            }
+        }
+        if (!all_same) {
+            common_vendor.clear();
+            common_material.clear();
+        }
+    }
+
+    std::vector<std::string> profile_channel_keys;
+    for (const auto& ch : profile.palette) {
+        profile_channel_keys.push_back(NormalizeChannelKey(ch));
+    }
+
+    const auto* model =
+        data_.ForwardModels().Select(common_vendor, common_material, profile_channel_keys);
+    if (!model) {
+        return ServiceResult::Error(501, "no_forward_model",
+                                    "No forward model available for this task's material scope");
+    }
+
+    std::vector<int> stage_recipe;
+    stage_recipe.reserve(palette_recipe.size());
+    for (int pidx : palette_recipe) {
+        if (pidx < 0 || pidx >= static_cast<int>(profile.palette.size())) {
+            return ServiceResult::Error(400, "invalid_params",
+                                        "Recipe channel index out of palette range");
+        }
+        int stage_idx = model->MapChannelByName(profile.palette[pidx].color);
+        if (stage_idx < 0) {
+            return ServiceResult::Error(400, "channel_mapping_failed",
+                                        "Cannot map palette channel '" +
+                                            profile.palette[pidx].color +
+                                            "' to forward model stage channel");
+        }
+        stage_recipe.push_back(stage_idx);
+    }
+
+    int base_stage_idx = 0;
+    if (profile.base_channel_idx >= 0 &&
+        profile.base_channel_idx < static_cast<int>(profile.palette.size())) {
+        int mapped = model->MapChannelByName(profile.palette[profile.base_channel_idx].color);
+        if (mapped >= 0) base_stage_idx = mapped;
+    }
+
+    ChromaPrint3D::PredictionConfig cfg;
+    cfg.layer_height_mm  = profile.layer_height_mm;
+    cfg.base_channel_idx = base_stage_idx;
+    cfg.layer_order      = profile.layer_order;
+    cfg.substrate_idx    = model->ResolveSubstrateIdx(base_stage_idx);
+
+    ChromaPrint3D::Lab predicted = model->PredictLab(stage_recipe, cfg);
+
+    uint8_t r8, g8, b8;
+    predicted.ToRgb().ToRgb255(r8, g8, b8);
+    char hex[8];
+    std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", r8, g8, b8);
+
+    return ServiceResult::Success(
+        200, {{"predicted_lab", {{"L", predicted.l()}, {"a", predicted.a()}, {"b", predicted.b()}}},
+              {"hex", std::string(hex)},
+              {"from_model", true}});
+}
+
 ServiceResult ServerFacade::ListTasks(const std::string& owner) const {
     if (owner.empty()) return ServiceResult::Success(200, {{"tasks", json::array()}});
     json tasks = json::array();

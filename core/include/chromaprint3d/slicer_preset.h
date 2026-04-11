@@ -51,7 +51,7 @@ struct FilamentConfig {
     /// Returns a FilamentConfig populated with the built-in hardcoded defaults.
     static FilamentConfig BuiltinDefaults();
 
-    /// Resolve a color name (e.g. "Red", "Bamboo Green") to a hex string (e.g. "#C12E1F").
+    /// Resolve a color name (e.g. "Red", "Bambu Green") to a hex string (e.g. "#C12E1F").
     /// Tries this config's color table first, then built-in defaults, then fallback palette.
     std::string ResolveHexColor(const std::string& color_name, int fallback_idx = 0) const;
 };

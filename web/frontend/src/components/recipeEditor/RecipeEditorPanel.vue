@@ -14,6 +14,7 @@ import { usePanZoom } from '../../composables/usePanZoom'
 import { useAppStore } from '../../stores/app'
 import RecipeSummaryPanel from './RecipeSummaryPanel.vue'
 import RecipeCandidatePanel from './RecipeCandidatePanel.vue'
+import CustomRecipeDialog from './CustomRecipeDialog.vue'
 import RegionOverlayCanvas from './RegionOverlayCanvas.vue'
 import ZoomableImageViewport from '../common/ZoomableImageViewport.vue'
 import { fetchBlobWithSession } from '../../runtime/protectedRequest'
@@ -345,6 +346,48 @@ async function handleUndo() {
 
 const canUndo = computed(() => undoStack.value.length > 0)
 
+// ── Custom recipe dialog ────────────────────────────────────────────────────
+
+const showCustomRecipeDialog = ref(false)
+
+const customRecipeInitialRecipe = computed<number[]>(() => {
+  if (selectedRecipeIndex.value === null || !summary.value) return []
+  const recipe = summary.value.unique_recipes[selectedRecipeIndex.value]
+  return recipe?.recipe ?? []
+})
+
+const customRecipeInitialHex = computed<string>(() => {
+  if (selectedRecipeIndex.value === null || !summary.value) return '#FFFFFF'
+  const recipe = summary.value.unique_recipes[selectedRecipeIndex.value]
+  return recipe?.hex ?? '#FFFFFF'
+})
+
+function openCustomRecipeDialog() {
+  if (!summary.value || selectedRegionIds.value.size === 0 || selectedRecipeIndex.value === null) {
+    message.warning(t('recipeEditor.noRegionSelected'))
+    return
+  }
+  showCustomRecipeDialog.value = true
+}
+
+async function handleCustomRecipeConfirm(payload: {
+  recipe: number[]
+  mappedLab: import('../../types').LabColor
+  hex: string
+  fromModel: boolean
+}) {
+  const candidate: RecipeCandidate = {
+    recipe: payload.recipe,
+    predicted_lab: payload.mappedLab,
+    hex: payload.hex,
+    delta_e76: 0,
+    lightness_diff: 0,
+    hue_diff: 0,
+    from_model: payload.fromModel,
+  }
+  await handleCandidateSelect(candidate)
+}
+
 // ── Generate model ───────────────────────────────────────────────────────────
 
 async function handleGenerate() {
@@ -546,14 +589,31 @@ onUnmounted(() => {
           :selected-recipe-index="selectedRecipeIndex"
           @select-recipe="handleSelectRecipe"
         />
-        <RecipeCandidatePanel
-          :task-id="taskId"
-          :target-lab="targetLab"
-          :target-hex="targetHex"
-          :palette="summary.palette"
-          @select="handleCandidateSelect"
-        />
+        <div class="candidate-panel-wrapper">
+          <div class="candidate-panel-toolbar">
+            <NButton size="small" :disabled="!hasSelection" @click="openCustomRecipeDialog">
+              {{ t('recipeEditor.customRecipe.button') }}
+            </NButton>
+          </div>
+          <RecipeCandidatePanel
+            :task-id="taskId"
+            :target-lab="targetLab"
+            :target-hex="targetHex"
+            :palette="summary.palette"
+            @select="handleCandidateSelect"
+          />
+        </div>
       </div>
+
+      <CustomRecipeDialog
+        v-model:show="showCustomRecipeDialog"
+        :task-id="taskId"
+        :initial-recipe="customRecipeInitialRecipe"
+        :initial-hex="customRecipeInitialHex"
+        :palette="summary.palette"
+        :current-color-layers="summary.color_layers"
+        @confirm="handleCustomRecipeConfirm"
+      />
     </div>
 
     <NText v-if="replacing" depth="3" style="font-size: 12px; margin-top: 8px; display: block">
@@ -670,6 +730,19 @@ onUnmounted(() => {
   grid-template-rows: 1fr;
   gap: 16px;
   height: 420px;
+}
+
+.candidate-panel-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 6px;
+}
+
+.candidate-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 @media (max-width: 720px) {

@@ -39,7 +39,7 @@ function createChannel(color: string, material: string): EditablePaletteChannel 
 }
 
 const DEFAULT_8_COLORS: EditablePaletteChannel[] = [
-  createChannel('Bamboo Green', 'PLA Basic'),
+  createChannel('Bambu Green', 'PLA Basic'),
   createChannel('Black', 'PLA Basic'),
   createChannel('Blue', 'PLA Basic'),
   createChannel('Cyan', 'PLA Basic'),

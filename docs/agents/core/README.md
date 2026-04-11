@@ -10,6 +10,7 @@
 - 核心实现：`core/src/`
   - 图像处理：`imgproc/`
   - 匹配算法：`match/`
+  - 前向色彩模型：`model/`
   - 几何与导出：`geo/`、`vecgeo/`
   - 转换编排：`pipeline/`
   - 校准：`calib/`
@@ -28,6 +29,7 @@
 | 修改 Bambu 预设与耗材元数据 | `core/src/geo/bambu_metadata.cpp` |
 | 修改 SVG 几何提取与遮挡裁剪 | `core/src/imgproc/vector_proc.cpp`、`core/src/imgproc/occlusion.cpp`、`core/src/imgproc/gradient.cpp` |
 | 修改端到端转换编排 | `core/src/pipeline/pipeline.cpp`、`core/src/pipeline/vector_pipeline.cpp` |
+| 修改前向色彩模型（Beer-Lambert 预测） | `core/src/model/forward_color_model.cpp`、`core/include/chromaprint3d/forward_color_model.h` |
 | 修改校准板与 ColorDB 构建 | `core/src/calib/calib.cpp` |
 
 ## Bambu Studio 预设体系

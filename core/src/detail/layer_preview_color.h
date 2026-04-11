@@ -78,15 +78,15 @@ inline std::string NormalizeColorKey(const std::string& literal) {
 
 inline const std::unordered_map<std::string, cv::Vec3b>& NamedColorTable() {
     static const std::unordered_map<std::string, cv::Vec3b> table = {
-        {"white", cv::Vec3b(255, 255, 255)},     {"black", cv::Vec3b(0, 0, 0)},
-        {"red", cv::Vec3b(0, 0, 255)},           {"green", cv::Vec3b(0, 255, 0)},
-        {"blue", cv::Vec3b(255, 0, 0)},          {"yellow", cv::Vec3b(0, 255, 255)},
-        {"cyan", cv::Vec3b(255, 255, 0)},        {"magenta", cv::Vec3b(255, 0, 255)},
-        {"orange", cv::Vec3b(0, 165, 255)},      {"purple", cv::Vec3b(128, 0, 128)},
-        {"pink", cv::Vec3b(203, 192, 255)},      {"gray", cv::Vec3b(128, 128, 128)},
-        {"grey", cv::Vec3b(128, 128, 128)},      {"brown", cv::Vec3b(42, 42, 165)},
-        {"gold", cv::Vec3b(0, 215, 255)},        {"silver", cv::Vec3b(192, 192, 192)},
-        {"bamboogreen", cv::Vec3b(34, 139, 34)},
+        {"white", cv::Vec3b(255, 255, 255)},    {"black", cv::Vec3b(0, 0, 0)},
+        {"red", cv::Vec3b(0, 0, 255)},          {"green", cv::Vec3b(0, 255, 0)},
+        {"blue", cv::Vec3b(255, 0, 0)},         {"yellow", cv::Vec3b(0, 255, 255)},
+        {"cyan", cv::Vec3b(255, 255, 0)},       {"magenta", cv::Vec3b(255, 0, 255)},
+        {"orange", cv::Vec3b(0, 165, 255)},     {"purple", cv::Vec3b(128, 0, 128)},
+        {"pink", cv::Vec3b(203, 192, 255)},     {"gray", cv::Vec3b(128, 128, 128)},
+        {"grey", cv::Vec3b(128, 128, 128)},     {"brown", cv::Vec3b(42, 42, 165)},
+        {"gold", cv::Vec3b(0, 215, 255)},       {"silver", cv::Vec3b(192, 192, 192)},
+        {"bambugreen", cv::Vec3b(34, 139, 34)},
     };
     return table;
 }

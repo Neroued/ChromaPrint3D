@@ -89,6 +89,8 @@ DataRepository::DataRepository(const ServerConfig& cfg) {
         model_packs_.LoadSingle(cfg.model_pack_path);
     }
 
+    forward_models_.LoadFromDirectory((data_root / "models" / "forward").string());
+
     recipe_store_ = TryLoadRecipes(data_root);
 
     matting_registry_.Register("opencv",

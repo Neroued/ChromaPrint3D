@@ -48,6 +48,8 @@ public:
                   drogon::Post, drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::RecipeEditorGenerate, "/api/v1/tasks/{1}/recipe-editor/generate",
                   drogon::Post, drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::RecipeEditorPredict, "/api/v1/tasks/{1}/recipe-editor/predict",
+                  drogon::Post, drogon::Options);
 
     ADD_METHOD_TO(ApiV1Controller::ModelPackInfo, "/api/v1/model-pack/info", drogon::Get,
                   drogon::Options);
@@ -110,6 +112,8 @@ public:
                              const std::string& task_id);
     void RecipeEditorGenerate(const drogon::HttpRequestPtr& req, Callback&& cb,
                               const std::string& task_id);
+    void RecipeEditorPredict(const drogon::HttpRequestPtr& req, Callback&& cb,
+                             const std::string& task_id);
 
     void ModelPackInfo(const drogon::HttpRequestPtr& req, Callback&& cb);
     void MattingMethods(const drogon::HttpRequestPtr& req, Callback&& cb);

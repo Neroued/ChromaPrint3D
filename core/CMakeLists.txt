@@ -72,7 +72,8 @@ target_sources(chromaprint3d PRIVATE
     src/logging/logging.cpp
     src/matting/matting.cpp
     src/matting/matting_postprocess.cpp
-    src/detail/icc_utils.cpp)
+    src/detail/icc_utils.cpp
+    src/model/forward_color_model.cpp)
 
 # ── Optional: infer module for DL matting ─────────────────────────────────────
 

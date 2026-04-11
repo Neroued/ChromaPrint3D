@@ -181,17 +181,17 @@ FilamentConfig FilamentConfig::BuiltinDefaults() {
     FilamentConfig cfg;
 
     cfg.colors = {
-        {"bamboo green", "#00AE42"}, {"white", "#FFFFFF"},     {"black", "#000000"},
-        {"red", "#C12E1F"},          {"green", "#00AE42"},     {"blue", "#0A2989"},
-        {"cyan", "#0086D6"},         {"magenta", "#EC008C"},   {"yellow", "#F4EE2A"},
-        {"orange", "#FF8C00"},       {"pink", "#FF69B4"},      {"purple", "#800080"},
-        {"brown", "#8B4513"},        {"grey", "#808080"},      {"gray", "#808080"},
-        {"gold", "#FFD700"},         {"silver", "#C0C0C0"},    {"navy", "#000080"},
-        {"teal", "#008080"},         {"olive", "#808000"},     {"maroon", "#800000"},
-        {"lime", "#00FF00"},         {"aqua", "#00FFFF"},      {"coral", "#FF7F50"},
-        {"salmon", "#FA8072"},       {"turquoise", "#40E0D0"}, {"violet", "#EE82EE"},
-        {"indigo", "#4B0082"},       {"crimson", "#DC143C"},   {"beige", "#F5F5DC"},
-        {"ivory", "#FFFFF0"},        {"lavender", "#E6E6FA"},  {"chocolate", "#D2691E"},
+        {"bambu green", "#00AE42"}, {"white", "#FFFFFF"},     {"black", "#000000"},
+        {"red", "#C12E1F"},         {"green", "#00AE42"},     {"blue", "#0A2989"},
+        {"cyan", "#0086D6"},        {"magenta", "#EC008C"},   {"yellow", "#F4EE2A"},
+        {"orange", "#FF8C00"},      {"pink", "#FF69B4"},      {"purple", "#800080"},
+        {"brown", "#8B4513"},       {"grey", "#808080"},      {"gray", "#808080"},
+        {"gold", "#FFD700"},        {"silver", "#C0C0C0"},    {"navy", "#000080"},
+        {"teal", "#008080"},        {"olive", "#808000"},     {"maroon", "#800000"},
+        {"lime", "#00FF00"},        {"aqua", "#00FFFF"},      {"coral", "#FF7F50"},
+        {"salmon", "#FA8072"},      {"turquoise", "#40E0D0"}, {"violet", "#EE82EE"},
+        {"indigo", "#4B0082"},      {"crimson", "#DC143C"},   {"beige", "#F5F5DC"},
+        {"ivory", "#FFFFF0"},       {"lavender", "#E6E6FA"},  {"chocolate", "#D2691E"},
         {"khaki", "#F0E68C"},
     };
 
