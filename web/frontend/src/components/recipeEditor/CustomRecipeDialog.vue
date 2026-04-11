@@ -286,7 +286,7 @@ function renderChannelLabel(option: { label: string; value: number }) {
               :modes="['hex']"
               :show-alpha="false"
               style="width: 120px"
-              @complete="handleHexChange"
+              @update:value="handleHexChange"
             />
             <span class="color-preview-swatch" :style="{ backgroundColor: hexColor }" />
           </div>
