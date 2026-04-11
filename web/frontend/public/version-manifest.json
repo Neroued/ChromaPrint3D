@@ -1,7 +1,7 @@
 {
-  "version": "1.3.0-rc.2",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.0-rc.2",
-  "changelog": "- 集成 Umami 自托管访问统计\n- 后端 ServerFacade 拆分重构",
-  "changelog_en": "- Integrate self-hosted Umami analytics\n- Backend ServerFacade refactoring",
+  "version": "1.3.0",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.0",
+  "changelog": "- 色层数自由调节，支持 1–20 层，不再受限于固定模式\n- 新增自定义配方编辑器，可手动设计配色方案并实时预览颜色效果\n- 自定义配方支持历史记录，可一键复用到其他区域\n- 配方搜索支持按层颜色模式匹配，快速定位目标配方\n- 配方面板改版，替代配方与自定义配方分区展示",
+  "changelog_en": "- Freely adjustable color layers (1–20), no longer limited to fixed modes\n- New custom recipe editor with real-time color prediction\n- Custom recipe history: reuse recipes across regions with one click\n- Recipe search by layer color pattern for quick matching\n- Revamped recipe panel with tabbed layout",
   "published_at": "2026-04-11"
 }
