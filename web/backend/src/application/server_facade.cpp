@@ -93,15 +93,23 @@ json LayerPreviewsToJson(const LayerPreviewResult& layer_previews) {
     };
 }
 
+std::string NormalizeLabel(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        if (std::isalnum(c)) { out.push_back(static_cast<char>(std::tolower(c))); }
+    }
+    return out;
+}
+
+std::string NormalizeChannelKey(const Channel& ch) {
+    return NormalizeLabel(ch.color) + "|" + NormalizeLabel(ch.material);
+}
+
 std::vector<std::string> BuildProfileChannelKeys(const std::vector<const ColorDB*>& dbs) {
     std::unordered_set<std::string> keys;
     for (const auto* db : dbs) {
-        for (const auto& ch : db->palette) {
-            std::string key = ch.color + "|" + ch.material;
-            std::transform(key.begin(), key.end(), key.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            keys.insert(std::move(key));
-        }
+        for (const auto& ch : db->palette) { keys.insert(NormalizeChannelKey(ch)); }
     }
     return {keys.begin(), keys.end()};
 }

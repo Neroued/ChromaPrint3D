@@ -139,6 +139,7 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
         model_pack_ptr = &owned_model_pack.value();
     }
 
+    spdlog::info("Model pack: {}", model_pack_ptr ? "loaded" : "none");
     NotifyProgress(progress, ConvertStage::LoadingResources, 1.0f);
 
     // === 2. Process SVG ===
