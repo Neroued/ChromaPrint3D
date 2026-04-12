@@ -25,6 +25,7 @@ dist/
 *.jpg
 !web/frontend/public/examples/*.jpg
 *.png
+!web/frontend/public/og-image.png
 *.log
 *.svg
 

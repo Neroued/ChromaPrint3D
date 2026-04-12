@@ -1,13 +1,112 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ChromaPrint3D</title>
+
+    <!-- 基础 SEO -->
+    <title>ChromaPrint3D - 图片转多色3D打印模型 | Multi-color 3D Print Generator</title>
+    <meta name="description" content="ChromaPrint3D 将图片转换为多色 3D 打印 3MF 模型。支持 Bambu Studio 预设自动写入、颜色配方智能匹配、1-20 层自由调色。在线使用、桌面版下载或 Docker 部署。" />
+    <meta name="keywords" content="ChromaPrint3D,多色3D打印,3MF,图片转3D模型,Bambu Studio,multi-color 3D printing,lithophane,color matching,3D print image,彩色3D打印" />
+    <meta name="author" content="Neroued" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Canonical & 多语言 -->
+    <link rel="canonical" href="https://chromaprint3d.com/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://chromaprint3d.com/" />
+    <link rel="alternate" hreflang="en" href="https://chromaprint3d.com/" />
+    <link rel="alternate" hreflang="x-default" href="https://chromaprint3d.com/" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ChromaPrint3D" />
+    <meta property="og:title" content="ChromaPrint3D - 图片转多色3D打印模型" />
+    <meta property="og:description" content="将图片转换为多色 3D 打印 3MF 模型，支持 Bambu Studio 预设、颜色配方智能匹配。免费在线使用。" />
+    <meta property="og:url" content="https://chromaprint3d.com/" />
+    <meta property="og:image" content="https://chromaprint3d.com/og-image.png" />
+    <meta property="og:image:width" content="1376" />
+    <meta property="og:image:height" content="768" />
+    <meta property="og:image:alt" content="ChromaPrint3D - 图片转多色3D打印模型工具界面" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ChromaPrint3D - Multi-color 3D Print Generator" />
+    <meta name="twitter:description" content="Turn images into multi-color 3MF models for 3D printing. Supports Bambu Studio presets and automatic color matching. Free to use online." />
+    <meta name="twitter:image" content="https://chromaprint3d.com/og-image.png" />
+    <meta name="twitter:image:alt" content="ChromaPrint3D - Multi-color 3D print image processor" />
+
+    <!-- JSON-LD 结构化数据 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "ChromaPrint3D",
+      "url": "https://chromaprint3d.com/",
+      "description": "将图片转换为多色 3D 打印 3MF 模型，支持 Bambu Studio 预设自动写入和颜色配方智能匹配",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Windows, macOS, Linux, Web",
+      "browserRequirements": "Requires JavaScript",
+      "softwareVersion": "1.3.1",
+      "inLanguage": ["zh-CN", "en"],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Neroued",
+        "email": "Neroued@gmail.com",
+        "url": "https://github.com/neroued"
+      },
+      "downloadUrl": "https://github.com/neroued/ChromaPrint3D/releases",
+      "screenshot": "https://chromaprint3d.com/og-image.png",
+      "featureList": [
+        "图片转多色 3MF 模型",
+        "Bambu Studio 预设自动写入",
+        "颜色配方智能匹配",
+        "1-20 层自由调色",
+        "自定义配方编辑器",
+        "校准板生成",
+        "SVG 矢量化预处理",
+        "背景抠图"
+      ],
+      "sameAs": [
+        "https://github.com/neroued/ChromaPrint3D"
+      ]
+    }
+    </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Vue 挂载后替换，供搜索引擎爬虫在 JS 不可用时抓取 -->
+      <div id="seo-fallback">
+        <h1>ChromaPrint3D - 图片转多色3D打印模型</h1>
+        <p>ChromaPrint3D 是一款免费的在线工具，可以将图片转换为多色 3D 打印 3MF 模型。</p>
+        <h2>核心功能</h2>
+        <ul>
+          <li>图片转多色 3MF 模型 - 支持 JPG、PNG、BMP、TIFF、SVG 格式</li>
+          <li>Bambu Studio 预设自动写入 - 0.2mm/0.4mm 喷嘴，观赏面朝上/朝下</li>
+          <li>颜色配方智能匹配 - 自动将模型颜色匹配到最接近的耗材丝槽位</li>
+          <li>1-20 层自由调色 - 不再受限于固定色层数</li>
+          <li>自定义配方编辑器 - 手动设计配色方案并实时预览</li>
+          <li>校准板生成 - 构建和管理 ColorDB 颜色数据库</li>
+          <li>图像预处理 - SVG 矢量化、背景抠图</li>
+        </ul>
+        <h2>使用方式</h2>
+        <ul>
+          <li><a href="https://chromaprint3d.com/">在线使用（推荐）</a></li>
+          <li><a href="https://github.com/neroued/ChromaPrint3D/releases">下载桌面版（Windows / macOS / Linux）</a></li>
+          <li>Docker 部署：docker run -d -p 8080:8080 neroued/chromaprint3d:latest</li>
+        </ul>
+        <p>联系方式：<a href="mailto:Neroued@gmail.com">Neroued@gmail.com</a> | <a href="https://github.com/neroued/ChromaPrint3D">GitHub</a></p>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
