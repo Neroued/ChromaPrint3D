@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ChromaPrint3D VERSION 1.3.0 LANGUAGES CXX)
+project(ChromaPrint3D VERSION 1.3.1 LANGUAGES CXX)
 
 set(CHROMAPRINT3D_VERSION_PRERELEASE "" CACHE STRING "Pre-release suffix, e.g. rc.1")
 if(CHROMAPRINT3D_VERSION_PRERELEASE)
