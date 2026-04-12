@@ -47,8 +47,21 @@ ServiceResult RecipeEditorService::RecipeEditorAlternatives(const std::string& o
     std::string recipe_pattern = body.value("recipe_pattern", std::string{});
 
     const ChromaPrint3D::ModelPackage* model_pack = nullptr;
-    if (!data_.ModelPackRegistry().Empty()) {
-        model_pack = &data_.ModelPackRegistry().All().front();
+    auto db_names_opt                             = tasks_.GetTaskColorDbNames(owner, task_id);
+    if (db_names_opt) {
+        std::string mp_vendor, mp_material;
+        ResolveTaskVendorMaterial(*db_names_opt, data_, mp_vendor, mp_material);
+        if (!mp_vendor.empty() && !mp_material.empty()) {
+            auto profile_opt = tasks_.GetTaskPrintProfile(owner, task_id);
+            if (profile_opt) {
+                std::vector<std::string> keys;
+                keys.reserve(profile_opt->palette.size());
+                for (const auto& ch : profile_opt->palette) {
+                    keys.push_back(NormalizeChannelKey(ch));
+                }
+                model_pack = data_.ModelPackRegistry().Select(mp_vendor, mp_material, keys);
+            }
+        }
     }
 
     auto result = tasks_.QueryRecipeAlternatives(owner, task_id, target, max_candidates, offset,

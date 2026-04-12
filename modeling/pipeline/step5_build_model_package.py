@@ -31,7 +31,7 @@ from modeling.core.io_utils import load_json, normalize_label, parse_layer_order
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-DEFAULT_MODES = "2:0.08,3:0.08,4:0.08,5:0.08,6:0.04,7:0.04,8:0.04,9:0.04,10:0.04"
+DEFAULT_MODES = "2:0.08,3:0.08,4:0.08,5:0.08,6:0.08,7:0.08,8:0.08,9:0.08,10:0.08"
 
 
 def parse_args() -> argparse.Namespace:

@@ -3,6 +3,8 @@
 #include "detail/candidate_select.h"
 #include "detail/recipe_convert.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -254,12 +256,29 @@ RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB> dbs,
     impl->profile        = profile;
     impl->use_lab        = (match_cfg.color_space == ColorSpace::Lab);
 
+    spdlog::info("RecipeSearchCache::Build: color_layers={}, dbs={}, model={}",
+                 profile.color_layers, impl->prepared_dbs.size(),
+                 impl->prepared_model.has_value() ? "ready" : "unavailable");
+    if (!impl->prepared_model.has_value()) {
+        if (!model_package) {
+            spdlog::debug("RecipeSearchCache: model unavailable — no model package provided");
+        } else if (!model_gate.enable && !model_gate.model_only) {
+            spdlog::debug("RecipeSearchCache: model unavailable — gate disabled");
+        } else {
+            spdlog::debug("RecipeSearchCache: model unavailable — "
+                          "FindByColorLayers({}) or channel mapping failed",
+                          profile.color_layers);
+        }
+    }
+
     RecipeSearchCache cache;
     cache.impl_ = std::move(impl);
     return cache;
 }
 
-bool RecipeSearchCache::IsValid() const { return impl_ && !impl_->prepared_dbs.empty(); }
+bool RecipeSearchCache::IsValid() const {
+    return impl_ && (!impl_->prepared_dbs.empty() || impl_->prepared_model.has_value());
+}
 
 const std::vector<Channel>& RecipeSearchCache::Palette() const {
     static const std::vector<Channel> kEmpty;

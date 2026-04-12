@@ -440,6 +440,24 @@ export function useParamPanelState() {
     ),
   )
   const modelPackAvailable = computed(() => !!matchingModelPack.value)
+  const currentModeAvailable = computed(() => {
+    const pack = matchingModelPack.value
+    if (!pack) return false
+    const layers = modelValue.value.color_layers
+    return pack.modes.some((m) => m.color_layers === layers)
+  })
+  const modelPackModeHint = computed<string | null>(() => {
+    const pack = matchingModelPack.value
+    if (!pack) return null
+    if (currentModeAvailable.value) return null
+    const layers = modelValue.value.color_layers
+    const available = pack.modes.map((m) => m.color_layers).join(', ')
+    return (
+      t('param.modelPackNoMode', { n: layers }) +
+      ' ' +
+      t('param.modelPackAvailableModes', { modes: available })
+    )
+  })
 
   function selectAllFilteredDBs() {
     update({ db_names: filteredDBs.value.map((db) => db.name) })
@@ -579,6 +597,7 @@ export function useParamPanelState() {
     materialOptions,
     mode,
     modelPackAvailable,
+    modelPackModeHint,
     modelValue,
     pixelPresetOptions,
     resetParams,

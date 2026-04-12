@@ -60,6 +60,7 @@ const {
   materialOptions,
   mode,
   modelPackAvailable,
+  modelPackModeHint,
   modelValue,
   resetParams,
   selectedChannelKeys,
@@ -511,6 +512,9 @@ watch(canEnableTransparentLayer, (can) => {
               @update:value="(v: boolean) => update({ model_enable: v })"
             />
           </NFormItem>
+          <NText v-if="modelPackModeHint && modelPackAvailable" depth="3" style="font-size: 12px">
+            {{ modelPackModeHint }}
+          </NText>
         </div>
 
         <NFormItem
@@ -533,6 +537,13 @@ watch(canEnableTransparentLayer, (can) => {
             @update:value="(v: boolean) => update({ model_enable: v })"
           />
         </NFormItem>
+        <NText
+          v-if="modelPackModeHint && modelPackAvailable && isVector && supportsModelGate"
+          depth="3"
+          style="font-size: 12px"
+        >
+          {{ modelPackModeHint }}
+        </NText>
 
         <NFormItem
           v-else-if="supportsModelGate"
@@ -553,6 +564,15 @@ watch(canEnableTransparentLayer, (can) => {
             @update:value="(v: boolean) => update({ model_enable: v })"
           />
         </NFormItem>
+        <NText
+          v-if="
+            modelPackModeHint && modelPackAvailable && supportsModelGate && !isRaster && !isVector
+          "
+          depth="3"
+          style="font-size: 12px"
+        >
+          {{ modelPackModeHint }}
+        </NText>
 
         <NFormItem
           v-if="isRaster && modelValue.dither && modelValue.dither !== 'none'"
@@ -1082,6 +1102,13 @@ watch(canEnableTransparentLayer, (can) => {
                 @update:value="(v: boolean) => update({ model_enable: v })"
               />
             </NFormItem>
+            <NText
+              v-if="modelPackModeHint && modelPackAvailable"
+              depth="3"
+              style="font-size: 12px; margin-bottom: 8px"
+            >
+              {{ modelPackModeHint }}
+            </NText>
 
             <NFormItem v-if="modelValue.model_enable">
               <template #label>
