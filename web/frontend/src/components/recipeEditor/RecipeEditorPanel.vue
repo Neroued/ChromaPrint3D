@@ -225,10 +225,16 @@ function handleViewportClick(event: MouseEvent) {
   }
 
   const pixel = screenToImagePixel(event.clientX, event.clientY)
-  if (!pixel) return
+  if (!pixel) {
+    clearSelection()
+    return
+  }
 
   const regionId = getRegionAtPixel(pixel.x, pixel.y)
-  if (regionId === null || regionId === 0xffffffff) return
+  if (regionId === null || regionId === 0xffffffff) {
+    clearSelection()
+    return
+  }
 
   if (globalMode.value) {
     const recipeIdx = regionLookup.value.get(regionId)
