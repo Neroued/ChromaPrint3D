@@ -517,62 +517,30 @@ watch(canEnableTransparentLayer, (can) => {
           </NText>
         </div>
 
-        <NFormItem
-          v-else-if="isVector && supportsModelGate"
-          class="param-inline-item"
-          label-placement="left"
-          :label-width="simpleLabelWidth"
-        >
-          <template #label>
-            <NTooltip>
-              <template #trigger>
-                <span class="tip-label">{{ t('param.enableModel') }}</span>
-              </template>
-              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
-            </NTooltip>
-          </template>
-          <NSwitch
-            :value="modelValue.model_enable"
-            :disabled="!modelPackAvailable"
-            @update:value="(v: boolean) => update({ model_enable: v })"
-          />
-        </NFormItem>
-        <NText
-          v-if="modelPackModeHint && modelPackAvailable && isVector && supportsModelGate"
-          depth="3"
-          style="font-size: 12px"
-        >
-          {{ modelPackModeHint }}
-        </NText>
-
-        <NFormItem
-          v-else-if="supportsModelGate"
-          label-placement="left"
-          :label-width="simpleLabelWidth"
-        >
-          <template #label>
-            <NTooltip>
-              <template #trigger>
-                <span class="tip-label">{{ t('param.enableModel') }}</span>
-              </template>
-              {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
-            </NTooltip>
-          </template>
-          <NSwitch
-            :value="modelValue.model_enable"
-            :disabled="!modelPackAvailable"
-            @update:value="(v: boolean) => update({ model_enable: v })"
-          />
-        </NFormItem>
-        <NText
-          v-if="
-            modelPackModeHint && modelPackAvailable && supportsModelGate && !isRaster && !isVector
-          "
-          depth="3"
-          style="font-size: 12px"
-        >
-          {{ modelPackModeHint }}
-        </NText>
+        <template v-else-if="supportsModelGate">
+          <NFormItem
+            :class="{ 'param-inline-item': isVector }"
+            label-placement="left"
+            :label-width="simpleLabelWidth"
+          >
+            <template #label>
+              <NTooltip>
+                <template #trigger>
+                  <span class="tip-label">{{ t('param.enableModel') }}</span>
+                </template>
+                {{ modelPackAvailable ? tooltips.model_enable : t('param.modelPackNoMatch') }}
+              </NTooltip>
+            </template>
+            <NSwitch
+              :value="modelValue.model_enable"
+              :disabled="!modelPackAvailable"
+              @update:value="(v: boolean) => update({ model_enable: v })"
+            />
+          </NFormItem>
+          <NText v-if="modelPackModeHint && modelPackAvailable" depth="3" style="font-size: 12px">
+            {{ modelPackModeHint }}
+          </NText>
+        </template>
 
         <NFormItem
           v-if="isRaster && modelValue.dither && modelValue.dither !== 'none'"
