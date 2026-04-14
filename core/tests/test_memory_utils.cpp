@@ -36,13 +36,8 @@ TEST(MemoryUtils, GetHeapStatsReturnsValidResult) {
 }
 
 TEST(MemoryUtils, ReleaseFreedMemoryThrottlesCorrectly) {
-    bool first  = ChromaPrint3D::ReleaseFreedMemory(0);
-    bool second = ChromaPrint3D::ReleaseFreedMemory(60000);
-    if (first) {
-        EXPECT_FALSE(second);
-    } else {
-        EXPECT_FALSE(second);
-    }
+    ChromaPrint3D::ReleaseFreedMemory(0);
+    EXPECT_FALSE(ChromaPrint3D::ReleaseFreedMemory(60000));
 }
 
 TEST(MemoryUtils, ReleaseFreedMemoryConcurrentCAS) {

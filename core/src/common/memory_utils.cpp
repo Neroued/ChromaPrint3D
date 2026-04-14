@@ -98,13 +98,14 @@ bool ReleaseFreedMemory(int min_interval_ms) {
         return false;
     }
 
-    const auto release_guard = [&]() { purge_in_progress.store(false, std::memory_order_release); };
+    struct PurgeGuard {
+        std::atomic<bool>& flag;
+
+        ~PurgeGuard() { flag.store(false, std::memory_order_release); }
+    } guard{purge_in_progress};
 
     prev = last_successful_purge_ms.load(std::memory_order_acquire);
-    if (now_ms - prev < min_interval_ms) {
-        release_guard();
-        return false;
-    }
+    if (now_ms - prev < min_interval_ms) { return false; }
 
     bool purged = false;
 
@@ -115,7 +116,6 @@ bool ReleaseFreedMemory(int min_interval_ms) {
 #endif
 
     if (purged) { last_successful_purge_ms.store(now_ms, std::memory_order_release); }
-    release_guard();
     return purged;
 }
 
