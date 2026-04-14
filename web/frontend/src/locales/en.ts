@@ -23,9 +23,6 @@ export default {
     pollFailed: 'Task polling failed, please retry ({message})',
     downloadFailed: 'Download failed, please retry',
     videoTutorial: 'Video Tutorial',
-    memoryUsage: 'Mem {pct}%',
-    memoryTooltip:
-      'RSS: {rss} MB / {limit} MB\nHeap Allocated: {heapAlloc} MB\nHeap Resident: {heapRes} MB\nArtifact Budget: {budgetUsed} MB / {budgetLimit} MB\nColorDB Pool: {colordbPool} MB\nAllocator: {allocator}',
   },
 
   taskErrors: {

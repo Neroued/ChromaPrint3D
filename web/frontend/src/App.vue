@@ -18,7 +18,6 @@ import {
   NMessageProvider,
   NSwitch,
   NButton,
-  NTooltip,
   darkTheme,
   zhCN,
   dateZhCN,
@@ -63,39 +62,10 @@ const {
   serverVersion,
   activeTasks,
   totalTasks,
-  serverMemory,
   isDark,
   recipeEditorTaskId,
   completedTask,
 } = storeToRefs(appStore)
-
-const MB = 1024 * 1024
-const memoryPct = computed(() => {
-  const m = serverMemory.value
-  if (!m || m.memory_limit_bytes <= 0) return -1
-  return Math.round((m.rss_bytes / m.memory_limit_bytes) * 100)
-})
-const memoryTagType = computed(() => {
-  const p = memoryPct.value
-  if (p < 0) return 'default'
-  if (p < 60) return 'success'
-  if (p <= 80) return 'warning'
-  return 'error'
-})
-const memoryTooltipText = computed(() => {
-  const m = serverMemory.value
-  if (!m) return ''
-  return t('common.memoryTooltip', {
-    rss: Math.round(m.rss_bytes / MB),
-    limit: m.memory_limit_bytes > 0 ? Math.round(m.memory_limit_bytes / MB) : '∞',
-    heapAlloc: Math.round(m.heap_allocated_bytes / MB),
-    heapRes: Math.round(m.heap_resident_bytes / MB),
-    budgetUsed: Math.round(m.artifact_budget_bytes / MB),
-    budgetLimit: Math.round(m.artifact_budget_limit_bytes / MB),
-    colordbPool: Math.round(m.colordb_pool_bytes / MB),
-    allocator: m.allocator,
-  })
-})
 
 const activeTheme = computed(() => (isDark.value ? darkTheme : null))
 const activeThemeOverrides = computed(() =>
@@ -259,14 +229,6 @@ function toggleLocale() {
               <NButton size="small" quaternary @click="toggleLocale">
                 {{ locale === 'zh-CN' ? 'EN' : '中' }}
               </NButton>
-              <NTooltip v-if="serverOnline && memoryPct >= 0" :style="{ whiteSpace: 'pre-line' }">
-                <template #trigger>
-                  <NTag :type="memoryTagType" size="small" round>
-                    {{ t('common.memoryUsage', { pct: memoryPct }) }}
-                  </NTag>
-                </template>
-                {{ memoryTooltipText }}
-              </NTooltip>
               <NTag :type="serverOnline ? 'success' : 'error'" size="small" round>
                 {{ serverOnline ? t('common.serverOnline') : t('common.serverOffline') }}
               </NTag>
