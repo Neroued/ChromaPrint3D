@@ -119,6 +119,13 @@ services:
       # 公式：OMP_NUM_THREADS ≈ 可用核心数 / max_tasks
       # 示例：4 核 / 4 worker = 1；16 核 / 6 worker ≈ 3
       - OMP_NUM_THREADS=1
+      # === jemalloc 与 glibc 调优变量二选一，不可同时设置 ===
+      # 官方镜像默认链接 jemalloc，使用以下配置：
+      - MALLOC_CONF=background_thread:true,dirty_decay_ms:5000,muzzy_decay_ms:30000
+      # 若自编译且未链接 jemalloc（-DCHROMAPRINT3D_USE_JEMALLOC=OFF），改用 glibc 调优：
+      # - MALLOC_ARENA_MAX=2
+      # - MALLOC_TRIM_THRESHOLD_=131072
+      # - MALLOC_MMAP_THRESHOLD_=262144
     # 跨域模式：限制 CORS 只允许云主机前端域名
     # model_packs/ 已包含在 --data 指向的数据目录中，无需单独指定 --model-pack
     command:
@@ -658,6 +665,8 @@ crontab -e
 | `--max-owner-tasks` | 单用户不应独占全部 worker | 4 | 8 |
 | `--max-queue` | 控制排队深度 | 128 | 128 |
 | `--task-ttl` | 结果保留时间（秒） | 900 | 1800 |
+| `--board-geometry-cache-ttl` | 校准板几何缓存 TTL（秒） | 600 | 600 |
+| `--board-geometry-cache-max` | 校准板几何缓存最大条数（LRU 淘汰） | 16 | 16 |
 | Docker cpus | 留 1 核给 OS + Nginx | 4.0 | 15.0 |
 | Docker mem_limit | 留 4GB 给 OS | 4g | 28g |
 
@@ -666,6 +675,41 @@ crontab -e
 单个 pipeline 任务峰值内存约 3–4GB（大图 + 体素网格 + Mesh 构建 + 流式压缩）。
 总峰值 ≈ max_tasks × 4GB + 基础开销 (~1GB)。
 确保 Docker mem_limit > 该总峰值，并为 OS page cache 留出余量。
+
+### 内存分配器调优
+
+官方镜像默认链接 **jemalloc**，可大幅降低 glibc malloc 碎片化导致的稳态 RSS 膨胀。
+任务完成后服务会自动触发内存归还（内置 5 秒节流）。
+
+**jemalloc 环境变量**（官方镜像默认适用）：
+
+```yaml
+- MALLOC_CONF=background_thread:true,dirty_decay_ms:5000,muzzy_decay_ms:30000
+```
+
+- `background_thread:true`：后台线程异步回收脏页
+- `dirty_decay_ms:5000`：脏页在 5 秒后归还 OS
+- `muzzy_decay_ms:30000`：muzzy 页在 30 秒后解除映射
+
+**glibc 环境变量**（自编译且 `-DCHROMAPRINT3D_USE_JEMALLOC=OFF` 时使用）：
+
+```yaml
+- MALLOC_ARENA_MAX=2
+- MALLOC_TRIM_THRESHOLD_=131072
+- MALLOC_MMAP_THRESHOLD_=262144
+```
+
+> **互斥警告**：`MALLOC_CONF` 是 jemalloc 专有变量，`MALLOC_ARENA_MAX` / `MALLOC_TRIM_THRESHOLD_` / `MALLOC_MMAP_THRESHOLD_` 是 glibc 专有变量。两组变量不能同时设置——jemalloc 会忽略 glibc 变量但不报错，容易造成"以为生效了但实际没有"的困惑。
+
+**诊断命令**：
+
+```bash
+# 查看当前 RSS
+docker exec chromaprint3d cat /proc/1/smaps_rollup | head -3
+
+# 查看分配器信息（通过 health 端点）
+curl -s http://localhost:8080/api/v1/health | jq '.data.memory'
+```
 
 ### OMP_NUM_THREADS 的重要性
 
@@ -839,7 +883,24 @@ VITE_UMAMI_WEBSITE_ID=<预览版 website-id>
 
 `website-id` 在 Umami 管理后台添加网站后获取。
 
-### 8.4 备份
+### 8.4 多标签 `memory-status` 去重
+
+前端会额外上报一个自定义事件 `memory-status`，用于观测服务端内存占用趋势。部署时建议理解它的去重策略：
+
+- 浏览器端通过 `BroadcastChannel` + heartbeat/lease 选举单个 leader tab。
+- 只有 leader tab 会每 5 分钟发送一次 `memory-status`，避免同一用户开多个标签页时重复上报。
+- leader tab 关闭或失联后，其它标签页会在 lease 超时后自动接管，无需人工刷新。
+- 当 `/api/v1/health` 请求失败时，前端会清空缓存的 health 状态并停止该事件上报，避免继续发送过期内存值。
+
+事件字段：
+
+- `rss_mb`
+- `heap_mb`
+- `artifact_pct`
+- `usage_pct`
+- `allocator`
+
+### 8.5 备份
 
 ```bash
 # 手动备份
@@ -852,7 +913,7 @@ docker compose -f ~/umami-deploy/docker-compose.yml exec -T umami-db \
   && find ~/backups/ -name "umami-*.sql.gz" -mtime +30 -delete
 ```
 
-### 8.5 升级
+### 8.6 升级
 
 Umami 容器启动时自动执行数据库迁移，升级只需：
 

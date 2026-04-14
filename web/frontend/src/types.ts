@@ -134,6 +134,13 @@ export type ConvertStage =
   | 'exporting'
   | 'unknown'
 
+export type GenerationStatusValue = 'idle' | 'running' | 'succeeded' | 'failed'
+
+export interface GenerationState {
+  status: GenerationStatusValue
+  error: string | null
+}
+
 export interface TaskStatus {
   id: string
   status: TaskStatusValue
@@ -143,7 +150,7 @@ export interface TaskStatus {
   error: string | null
   result: TaskResult | null
   match_only?: boolean
-  generate_error?: string
+  generation?: GenerationState
   warnings?: string[]
 }
 
@@ -211,11 +218,23 @@ export interface Generate8ColorBoardRequest {
 
 // ---- Health response ----
 
+export interface HealthMemory {
+  rss_bytes: number
+  heap_allocated_bytes: number
+  heap_resident_bytes: number
+  artifact_budget_bytes: number
+  artifact_budget_limit_bytes: number
+  colordb_pool_bytes: number
+  memory_limit_bytes: number
+  allocator: string
+}
+
 export interface HealthResponse {
   status: string
   version: string
   active_tasks: number
   total_tasks: number
+  memory?: HealthMemory
 }
 
 // ---- Matting ----

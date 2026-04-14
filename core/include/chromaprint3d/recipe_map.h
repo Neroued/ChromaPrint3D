@@ -96,6 +96,14 @@ struct RecipeMap {
                                      const ModelGateConfig& model_gate = ModelGateConfig{},
                                      MatchStats* out_stats             = nullptr);
 
+    static RecipeMap MatchFromRasterPtrs(const RasterProcResult& img,
+                                         std::span<const ColorDB* const> dbs,
+                                         const PrintProfile& profile,
+                                         const MatchConfig& cfg            = MatchConfig{},
+                                         const ModelPackage* model_package = nullptr,
+                                         const ModelGateConfig& model_gate = ModelGateConfig{},
+                                         MatchStats* out_stats             = nullptr);
+
     /// Replace recipes for all pixels in \p target_region_ids with \p new_recipe.
     /// Also updates \c mapped_color and \c source_mask for affected pixels.
     void ReplaceRecipeInRegions(const struct RasterRegionMap& region_map,

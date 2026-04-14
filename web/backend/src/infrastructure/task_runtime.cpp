@@ -11,6 +11,8 @@
 #include <opencv2/imgproc.hpp>
 #include <spdlog/spdlog.h>
 
+#include "chromaprint3d/memory_utils.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -128,6 +130,20 @@ const char* TaskStatusToString(RuntimeTaskStatus status) {
     case RuntimeTaskStatus::Completed:
         return "completed";
     case RuntimeTaskStatus::Failed:
+        return "failed";
+    }
+    return "unknown";
+}
+
+const char* GenerationStatusToString(GenerationStatus status) {
+    switch (status) {
+    case GenerationStatus::Idle:
+        return "idle";
+    case GenerationStatus::Running:
+        return "running";
+    case GenerationStatus::Succeeded:
+        return "succeeded";
+    case GenerationStatus::Failed:
         return "failed";
     }
     return "unknown";
@@ -656,8 +672,6 @@ bool TaskRuntime::PostprocessMatting(const std::string& owner, const std::string
 
     auto result = ChromaPrint3D::ApplyMattingPostprocess(alpha, fallback_mask, original, params);
 
-    std::size_t old_bytes = it->second.artifact_bytes;
-
     cv::imencode(".png", result.mask, mp->processed_mask_png);
     if (!result.foreground.empty()) {
         cv::imencode(".png", result.foreground, mp->processed_fg_png);
@@ -669,10 +683,8 @@ bool TaskRuntime::PostprocessMatting(const std::string& owner, const std::string
     } else {
         mp->outline_png.clear();
     }
-
-    std::size_t new_bytes     = ComputeArtifactBytes(snap);
-    total_artifact_bytes_     = total_artifact_bytes_ - old_bytes + new_bytes;
-    it->second.artifact_bytes = new_bytes;
+    RefreshArtifactBytesLocked(it->second);
+    EnforceResultBudgetLocked(&id);
 
     status_code = 200;
     return true;
@@ -686,7 +698,7 @@ std::optional<nlohmann::json> TaskRuntime::GetRecipeEditorSummary(const std::str
     auto it = tasks_.find(id);
     if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
     if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
-    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
     return GetRecipeEditorSummaryLocked(it->second);
 }
 
@@ -696,6 +708,7 @@ TaskRuntime::GetTaskPrintProfile(const std::string& owner, const std::string& id
     auto it = tasks_.find(id);
     if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
     if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
 
     const auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
     if (!cp || !cp->match_only) return std::nullopt;
@@ -711,16 +724,18 @@ std::optional<std::vector<std::string>> TaskRuntime::GetTaskColorDbNames(const s
     auto it = tasks_.find(id);
     if (it == tasks_.end() || it->second.snapshot.owner != owner) return std::nullopt;
     if (it->second.snapshot.status != RuntimeTaskStatus::Completed) return std::nullopt;
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
 
     const auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
     if (!cp || !cp->match_only) return std::nullopt;
 
+    static const std::vector<std::shared_ptr<const ChromaPrint3D::ColorDB>> kEmpty;
     const auto& dbs = cp->raster_match_state   ? cp->raster_match_state->dbs
                       : cp->vector_match_state ? cp->vector_match_state->dbs
-                                               : std::vector<ChromaPrint3D::ColorDB>{};
+                                               : kEmpty;
     std::vector<std::string> names;
     names.reserve(dbs.size());
-    for (const auto& db : dbs) { names.push_back(db.name); }
+    for (const auto& db : dbs) { names.push_back(db->name); }
     return names;
 }
 
@@ -749,8 +764,11 @@ TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string
             is_raster ? cp->raster_match_state->match_config : cp->vector_match_state->match_config;
         const auto& model_gate_c =
             is_raster ? cp->raster_match_state->model_gate : cp->vector_match_state->model_gate;
+        std::vector<const ChromaPrint3D::ColorDB*> db_ptrs;
+        db_ptrs.reserve(dbs.size());
+        for (const auto& sp : dbs) { db_ptrs.push_back(sp.get()); }
         cp->recipe_search_cache = ChromaPrint3D::RecipeSearchCache::Build(
-            dbs, profile, match_config, model_pack, model_gate_c);
+            db_ptrs, profile, match_config, model_pack, model_gate_c);
     }
 
     std::vector<ChromaPrint3D::RecipeCandidate> candidates;
@@ -768,7 +786,7 @@ TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string
                                                            max_candidates, offset);
     }
 
-    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
 
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& c : candidates) {
@@ -812,6 +830,11 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
     if (!cp || !cp->match_only) {
         status_code = 400;
         message     = "not a match_only task";
+        return false;
+    }
+    if (IsGenerationRunningLocked(it->second)) {
+        status_code = 409;
+        message     = "generation is running";
         return false;
     }
 
@@ -864,10 +887,14 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
         cv::Mat preview_bgra = ChromaPrint3D::DownsampleForPreview(mstate.recipe_map.ToBgraImage());
         if (!preview_bgra.empty()) {
             cp->result.preview_png = ChromaPrint3D::EncodePng(preview_bgra);
+        } else {
+            cp->result.preview_png.clear();
         }
         cv::Mat source_mask_img = mstate.recipe_map.ToSourceMaskImage();
         if (!source_mask_img.empty()) {
             cp->result.source_mask_png = ChromaPrint3D::EncodePng(source_mask_img);
+        } else {
+            cp->result.source_mask_png.clear();
         }
     } else {
         auto& vstate = *cp->vector_match_state;
@@ -892,12 +919,16 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             ChromaPrint3D::RenderVectorSourceMaskPng(vstate.proc_result, vstate.recipe_map);
     }
 
-    std::size_t old_bytes     = it->second.artifact_bytes;
-    std::size_t new_bytes     = ComputeArtifactBytes(it->second.snapshot);
-    total_artifact_bytes_     = total_artifact_bytes_ - old_bytes + new_bytes;
-    it->second.artifact_bytes = new_bytes;
-
-    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
+    if (cp->match_only) {
+        cp->generation = {};
+        cp->result.model_3mf.clear();
+        cp->result.layer_previews = {};
+        cp->has_3mf_on_disk       = false;
+        it->second.spilled_3mf    = SpillableArtifact{};
+    }
+    RefreshArtifactBytesLocked(it->second);
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
+    EnforceResultBudgetLocked(&id);
 
     auto summary = GetRecipeEditorSummaryLocked(it->second);
     if (summary.has_value()) { out_summary = std::move(*summary); }
@@ -907,8 +938,11 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
 }
 
 SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const std::string& id) {
+    std::size_t queue_before = 0;
+    std::size_t queue_after  = 0;
+    std::size_t owner_active = 0;
     {
-        std::lock_guard<std::mutex> lock(task_mtx_);
+        std::scoped_lock lock(queue_mtx_, task_mtx_);
         auto it = tasks_.find(id);
         if (it == tasks_.end() || it->second.snapshot.owner != owner) {
             return {false, 404, id, "task not found"};
@@ -921,119 +955,168 @@ SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const st
         if (!cp->raster_match_state.has_value() && !cp->vector_match_state.has_value()) {
             return {false, 500, id, "missing match state"};
         }
+        if (cp->generation.status == GenerationStatus::Running) {
+            return {false, 409, id, "generation already running"};
+        }
+        queue_before = queue_.size();
+        if (static_cast<std::int64_t>(queue_.size()) >= max_queue_) {
+            return {false, 429, id, "Task queue is full"};
+        }
+        owner_active = ActiveTasksByOwnerLocked(owner);
+        if (static_cast<std::int64_t>(owner_active) >= max_tasks_per_owner_) {
+            return {false, 429, id, "Too many active tasks for current session"};
+        }
 
-        cp->generate_error.clear();
+        const auto now        = std::chrono::steady_clock::now();
+        cp->generation.status = GenerationStatus::Running;
+        cp->generation.error.clear();
+        cp->generation.started_at   = now;
+        cp->generation.completed_at = {};
         cp->result.model_3mf.clear();
-        it->second.spilled_3mf           = SpillableArtifact{};
-        it->second.snapshot.status       = RuntimeTaskStatus::Running;
-        it->second.snapshot.completed_at = {};
-        cp->stage                        = ChromaPrint3D::ConvertStage::BuildingModel;
-        cp->progress                     = 0.0f;
+        cp->result.layer_previews = {};
+        cp->has_3mf_on_disk       = false;
+        it->second.spilled_3mf    = SpillableArtifact{};
+        cp->stage                 = ChromaPrint3D::ConvertStage::BuildingModel;
+        cp->progress              = 0.0f;
+        RefreshArtifactBytesLocked(it->second);
+        TouchTaskLocked(it->second, now);
+        queue_.push_back(QueueEntry{
+            id,
+            [this, id](const std::string& /*tid*/) {
+                bool use_vector = false;
+                {
+                    std::lock_guard<std::mutex> lock(task_mtx_);
+                    auto it = tasks_.find(id);
+                    if (it == tasks_.end()) { throw std::runtime_error("task not found"); }
+                    auto* cp = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+                    if (!cp) { throw std::runtime_error("task payload mismatch"); }
+                    use_vector = cp->vector_match_state.has_value();
+                }
+
+                ChromaPrint3D::ProgressCallback progress_cb =
+                    [this, id](ChromaPrint3D::ConvertStage stage, float progress) {
+                        UpdateTaskPayload(id, [&](TaskPayload& p) {
+                            auto* cp = std::get_if<ConvertTaskPayload>(&p);
+                            if (!cp) return;
+                            cp->stage    = stage;
+                            cp->progress = progress;
+                        });
+                    };
+
+                try {
+                    ChromaPrint3D::ConvertResult gen_result;
+
+                    if (use_vector) {
+                        ChromaPrint3D::MatchVectorResult match_copy;
+                        {
+                            std::lock_guard<std::mutex> lock(task_mtx_);
+                            auto it = tasks_.find(id);
+                            auto* cp =
+                                std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+                            match_copy = *cp->vector_match_state;
+                        }
+                        gen_result = ChromaPrint3D::GenerateVectorModel(match_copy, progress_cb);
+                    } else {
+                        ChromaPrint3D::MatchRasterResult match_copy;
+                        {
+                            std::lock_guard<std::mutex> lock(task_mtx_);
+                            auto it = tasks_.find(id);
+                            auto* cp =
+                                std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
+                            match_copy = *cp->raster_match_state;
+                        }
+                        gen_result = ChromaPrint3D::GenerateRasterModel(match_copy, progress_cb);
+                    }
+
+                    PendingArtifactFile pending_3mf;
+                    SpillableArtifact spilled_3mf;
+                    if (!gen_result.model_3mf.empty()) {
+                        auto spill_path = temp_dir_ / (id + "_gen.3mf");
+                        pending_3mf     = PendingArtifactFile(spill_path);
+                        spdlog::debug("GenerateModel: writing 3MF for task {}, {} bytes to {}", id,
+                                      gen_result.model_3mf.size(), spill_path.string());
+
+                        std::ofstream ofs(spill_path, std::ios::binary | std::ios::trunc);
+                        if (!ofs.is_open()) {
+                            throw std::runtime_error("Cannot open 3MF spill file: " +
+                                                     spill_path.string());
+                        }
+                        ofs.write(reinterpret_cast<const char*>(gen_result.model_3mf.data()),
+                                  static_cast<std::streamsize>(gen_result.model_3mf.size()));
+                        if (!ofs.good()) {
+                            throw std::runtime_error("Failed to write 3MF spill file: " +
+                                                     spill_path.string());
+                        }
+                        ofs.close();
+                        if (ofs.fail()) {
+                            throw std::runtime_error("Failed to flush/close 3MF spill file: " +
+                                                     spill_path.string());
+                        }
+
+                        auto actual_size = std::filesystem::file_size(spill_path);
+                        if (actual_size != gen_result.model_3mf.size()) {
+                            spdlog::error(
+                                "GenerateModel: 3MF file size mismatch for task {}: expected={}, "
+                                "actual={}",
+                                id, gen_result.model_3mf.size(), actual_size);
+                            throw std::runtime_error("3MF file size mismatch after write");
+                        }
+
+                        spilled_3mf = pending_3mf.Commit(actual_size);
+                        gen_result.model_3mf.clear();
+                        gen_result.model_3mf.shrink_to_fit();
+                        spdlog::info("GenerateModel: 3MF written for task {}, {} bytes", id,
+                                     actual_size);
+                    }
+
+                    UpdateTaskRecord(id, [&](TaskRecord& rec) {
+                        auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
+                        if (!cp) return;
+                        const auto now             = std::chrono::steady_clock::now();
+                        cp->result.model_3mf       = std::move(gen_result.model_3mf);
+                        cp->result.layer_previews  = std::move(gen_result.layer_previews);
+                        cp->result.preview_png     = std::move(gen_result.preview_png);
+                        cp->result.source_mask_png = std::move(gen_result.source_mask_png);
+                        cp->progress               = 1.0f;
+                        cp->has_3mf_on_disk        = spilled_3mf.has_file();
+                        cp->generation.status      = GenerationStatus::Succeeded;
+                        cp->generation.error.clear();
+                        cp->generation.completed_at = now;
+                        rec.spilled_3mf             = std::move(spilled_3mf);
+                        this->RefreshArtifactBytesLocked(rec);
+                        this->TouchTaskLocked(rec, now);
+                    });
+                    UpdateTaskRecord(id, [&](TaskRecord& rec) {
+                        this->EnforceResultBudgetLocked(&rec.snapshot.id);
+                    });
+                } catch (const std::exception& e) {
+                    spdlog::error("GenerateModel failed for task {}: {}", id, e.what());
+                    UpdateTaskRecord(id, [&](TaskRecord& rec) {
+                        auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
+                        if (!cp) return;
+                        const auto now              = std::chrono::steady_clock::now();
+                        cp->generation.status       = GenerationStatus::Failed;
+                        cp->generation.error        = e.what();
+                        cp->generation.completed_at = now;
+                        cp->result.model_3mf.clear();
+                        cp->result.layer_previews = {};
+                        cp->has_3mf_on_disk       = false;
+                        cp->progress              = 0.0f;
+                        rec.spilled_3mf           = SpillableArtifact{};
+                        this->RefreshArtifactBytesLocked(rec);
+                        this->TouchTaskLocked(rec, now);
+                    });
+                }
+            },
+            false,
+        });
+        queue_after = queue_.size();
     }
-
-    RunTask(id, [this, id](const std::string& /*tid*/) {
-        bool use_vector = false;
-        {
-            std::lock_guard<std::mutex> lock(task_mtx_);
-            auto it    = tasks_.find(id);
-            auto* cp   = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
-            use_vector = cp->vector_match_state.has_value();
-        }
-
-        ChromaPrint3D::ProgressCallback progress_cb = [this, id](ChromaPrint3D::ConvertStage stage,
-                                                                 float progress) {
-            UpdateTaskPayload(id, [&](TaskPayload& p) {
-                auto* cp = std::get_if<ConvertTaskPayload>(&p);
-                if (!cp) return;
-                cp->stage    = stage;
-                cp->progress = progress;
-            });
-        };
-
-        try {
-            ChromaPrint3D::ConvertResult gen_result;
-
-            if (use_vector) {
-                ChromaPrint3D::MatchVectorResult match_copy;
-                {
-                    std::lock_guard<std::mutex> lock(task_mtx_);
-                    auto it    = tasks_.find(id);
-                    auto* cp   = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
-                    match_copy = *cp->vector_match_state;
-                }
-                gen_result = ChromaPrint3D::GenerateVectorModel(match_copy, progress_cb);
-            } else {
-                ChromaPrint3D::MatchRasterResult match_copy;
-                {
-                    std::lock_guard<std::mutex> lock(task_mtx_);
-                    auto it    = tasks_.find(id);
-                    auto* cp   = std::get_if<ConvertTaskPayload>(&it->second.snapshot.payload);
-                    match_copy = *cp->raster_match_state;
-                }
-                gen_result = ChromaPrint3D::GenerateRasterModel(match_copy, progress_cb);
-            }
-
-            PendingArtifactFile pending_3mf;
-            SpillableArtifact spilled_3mf;
-            if (!gen_result.model_3mf.empty()) {
-                auto spill_path = temp_dir_ / (id + "_gen.3mf");
-                pending_3mf     = PendingArtifactFile(spill_path);
-                spdlog::debug("GenerateModel: writing 3MF for task {}, {} bytes to {}", id,
-                              gen_result.model_3mf.size(), spill_path.string());
-
-                std::ofstream ofs(spill_path, std::ios::binary | std::ios::trunc);
-                if (!ofs.is_open()) {
-                    throw std::runtime_error("Cannot open 3MF spill file: " + spill_path.string());
-                }
-                ofs.write(reinterpret_cast<const char*>(gen_result.model_3mf.data()),
-                          static_cast<std::streamsize>(gen_result.model_3mf.size()));
-                if (!ofs.good()) {
-                    throw std::runtime_error("Failed to write 3MF spill file: " +
-                                             spill_path.string());
-                }
-                ofs.close();
-                if (ofs.fail()) {
-                    throw std::runtime_error("Failed to flush/close 3MF spill file: " +
-                                             spill_path.string());
-                }
-
-                auto actual_size = std::filesystem::file_size(spill_path);
-                if (actual_size != gen_result.model_3mf.size()) {
-                    spdlog::error("GenerateModel: 3MF file size mismatch for task {}: expected={}, "
-                                  "actual={}",
-                                  id, gen_result.model_3mf.size(), actual_size);
-                    throw std::runtime_error("3MF file size mismatch after write");
-                }
-
-                spilled_3mf = pending_3mf.Commit(actual_size);
-                gen_result.model_3mf.clear();
-                gen_result.model_3mf.shrink_to_fit();
-                spdlog::info("GenerateModel: 3MF written for task {}, {} bytes", id, actual_size);
-            }
-
-            UpdateTaskRecord(id, [&](TaskRecord& rec) {
-                auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
-                if (!cp) return;
-                cp->result.model_3mf       = std::move(gen_result.model_3mf);
-                cp->result.layer_previews  = std::move(gen_result.layer_previews);
-                cp->result.preview_png     = std::move(gen_result.preview_png);
-                cp->result.source_mask_png = std::move(gen_result.source_mask_png);
-                cp->progress               = 1.0f;
-                cp->has_3mf_on_disk        = spilled_3mf.has_file();
-                rec.spilled_3mf            = std::move(spilled_3mf);
-            });
-        } catch (const std::exception& e) {
-            spdlog::error("GenerateModel failed for task {}: {}", id, e.what());
-            UpdateTaskPayload(id, [&](TaskPayload& p) {
-                auto* cp = std::get_if<ConvertTaskPayload>(&p);
-                if (!cp) return;
-                cp->generate_error = e.what();
-                cp->result.model_3mf.clear();
-            });
-        }
-    });
-
-    return {true, 200, id, ""};
+    spdlog::debug("GenerateModel enqueued: id={}, owner={}, queue_before={}, queue_after={}, "
+                  "owner_active={}",
+                  id, OwnerTag(owner), queue_before, queue_after, owner_active);
+    queue_cv_.notify_one();
+    return {true, 202, id, ""};
 }
 
 std::vector<TaskSnapshot> TaskRuntime::ListTasks(const std::string& owner) const {
@@ -1062,9 +1145,7 @@ std::optional<TaskSnapshot> TaskRuntime::FindTask(const std::string& owner, cons
                      OwnerTag(it->second.snapshot.owner));
         return std::nullopt;
     }
-    if (it->second.snapshot.status == RuntimeTaskStatus::Completed) {
-        it->second.snapshot.completed_at = std::chrono::steady_clock::now();
-    }
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
     return it->second.snapshot;
 }
 
@@ -1075,6 +1156,11 @@ bool TaskRuntime::DeleteTask(const std::string& owner, const std::string& id, in
     if (it == tasks_.end() || it->second.snapshot.owner != owner) {
         status_code = 404;
         message     = "Task not found";
+        return false;
+    }
+    if (IsGenerationRunningLocked(it->second)) {
+        status_code = 409;
+        message     = "Cannot delete task while generation is running";
         return false;
     }
     if (it->second.snapshot.status == RuntimeTaskStatus::Pending) {
@@ -1120,7 +1206,7 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
         message     = "Task not completed";
         return std::nullopt;
     }
-    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
+    TouchTaskLocked(it->second, std::chrono::steady_clock::now());
 
     const auto& rec = it->second;
 
@@ -1318,6 +1404,11 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
 
 int TaskRuntime::ActiveTaskCount() const { return running_count_.load(std::memory_order_relaxed); }
 
+TaskRuntime::ArtifactBudgetInfo TaskRuntime::GetArtifactBudgetInfo() const {
+    std::lock_guard<std::mutex> lock(task_mtx_);
+    return {total_artifact_bytes_, static_cast<std::size_t>(max_total_result_bytes_)};
+}
+
 SubmitResult TaskRuntime::SubmitInternal(const std::string& owner, TaskKind kind,
                                          TaskPayload payload, WorkerFn worker) {
     if (owner.empty()) { return {false, 401, "", "Session is required"}; }
@@ -1345,15 +1436,17 @@ SubmitResult TaskRuntime::SubmitInternal(const std::string& owner, TaskKind kind
             return {false, 429, "", "Too many active tasks for current session"};
         }
         TaskRecord rec;
-        rec.snapshot.id         = id;
-        rec.snapshot.owner      = owner;
-        rec.snapshot.kind       = kind;
-        rec.snapshot.status     = RuntimeTaskStatus::Pending;
-        rec.snapshot.created_at = std::chrono::steady_clock::now();
-        rec.snapshot.payload    = std::move(payload);
-        tasks_[id]              = std::move(rec);
+        const auto now                = std::chrono::steady_clock::now();
+        rec.snapshot.id               = id;
+        rec.snapshot.owner            = owner;
+        rec.snapshot.kind             = kind;
+        rec.snapshot.status           = RuntimeTaskStatus::Pending;
+        rec.snapshot.created_at       = now;
+        rec.snapshot.last_accessed_at = now;
+        rec.snapshot.payload          = std::move(payload);
+        tasks_[id]                    = std::move(rec);
 
-        queue_.push_back(QueueEntry{id, std::move(worker)});
+        queue_.push_back(QueueEntry{id, std::move(worker), true});
         queue_after = queue_.size();
         total_submitted_.fetch_add(1, std::memory_order_relaxed);
     }
@@ -1372,7 +1465,7 @@ SubmitResult TaskRuntime::SubmitInternal(const std::string& owner, TaskKind kind
     return {true, 202, id, ""};
 }
 
-void TaskRuntime::RunTask(const std::string& id, WorkerFn worker) {
+void TaskRuntime::RunTask(const std::string& id, WorkerFn worker, bool manage_task_state) {
     TaskKind kind      = TaskKind::Convert;
     std::string owner  = "none";
     double queue_wait  = 0.0;
@@ -1393,13 +1486,23 @@ void TaskRuntime::RunTask(const std::string& id, WorkerFn worker) {
         spdlog::debug("Task running: id={}, kind={}, owner={}, queue_wait_ms={:.2f}", id,
                       TaskKindToString(kind), owner, queue_wait);
     }
-    MarkRunning(id);
+    if (manage_task_state) { MarkRunning(id); }
     running_count_.fetch_add(1, std::memory_order_relaxed);
     try {
         worker(id);
-        MarkCompleted(id);
-    } catch (const std::exception& e) { MarkFailed(id, e.what()); } catch (...) {
-        MarkFailed(id, "Unknown error");
+        if (manage_task_state) { MarkCompleted(id); }
+    } catch (const std::exception& e) {
+        if (manage_task_state) {
+            MarkFailed(id, e.what());
+        } else {
+            throw;
+        }
+    } catch (...) {
+        if (manage_task_state) {
+            MarkFailed(id, "Unknown error");
+        } else {
+            throw;
+        }
     }
     running_count_.fetch_sub(1, std::memory_order_relaxed);
 }
@@ -1423,7 +1526,8 @@ void TaskRuntime::WorkerLoop() {
             job = std::move(queue_.front());
             queue_.pop_front();
         }
-        RunTask(job.task_id, std::move(job.worker));
+        RunTask(job.task_id, std::move(job.worker), job.manage_task_state);
+        ChromaPrint3D::ReleaseFreedMemory();
     }
 }
 
@@ -1431,7 +1535,8 @@ void TaskRuntime::MarkRunning(const std::string& id) {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end()) return;
-    it->second.snapshot.status = RuntimeTaskStatus::Running;
+    it->second.snapshot.status           = RuntimeTaskStatus::Running;
+    it->second.snapshot.last_accessed_at = std::chrono::steady_clock::now();
     spdlog::debug("Task state -> running: id={}, kind={}", id,
                   TaskKindToString(it->second.snapshot.kind));
 }
@@ -1440,11 +1545,12 @@ void TaskRuntime::MarkFailed(const std::string& id, const std::string& message) 
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end()) return;
-    it->second.snapshot.status       = RuntimeTaskStatus::Failed;
-    it->second.snapshot.error        = message;
-    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
-    const double elapsed =
-        ElapsedMs(it->second.snapshot.created_at, it->second.snapshot.completed_at);
+    const auto now                       = std::chrono::steady_clock::now();
+    it->second.snapshot.status           = RuntimeTaskStatus::Failed;
+    it->second.snapshot.error            = message;
+    it->second.snapshot.completed_at     = now;
+    it->second.snapshot.last_accessed_at = now;
+    const double elapsed                 = ElapsedMs(it->second.snapshot.created_at, now);
     spdlog::error("Task failed: id={}, kind={}, owner={}, elapsed_ms={:.2f}, error={}", id,
                   TaskKindToString(it->second.snapshot.kind), OwnerTag(it->second.snapshot.owner),
                   elapsed, message);
@@ -1454,30 +1560,32 @@ void TaskRuntime::MarkCompleted(const std::string& id) {
     std::lock_guard<std::mutex> lock(task_mtx_);
     auto it = tasks_.find(id);
     if (it == tasks_.end()) return;
-    it->second.snapshot.status       = RuntimeTaskStatus::Completed;
-    it->second.snapshot.completed_at = std::chrono::steady_clock::now();
-    total_artifact_bytes_ -= it->second.artifact_bytes;
-    it->second.artifact_bytes = ComputeArtifactBytes(it->second.snapshot);
-    total_artifact_bytes_ += it->second.artifact_bytes;
-    const double elapsed =
-        ElapsedMs(it->second.snapshot.created_at, it->second.snapshot.completed_at);
+    const auto now                       = std::chrono::steady_clock::now();
+    it->second.snapshot.status           = RuntimeTaskStatus::Completed;
+    it->second.snapshot.completed_at     = now;
+    it->second.snapshot.last_accessed_at = now;
+    RefreshArtifactBytesLocked(it->second);
+    const double elapsed = ElapsedMs(it->second.snapshot.created_at, now);
 
     if (auto* vp = std::get_if<VectorizeTaskPayload>(&it->second.snapshot.payload)) {
         const std::size_t svg_bytes = vp->svg_bytes > 0 ? vp->svg_bytes : vp->svg_content.size();
         spdlog::info(
             "Task completed: id={}, kind={}, owner={}, elapsed_ms={:.2f}, vectorize_ms={:.2f}, "
             "pipeline_ms={:.2f}, width={}, height={}, num_shapes={}, svg_bytes={}, spilled_svg={}, "
-            "artifact_bytes={}",
+            "artifact_bytes={}, rss_mb={}",
             id, TaskKindToString(it->second.snapshot.kind), OwnerTag(it->second.snapshot.owner),
             elapsed, vp->vectorize_ms, vp->pipeline_ms, vp->width, vp->height, vp->num_shapes,
-            svg_bytes, it->second.spilled_svg.has_file(), it->second.artifact_bytes);
+            svg_bytes, it->second.spilled_svg.has_file(), it->second.artifact_bytes,
+            ChromaPrint3D::GetProcessRssBytes() / (1024 * 1024));
     } else {
         spdlog::debug(
-            "Task completed: id={}, kind={}, owner={}, elapsed_ms={:.2f}, artifact_bytes={}", id,
-            TaskKindToString(it->second.snapshot.kind), OwnerTag(it->second.snapshot.owner),
-            elapsed, it->second.artifact_bytes);
+            "Task completed: id={}, kind={}, owner={}, elapsed_ms={:.2f}, artifact_bytes={}, "
+            "rss_mb={}",
+            id, TaskKindToString(it->second.snapshot.kind), OwnerTag(it->second.snapshot.owner),
+            elapsed, it->second.artifact_bytes,
+            ChromaPrint3D::GetProcessRssBytes() / (1024 * 1024));
     }
-    EnforceResultBudgetLocked();
+    EnforceResultBudgetLocked(&id);
 }
 
 std::size_t TaskRuntime::ComputeArtifactBytes(const TaskSnapshot& snapshot) const {
@@ -1667,6 +1775,10 @@ void TaskRuntime::CleanupLoop() {
 void TaskRuntime::CleanupExpiredLocked(const std::chrono::steady_clock::time_point& now) {
     for (auto it = tasks_.begin(); it != tasks_.end();) {
         const auto& t = it->second.snapshot;
+        if (IsGenerationRunningLocked(it->second)) {
+            ++it;
+            continue;
+        }
         if (t.status == RuntimeTaskStatus::Completed || t.status == RuntimeTaskStatus::Failed) {
             auto elapsed =
                 std::chrono::duration_cast<std::chrono::seconds>(now - t.completed_at).count();
@@ -1681,15 +1793,17 @@ void TaskRuntime::CleanupExpiredLocked(const std::chrono::steady_clock::time_poi
     EnforceResultBudgetLocked();
 }
 
-void TaskRuntime::EnforceResultBudgetLocked() {
+void TaskRuntime::EnforceResultBudgetLocked(const std::string* protected_task_id) {
     if (max_total_result_bytes_ <= 0) return;
     while (static_cast<std::int64_t>(total_artifact_bytes_) > max_total_result_bytes_) {
         auto oldest = tasks_.end();
         for (auto it = tasks_.begin(); it != tasks_.end(); ++it) {
             auto st = it->second.snapshot.status;
             if (st != RuntimeTaskStatus::Completed && st != RuntimeTaskStatus::Failed) continue;
+            if (IsGenerationRunningLocked(it->second)) continue;
+            if (protected_task_id && it->first == *protected_task_id) continue;
             if (oldest == tasks_.end() ||
-                it->second.snapshot.completed_at < oldest->second.snapshot.completed_at) {
+                it->second.snapshot.last_accessed_at < oldest->second.snapshot.last_accessed_at) {
                 oldest = it;
             }
         }
@@ -1704,12 +1818,28 @@ void TaskRuntime::EnforceResultBudgetLocked() {
     }
 }
 
+void TaskRuntime::RefreshArtifactBytesLocked(TaskRecord& rec) {
+    total_artifact_bytes_ -= std::min(total_artifact_bytes_, rec.artifact_bytes);
+    rec.artifact_bytes = ComputeArtifactBytes(rec.snapshot);
+    total_artifact_bytes_ += rec.artifact_bytes;
+}
+
+bool TaskRuntime::IsGenerationRunningLocked(const TaskRecord& rec) const {
+    const auto* cp = std::get_if<ConvertTaskPayload>(&rec.snapshot.payload);
+    return cp && cp->match_only && cp->generation.status == GenerationStatus::Running;
+}
+
+void TaskRuntime::TouchTaskLocked(TaskRecord& rec,
+                                  const std::chrono::steady_clock::time_point& now) {
+    rec.snapshot.last_accessed_at = now;
+}
+
 std::size_t TaskRuntime::ActiveTasksByOwnerLocked(const std::string& owner) const {
     std::size_t count = 0;
     for (const auto& [_, task] : tasks_) {
         if (task.snapshot.owner != owner) continue;
         if (task.snapshot.status == RuntimeTaskStatus::Pending ||
-            task.snapshot.status == RuntimeTaskStatus::Running) {
+            task.snapshot.status == RuntimeTaskStatus::Running || IsGenerationRunningLocked(task)) {
             ++count;
         }
     }

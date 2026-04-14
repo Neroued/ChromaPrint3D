@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -82,15 +83,16 @@ public:
     /// Select the best-matching package for a request.
     /// Requires ALL selected ColorDBs to share the same vendor + material_type.
     /// Returns nullptr if no package matches.
-    const ModelPackage* Select(const std::string& vendor, const std::string& material_type,
-                               const std::vector<std::string>& profile_channel_keys) const;
+    std::shared_ptr<const ModelPackage>
+    Select(const std::string& vendor, const std::string& material_type,
+           const std::vector<std::string>& profile_channel_keys) const;
 
-    const std::vector<ModelPackage>& All() const { return packages_; }
+    const std::vector<std::shared_ptr<const ModelPackage>>& All() const { return packages_; }
 
     bool Empty() const { return packages_.empty(); }
 
 private:
-    std::vector<ModelPackage> packages_;
+    std::vector<std::shared_ptr<const ModelPackage>> packages_;
 };
 
 /// Configuration for the model gate that decides when to prefer model

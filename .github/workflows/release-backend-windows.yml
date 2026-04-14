@@ -220,7 +220,8 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
             -DPOTRACE_INCLUDE_DIR="${{ steps.potrace_win.outputs.potrace_include }}" `
-            -DPOTRACE_LIBRARY="${{ steps.potrace_win.outputs.potrace_lib }}"
+            -DPOTRACE_LIBRARY="${{ steps.potrace_win.outputs.potrace_lib }}" `
+            -DCHROMAPRINT3D_USE_JEMALLOC=OFF
 
       - name: Build
         run: cmake --build build --config Release --parallel 4

@@ -85,23 +85,24 @@ ColorDB PrintProfile::ToColorDB(const std::string& name) const {
     return out;
 }
 
-PrintProfile PrintProfile::BuildFromColorDBs(std::span<const ColorDB> dbs, int color_layers,
-                                             float layer_height_mm, const FilamentConfig* config) {
-    if (dbs.empty()) { throw InputError("BuildFromColorDBs requires at least one ColorDB"); }
+PrintProfile PrintProfile::BuildFromColorDBPtrs(std::span<const ColorDB* const> db_ptrs,
+                                                int color_layers, float layer_height_mm,
+                                                const FilamentConfig* config) {
+    if (db_ptrs.empty()) { throw InputError("BuildFromColorDBs requires at least one ColorDB"); }
 
+    const ColorDB& front = *db_ptrs.front();
     PrintProfile profile;
-    profile.color_layers = color_layers;
-    profile.layer_height_mm =
-        (layer_height_mm > 0.0f) ? layer_height_mm : dbs.front().layer_height_mm;
-
-    profile.base_layers   = dbs.front().base_layers;
-    profile.line_width_mm = (dbs.front().line_width_mm > 0.0f) ? dbs.front().line_width_mm : 0.42f;
-    profile.layer_order   = dbs.front().layer_order;
+    profile.color_layers    = color_layers;
+    profile.layer_height_mm = (layer_height_mm > 0.0f) ? layer_height_mm : front.layer_height_mm;
+    profile.base_layers     = front.base_layers;
+    profile.line_width_mm   = (front.line_width_mm > 0.0f) ? front.line_width_mm : 0.42f;
+    profile.layer_order     = front.layer_order;
 
     std::optional<std::string> base_channel_key;
     std::map<std::string, Channel> sorted_palette;
 
-    for (const ColorDB& db : dbs) {
+    for (const ColorDB* p : db_ptrs) {
+        const ColorDB& db = *p;
         if (db.palette.empty()) { throw ConfigError("ColorDB palette is empty"); }
         if (db.base_channel_idx < 0 ||
             static_cast<std::size_t>(db.base_channel_idx) >= db.palette.size()) {
@@ -146,6 +147,14 @@ PrintProfile PrintProfile::BuildFromColorDBs(std::span<const ColorDB> dbs, int c
 
     profile.Validate();
     return profile;
+}
+
+PrintProfile PrintProfile::BuildFromColorDBs(std::span<const ColorDB> dbs, int color_layers,
+                                             float layer_height_mm, const FilamentConfig* config) {
+    std::vector<const ColorDB*> ptrs;
+    ptrs.reserve(dbs.size());
+    for (const ColorDB& db : dbs) { ptrs.push_back(&db); }
+    return BuildFromColorDBPtrs(ptrs, color_layers, layer_height_mm, config);
 }
 
 void PrintProfile::FilterChannels(const std::vector<std::string>& allowed_keys) {

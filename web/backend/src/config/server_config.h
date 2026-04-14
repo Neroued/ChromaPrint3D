@@ -24,13 +24,15 @@ struct ServerConfig {
     std::int64_t session_ttl_seconds = 3600;
     std::int64_t max_task_queue      = 256;
 
-    std::int64_t max_tasks_per_owner  = 32;
-    std::int64_t max_task_result_mb   = 512;
-    std::int64_t max_pixels_per_image = 4096LL * 4096LL;
-    std::int64_t max_session_colordbs = 10;
-    std::int64_t board_cache_ttl      = 600;
-    bool require_cors_origin          = false;
-    bool allow_open_cors              = true;
+    std::int64_t max_tasks_per_owner      = 32;
+    std::int64_t max_task_result_mb       = 512;
+    std::int64_t max_pixels_per_image     = 4096LL * 4096LL;
+    std::int64_t max_session_colordbs     = 10;
+    std::int64_t board_cache_ttl          = 600;
+    std::int64_t board_geometry_cache_ttl = 600;
+    std::int64_t board_geometry_cache_max = 16;
+    bool require_cors_origin              = false;
+    bool allow_open_cors                  = true;
 };
 
 struct ConfigParseResult {

@@ -72,6 +72,8 @@ std::string BuildUsage(const char* exe_name) {
            "1048576-268435456)\n"
         << "  --max-session-colordbs N    Max uploaded ColorDB count per session (default: 10)\n"
         << "  --board-cache-ttl N         Calibration board cache TTL seconds (default: 600)\n"
+        << "  --board-geometry-cache-ttl N Board geometry cache TTL seconds (default: 600)\n"
+        << "  --board-geometry-cache-max N Max cached board geometries (default: 16)\n"
         << "  -h, --help                  Show this help\n";
     return oss.str();
 }
@@ -92,6 +94,8 @@ ConfigParseResult ParseConfig(int argc, char** argv) {
         {"--max-pixels", &cfg.max_pixels_per_image},
         {"--max-session-colordbs", &cfg.max_session_colordbs},
         {"--board-cache-ttl", &cfg.board_cache_ttl},
+        {"--board-geometry-cache-ttl", &cfg.board_geometry_cache_ttl},
+        {"--board-geometry-cache-max", &cfg.board_geometry_cache_max},
     };
 
     for (int i = 1; i < argc; ++i) {
@@ -185,6 +189,12 @@ ConfigParseResult ParseConfig(int argc, char** argv) {
     if (!ValidateI64Range("--max-session-colordbs", cfg.max_session_colordbs, 1, 256, result))
         return result;
     if (!ValidateI64Range("--board-cache-ttl", cfg.board_cache_ttl, 60, 86400, result))
+        return result;
+    if (!ValidateI64Range("--board-geometry-cache-ttl", cfg.board_geometry_cache_ttl, 60, 86400,
+                          result))
+        return result;
+    if (!ValidateI64Range("--board-geometry-cache-max", cfg.board_geometry_cache_max, 1, 256,
+                          result))
         return result;
 
     if (cfg.require_cors_origin && cfg.cors_origin.empty()) {

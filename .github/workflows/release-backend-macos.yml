@@ -59,7 +59,7 @@ jobs:
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
         run: |
           missing=()
-          for formula in opencv openblas potrace ccache libomp jpeg-turbo ninja zlib; do
+          for formula in opencv openblas potrace ccache libomp jpeg-turbo ninja zlib jemalloc; do
             brew list --formula "$formula" >/dev/null 2>&1 || missing+=("$formula")
           done
           if [ ${#missing[@]} -gt 0 ]; then

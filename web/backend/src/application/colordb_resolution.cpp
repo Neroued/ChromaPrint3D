@@ -33,18 +33,26 @@ std::vector<std::string> BuildProfileChannelKeys(const std::vector<const ColorDB
     return {keys.begin(), keys.end()};
 }
 
+std::vector<std::string>
+BuildProfileChannelKeys(const std::vector<std::shared_ptr<const ColorDB>>& dbs) {
+    std::unordered_set<std::string> keys;
+    for (const auto& db : dbs) {
+        for (const auto& ch : db->palette) { keys.insert(NormalizeChannelKey(ch)); }
+    }
+    return {keys.begin(), keys.end()};
+}
+
 ServiceResult ResolveSelectedColorDbs(const json& params,
                                       const std::optional<SessionSnapshot>& session,
                                       const DataRepository& data,
-                                      std::vector<const ColorDB*>& out_dbs,
-                                      std::vector<std::shared_ptr<const ColorDB>>& session_owned,
+                                      std::vector<std::shared_ptr<const ColorDB>>& out_dbs,
                                       std::string& common_vendor, std::string& common_material) {
     out_dbs.clear();
     common_vendor.clear();
     common_material.clear();
 
     struct DbWithMeta {
-        const ColorDB* db;
+        std::shared_ptr<const ColorDB> db;
         std::string vendor;
         std::string material_type;
     };
@@ -59,25 +67,21 @@ ServiceResult ResolveSelectedColorDbs(const json& params,
                                             "db_names must be an array of strings");
             }
             const std::string name = name_val.get<std::string>();
-            const ColorDB* db      = nullptr;
+            std::shared_ptr<const ColorDB> db;
             std::string vendor, material;
             if (const auto* entry = data.ColorDbCache().FindEntryByName(name)) {
-                db       = &entry->db;
+                db       = entry->db;
                 vendor   = entry->vendor;
                 material = entry->material_type;
             }
             if (!db && session) {
                 auto it = session->color_dbs.find(name);
-                if (it != session->color_dbs.end()) {
-                    auto copy = std::make_shared<const ColorDB>(it->second);
-                    session_owned.push_back(copy);
-                    db = copy.get();
-                }
+                if (it != session->color_dbs.end()) { db = it->second; }
             }
             if (!db) {
                 return ServiceResult::Error(400, "invalid_params", "ColorDB not found: " + name);
             }
-            selected.push_back({db, vendor, material});
+            selected.push_back({std::move(db), vendor, material});
         }
         if (selected.empty()) {
             return ServiceResult::Error(400, "invalid_params", "No valid ColorDB names provided");
@@ -85,12 +89,12 @@ ServiceResult ResolveSelectedColorDbs(const json& params,
     } else {
         selected.reserve(data.ColorDbCache().databases.size());
         for (const auto& entry : data.ColorDbCache().databases) {
-            selected.push_back({&entry.db, entry.vendor, entry.material_type});
+            selected.push_back({entry.db, entry.vendor, entry.material_type});
         }
     }
 
     out_dbs.reserve(selected.size());
-    for (const auto& s : selected) { out_dbs.push_back(s.db); }
+    for (auto& s : selected) { out_dbs.push_back(std::move(s.db)); }
 
     if (!selected.empty()) {
         const auto& first_v = selected.front().vendor;

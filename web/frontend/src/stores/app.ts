@@ -6,7 +6,13 @@ import { detectSystemDarkMode } from '../runtime/theme'
 import type { WritableComputedRef } from 'vue'
 import i18n from '../locales'
 import { LOCALE_STORAGE_KEY, type SupportedLocale } from '../locales'
-import type { ConvertAnyParams, ImageDimensions, InputType, TaskStatus } from '../types'
+import type {
+  ConvertAnyParams,
+  HealthMemory,
+  ImageDimensions,
+  InputType,
+  TaskStatus,
+} from '../types'
 
 export const THEME_STORAGE_KEY = 'chromaprint3d-theme'
 
@@ -23,6 +29,7 @@ export const useAppStore = defineStore('app', () => {
   const serverVersion = ref('')
   const activeTasks = ref(0)
   const totalTasks = ref(0)
+  const serverMemory = ref<HealthMemory | null>(null)
 
   const isDark = ref(false)
   const recipeEditorTaskId = ref<string | null>(null)
@@ -77,12 +84,17 @@ export const useAppStore = defineStore('app', () => {
   async function checkHealth() {
     try {
       const h = await fetchHealth()
-      serverOnline.value = h.status === 'ok'
+      serverOnline.value = true
       serverVersion.value = h.version ?? ''
       activeTasks.value = h.active_tasks ?? 0
       totalTasks.value = h.total_tasks ?? 0
+      serverMemory.value = h.memory ?? null
     } catch {
       serverOnline.value = false
+      serverVersion.value = ''
+      activeTasks.value = 0
+      totalTasks.value = 0
+      serverMemory.value = null
     }
   }
 
@@ -129,6 +141,7 @@ export const useAppStore = defineStore('app', () => {
     serverVersion,
     activeTasks,
     totalTasks,
+    serverMemory,
     isDark,
     recipeEditorTaskId,
     setSelectedFile,

@@ -94,13 +94,7 @@ std::size_t MatchRasterResult::EstimateBytes() const {
         bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
     }
 
-    for (const auto& db : dbs) {
-        for (const auto& entry : db.entries) { bytes += sizeof(Entry) + entry.recipe.capacity(); }
-        for (const auto& ch : db.palette) {
-            bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
-        }
-    }
-
+    bytes += dbs.size() * sizeof(std::shared_ptr<const ColorDB>);
     bytes += preset_dir.capacity();
     return bytes;
 }
@@ -126,28 +120,24 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     // === 1. Load resources ===
     NotifyProgress(progress, ConvertStage::LoadingResources, 0.0f);
 
-    std::vector<ColorDB> owned_dbs;
-    std::vector<const ColorDB*> db_ptrs;
-
+    std::vector<std::shared_ptr<const ColorDB>> db_shared;
     if (!request.preloaded_dbs.empty()) {
-        db_ptrs = request.preloaded_dbs;
+        db_shared = request.preloaded_dbs;
     } else {
         const std::vector<std::string> resolved = ResolveDBPaths(request.db_paths);
-        owned_dbs                               = LoadColorDBsFromPaths(resolved);
-        db_ptrs.reserve(owned_dbs.size());
-        for (const ColorDB& db : owned_dbs) { db_ptrs.push_back(&db); }
+        auto loaded                             = LoadColorDBsFromPaths(resolved);
+        db_shared.reserve(loaded.size());
+        for (auto& db : loaded) {
+            db_shared.push_back(std::make_shared<const ColorDB>(std::move(db)));
+        }
     }
 
-    if (db_ptrs.empty()) { throw InputError("No ColorDB available"); }
-    spdlog::info("Loaded {} ColorDB(s)", db_ptrs.size());
+    if (db_shared.empty()) { throw InputError("No ColorDB available"); }
+    spdlog::info("Loaded {} ColorDB(s)", db_shared.size());
 
-    std::vector<ColorDB> db_span_storage;
-    if (!request.preloaded_dbs.empty()) {
-        db_span_storage.reserve(db_ptrs.size());
-        for (const ColorDB* p : db_ptrs) { db_span_storage.push_back(*p); }
-    }
-    const std::vector<ColorDB>& dbs_ref =
-        request.preloaded_dbs.empty() ? owned_dbs : db_span_storage;
+    std::vector<const ColorDB*> db_ptrs;
+    db_ptrs.reserve(db_shared.size());
+    for (const auto& sp : db_shared) { db_ptrs.push_back(sp.get()); }
 
     std::optional<FilamentConfig> fil_config;
     if (!request.preset_dir.empty()) {
@@ -155,8 +145,8 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     }
 
     PrintProfile profile =
-        PrintProfile::BuildFromColorDBs(dbs_ref, request.color_layers, request.layer_height_mm,
-                                        fil_config ? &*fil_config : nullptr);
+        PrintProfile::BuildFromColorDBPtrs(db_ptrs, request.color_layers, request.layer_height_mm,
+                                           fil_config ? &*fil_config : nullptr);
     profile.nozzle_size      = request.nozzle_size;
     profile.face_orientation = request.face_orientation;
 
@@ -166,7 +156,7 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     }
 
     std::optional<ModelPackage> owned_model_pack;
-    const ModelPackage* model_pack_ptr = request.preloaded_model_pack;
+    const ModelPackage* model_pack_ptr = request.preloaded_model_pack.get();
     if (!model_pack_ptr && !request.model_pack_path.empty()) {
         owned_model_pack.emplace(ModelPackage::Load(request.model_pack_path));
         model_pack_ptr = &owned_model_pack.value();
@@ -264,8 +254,8 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     }
 
     MatchStats match_stats;
-    RecipeMap recipe_map = RecipeMap::MatchFromRaster(img, dbs_ref, profile, match_cfg,
-                                                      model_pack_ptr, model_gate, &match_stats);
+    RecipeMap recipe_map = RecipeMap::MatchFromRasterPtrs(img, db_ptrs, profile, match_cfg,
+                                                          model_pack_ptr, model_gate, &match_stats);
 
     NotifyProgress(progress, ConvertStage::Matching, 1.0f);
     spdlog::info("Stage: matching completed, clusters={}, db_only={}, model_fallback={}, "
@@ -301,11 +291,7 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     result.generate_preview     = request.generate_preview;
     result.generate_source_mask = request.generate_source_mask;
 
-    if (!request.preloaded_dbs.empty()) {
-        result.dbs = std::move(db_span_storage);
-    } else {
-        result.dbs = std::move(owned_dbs);
-    }
+    result.dbs = std::move(db_shared);
 
     spdlog::info("MatchRaster completed: {}x{}, pixel_mm={:.3f}", result.input_width,
                  result.input_height, result.resolved_pixel_mm);
@@ -415,6 +401,12 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
     ColorDB profile_db = mr.profile.ToColorDB("MergedPrintProfile");
     ModelIR model      = ModelIR::Build(mr.recipe_map, profile_db, build_cfg);
 
+    // recipe_map is no longer needed — release heavy buffers early.
+    { auto tmp = std::move(mr.recipe_map.recipes); }
+    { auto tmp = std::move(mr.recipe_map.mask); }
+    { auto tmp = std::move(mr.recipe_map.mapped_color); }
+    { auto tmp = std::move(mr.recipe_map.source_mask); }
+
     NotifyProgress(progress, ConvertStage::BuildingModel, 1.0f);
     spdlog::info("Stage: building_model completed, grids={}, layers={}", model.voxel_grids.size(),
                  model.base_layers + model.color_layers);
@@ -506,6 +498,8 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
             result.model_3mf = Export3mfToBuffer(model, mesh_cfg, mr.face_orientation);
         }
     }
+
+    for (auto& grid : model.voxel_grids) { decltype(grid.ooc){}.swap(grid.ooc); }
 
     result.resolved_pixel_mm  = mr.resolved_pixel_mm;
     result.physical_width_mm  = static_cast<float>(mr.input_width) * mr.resolved_pixel_mm;

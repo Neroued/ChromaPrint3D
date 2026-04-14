@@ -31,9 +31,18 @@ namespace chromaprint3d::backend {
 
 enum class TaskKind { Convert, Matting, Vectorize };
 enum class RuntimeTaskStatus : std::uint8_t { Pending, Running, Completed, Failed };
+enum class GenerationStatus : std::uint8_t { Idle, Running, Succeeded, Failed };
 
 const char* TaskKindToString(TaskKind kind);
 const char* TaskStatusToString(RuntimeTaskStatus status);
+const char* GenerationStatusToString(GenerationStatus status);
+
+struct GenerationState {
+    GenerationStatus status = GenerationStatus::Idle;
+    std::string error;
+    std::chrono::steady_clock::time_point started_at;
+    std::chrono::steady_clock::time_point completed_at;
+};
 
 struct ConvertTaskPayload {
     std::string input_name;
@@ -43,7 +52,7 @@ struct ConvertTaskPayload {
     bool has_3mf_on_disk = false;
 
     bool match_only = false;
-    std::string generate_error;
+    GenerationState generation;
     std::optional<ChromaPrint3D::MatchRasterResult> raster_match_state;
     std::optional<ChromaPrint3D::RasterRegionMap> raster_region_map;
     std::vector<uint8_t> region_map_binary;
@@ -104,6 +113,7 @@ struct TaskSnapshot {
 
     std::chrono::steady_clock::time_point created_at;
     std::chrono::steady_clock::time_point completed_at;
+    std::chrono::steady_clock::time_point last_accessed_at;
     TaskPayload payload;
 };
 
@@ -197,6 +207,13 @@ public:
 
     int TotalTaskCount() const { return total_submitted_.load(std::memory_order_relaxed); }
 
+    struct ArtifactBudgetInfo {
+        std::size_t used_bytes  = 0;
+        std::size_t limit_bytes = 0;
+    };
+
+    ArtifactBudgetInfo GetArtifactBudgetInfo() const;
+
 private:
     using WorkerFn = std::function<void(const std::string& task_id)>;
 
@@ -210,11 +227,12 @@ private:
     struct QueueEntry {
         std::string task_id;
         WorkerFn worker;
+        bool manage_task_state = true;
     };
 
     SubmitResult SubmitInternal(const std::string& owner, TaskKind kind, TaskPayload payload,
                                 WorkerFn worker);
-    void RunTask(const std::string& id, WorkerFn worker);
+    void RunTask(const std::string& id, WorkerFn worker, bool manage_task_state = true);
     void StartWorkers(std::int64_t worker_count);
     void WorkerLoop();
 
@@ -242,7 +260,10 @@ private:
     std::optional<nlohmann::json> GetRecipeEditorSummaryLocked(const TaskRecord& rec) const;
     void CleanupLoop();
     void CleanupExpiredLocked(const std::chrono::steady_clock::time_point& now);
-    void EnforceResultBudgetLocked();
+    void EnforceResultBudgetLocked(const std::string* protected_task_id = nullptr);
+    void RefreshArtifactBytesLocked(TaskRecord& rec);
+    bool IsGenerationRunningLocked(const TaskRecord& rec) const;
+    void TouchTaskLocked(TaskRecord& rec, const std::chrono::steady_clock::time_point& now);
     std::size_t ActiveTasksByOwnerLocked(const std::string& owner) const;
     static std::string NewTaskId();
 

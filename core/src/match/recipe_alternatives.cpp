@@ -276,6 +276,26 @@ RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB> dbs,
     return cache;
 }
 
+RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB* const> db_ptrs,
+                                           const PrintProfile& profile,
+                                           const MatchConfig& match_cfg,
+                                           const ModelPackage* model_package,
+                                           const ModelGateConfig& model_gate) {
+    auto impl            = std::make_shared<Impl>();
+    impl->prepared_dbs   = detail::PrepareDBs(db_ptrs, profile);
+    impl->prepared_model = detail::PrepareModel(model_package, model_gate, profile);
+    impl->profile        = profile;
+    impl->use_lab        = (match_cfg.color_space == ColorSpace::Lab);
+
+    spdlog::info("RecipeSearchCache::Build(ptrs): color_layers={}, dbs={}, model={}",
+                 profile.color_layers, impl->prepared_dbs.size(),
+                 impl->prepared_model.has_value() ? "ready" : "unavailable");
+
+    RecipeSearchCache cache;
+    cache.impl_ = std::move(impl);
+    return cache;
+}
+
 bool RecipeSearchCache::IsValid() const {
     return impl_ && (!impl_->prepared_dbs.empty() || impl_->prepared_model.has_value());
 }

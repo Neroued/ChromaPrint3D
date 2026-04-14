@@ -170,7 +170,49 @@ npm run dev
 1. `session` cookie
 2. `X-ChromaPrint3D-Session` header
 
-### 5.3 关键接口分组
+### 5.3 Health 端点响应格式
+
+`GET /api/v1/health` 响应包含 `memory` 对象，提供服务端内存状态：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "status": "ok",
+    "version": "1.3.1",
+    "active_tasks": 2,
+    "total_tasks": 15,
+    "memory": {
+      "rss_bytes": 1073741824,
+      "heap_allocated_bytes": 536870912,
+      "heap_resident_bytes": 805306368,
+      "artifact_budget_bytes": 134217728,
+      "artifact_budget_limit_bytes": 536870912,
+      "colordb_pool_bytes": 52428800,
+      "memory_limit_bytes": 4294967296,
+      "allocator": "jemalloc"
+    }
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `rss_bytes` | 进程 RSS |
+| `heap_allocated_bytes` | 应用层已分配的堆内存 |
+| `heap_resident_bytes` | 分配器保留的物理内存 |
+| `artifact_budget_bytes` | 任务独占数据（recipe_map/region_map 等）占用 |
+| `artifact_budget_limit_bytes` | `--max-result-mb` 对应的预算上限 |
+| `colordb_pool_bytes` | ColorDB 缓存 + 会话 DB 的总估算体量 |
+| `memory_limit_bytes` | 容器内存限制（cgroup）或物理内存总量 |
+| `allocator` | 编译时链接的分配器（`jemalloc` / `glibc` / `system`） |
+
+补充说明：
+
+- `colordb_pool_bytes` 是启发式容量指标，不是 RSS 的拆分项。它由全局 `ColorDBCache` 与会话 `SessionStore` 的估算字节数增量维护，`GET /api/v1/health` 读取该值不再做全量遍历，保持 O(1) 热路径。
+- `status` 当前固定返回 `ok`；前端应以请求是否成功判断“在线/离线”，不要把 `status === "ok"` 当成唯一在线判据，以便后续扩展 `degraded` 等服务状态。
+
+### 5.4 关键接口分组
 
 | 分组 | 代表接口 |
 |---|---|
@@ -343,6 +385,41 @@ npm run dev
 - 单会话并发上限：`--max-owner-tasks`
 - 结果缓存 TTL：`--task-ttl`
 - 结果总内存预算：`--max-result-mb`
+
+对 `match_only` 转换任务还有一层独立的生成子状态：
+
+- 配色匹配阶段完成后，顶层 `task.status` 进入 `completed`，此时配方编辑器所需的 summary / region-map / preview 已可用。
+- `POST /api/v1/tasks/{id}/recipe-editor/generate` 只推进 `generation.status`：`idle -> running -> succeeded/failed`。
+- 当 `generation.status=failed` 时，顶层 `task.status` 仍保持 `completed`，以保留 recipe editor 的可编辑与可重试语义；此时 `result.has_3mf=false`。
+- 只有 `generation.status=succeeded` 后，`result.has_3mf` 才会变为 `true`，3MF 下载端点才可用。
+
+`GET /api/v1/tasks/{id}` 在 `match_only` 转换任务上会返回：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "task-id",
+    "status": "completed",
+    "match_only": true,
+    "generation": {
+      "status": "failed",
+      "error": "Cannot open 3MF spill file: ..."
+    },
+    "result": {
+      "has_3mf": false,
+      "has_preview": true,
+      "has_source_mask": true
+    }
+  }
+}
+```
+
+保活语义：
+
+- 后端内部将任务终态时间与访问时间拆分为 `completed_at` 和 `last_accessed_at`。
+- `completed_at` 只在任务主生命周期真正结束时写入，用于 `--task-ttl`。
+- `GET /api/v1/tasks/{id}`、artifact 下载、recipe editor 查询只会刷新 `last_accessed_at`，不会延长 `--task-ttl`。
 
 ## 6. 常见开发问题
 

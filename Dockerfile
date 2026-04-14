@@ -17,6 +17,7 @@ RUN apt-get update \
         libopencv-imgproc4.5d \
         libopencv-imgcodecs4.5d \
         libpotrace0 \
+        libjemalloc2 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 chromaprint3d \
     && useradd --system --uid 10001 --gid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin chromaprint3d

@@ -2,6 +2,7 @@
 
 #include "application/json_serialization.h"
 
+#include "chromaprint3d/memory_utils.h"
 #include "chromaprint3d/pipeline.h"
 #include "chromaprint3d/version.h"
 
@@ -20,10 +21,11 @@ ServerFacade::ServerFacade(ServerConfig cfg)
       sessions_(cfg_.session_ttl_seconds, cfg_.max_session_colordbs),
       tasks_(cfg_.max_tasks, cfg_.max_task_queue, cfg_.task_ttl_seconds, cfg_.max_tasks_per_owner,
              cfg_.max_task_result_mb * 1024 * 1024, cfg_.data_dir),
-      boards_(cfg_.board_cache_ttl, cfg_.data_dir), color_db_svc_(data_, sessions_),
-      task_svc_(tasks_), convert_svc_(cfg_, data_, sessions_, tasks_),
-      matting_svc_(cfg_, data_, tasks_), recipe_svc_(data_, tasks_),
-      calib_svc_(cfg_, data_, sessions_, boards_) {}
+      boards_(cfg_.board_cache_ttl, cfg_.data_dir, cfg_.board_geometry_cache_ttl,
+              cfg_.board_geometry_cache_max),
+      color_db_svc_(data_, sessions_), task_svc_(tasks_),
+      convert_svc_(cfg_, data_, sessions_, tasks_), matting_svc_(cfg_, data_, tasks_),
+      recipe_svc_(data_, tasks_), calib_svc_(cfg_, data_, sessions_, boards_) {}
 
 std::string ServerFacade::EnsureSession(const std::optional<std::string>& existing_token,
                                         bool* created) {
@@ -39,11 +41,27 @@ std::optional<SessionSnapshot> ServerFacade::SessionSnapshotByToken(const std::s
 // ---------------------------------------------------------------------------
 
 ServiceResult ServerFacade::Health() const {
+    const auto heap   = ChromaPrint3D::GetHeapStats();
+    const auto budget = tasks_.GetArtifactBudgetInfo();
+
+    json memory = {
+        {"rss_bytes", ChromaPrint3D::GetProcessRssBytes()},
+        {"heap_allocated_bytes", heap.valid ? heap.allocated : 0},
+        {"heap_resident_bytes", heap.valid ? heap.resident : 0},
+        {"artifact_budget_bytes", budget.used_bytes},
+        {"artifact_budget_limit_bytes", budget.limit_bytes},
+        {"colordb_pool_bytes",
+         data_.ColorDbCache().EstimateTotalBytes() + sessions_.EstimateAllSessionDbBytes()},
+        {"memory_limit_bytes", ChromaPrint3D::GetMemoryLimitBytes()},
+        {"allocator", ChromaPrint3D::AllocatorName()},
+    };
+
     return ServiceResult::Success(200, {
                                            {"status", "ok"},
                                            {"version", CHROMAPRINT3D_VERSION_STRING},
                                            {"active_tasks", tasks_.ActiveTaskCount()},
                                            {"total_tasks", tasks_.TotalTaskCount()},
+                                           {"memory", std::move(memory)},
                                        });
 }
 
@@ -117,7 +135,7 @@ json ServerFacade::GetModelPackInfo() const {
     json packs = json::array();
     for (const auto& pack : data_.ModelPackRegistry().All()) {
         json modes = json::array();
-        for (const auto& lp : pack.layer_packages) {
+        for (const auto& lp : pack->layer_packages) {
             modes.push_back({
                 {"color_layers", lp.color_layers},
                 {"layer_height_mm", lp.layer_height_mm},
@@ -125,12 +143,14 @@ json ServerFacade::GetModelPackInfo() const {
             });
         }
         packs.push_back({
-            {"name", pack.name},
+            {"name", pack->name},
             {"schema_version", ModelPackage::kSchemaVersion},
-            {"scope", {{"vendor", pack.scope.vendor}, {"material_type", pack.scope.material_type}}},
-            {"channel_keys", pack.channel_keys},
+            {"scope",
+             {{"vendor", pack->scope.vendor}, {"material_type", pack->scope.material_type}}},
+            {"channel_keys", pack->channel_keys},
             {"modes", std::move(modes)},
-            {"defaults", {{"threshold", pack.default_threshold}, {"margin", pack.default_margin}}},
+            {"defaults",
+             {{"threshold", pack->default_threshold}, {"margin", pack->default_margin}}},
         });
     }
     return {{"packs", std::move(packs)}};

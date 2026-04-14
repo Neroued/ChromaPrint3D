@@ -20,7 +20,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libopencv-dev libpotrace-dev uuid-dev zlib1g-dev ccache ninja-build patchelf
+            libopencv-dev libpotrace-dev uuid-dev zlib1g-dev ccache ninja-build patchelf \
+            libjemalloc-dev
           mkdir -p "$CCACHE_DIR"
           mkdir -p build
 

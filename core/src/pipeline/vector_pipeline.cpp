@@ -14,6 +14,7 @@
 
 #include <filesystem>
 #include <cmath>
+#include <memory>
 #include <optional>
 
 namespace ChromaPrint3D {
@@ -66,13 +67,7 @@ std::size_t MatchVectorResult::EstimateBytes() const {
         bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
     }
 
-    for (const auto& db : dbs) {
-        for (const auto& entry : db.entries) { bytes += sizeof(Entry) + entry.recipe.capacity(); }
-        for (const auto& ch : db.palette) {
-            bytes += ch.color.capacity() + ch.material.capacity() + ch.hex_color.capacity();
-        }
-    }
-
+    bytes += dbs.size() * sizeof(std::shared_ptr<const ColorDB>);
     bytes += preset_dir.capacity();
     return bytes;
 }
@@ -93,28 +88,24 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     // === 1. Load resources ===
     NotifyProgress(progress, ConvertStage::LoadingResources, 0.0f);
 
-    std::vector<ColorDB> owned_dbs;
-    std::vector<const ColorDB*> db_ptrs;
-
+    std::vector<std::shared_ptr<const ColorDB>> db_shared;
     if (!request.preloaded_dbs.empty()) {
-        db_ptrs = request.preloaded_dbs;
+        db_shared = request.preloaded_dbs;
     } else {
         const std::vector<std::string> resolved = ResolveDBPaths(request.db_paths);
-        owned_dbs                               = LoadColorDBsFromPaths(resolved);
-        db_ptrs.reserve(owned_dbs.size());
-        for (const ColorDB& db : owned_dbs) { db_ptrs.push_back(&db); }
+        auto loaded                             = LoadColorDBsFromPaths(resolved);
+        db_shared.reserve(loaded.size());
+        for (auto& db : loaded) {
+            db_shared.push_back(std::make_shared<const ColorDB>(std::move(db)));
+        }
     }
 
-    if (db_ptrs.empty()) { throw InputError("No ColorDB available"); }
-    spdlog::info("Loaded {} ColorDB(s)", db_ptrs.size());
+    if (db_shared.empty()) { throw InputError("No ColorDB available"); }
+    spdlog::info("Loaded {} ColorDB(s)", db_shared.size());
 
-    std::vector<ColorDB> db_span_storage;
-    if (!request.preloaded_dbs.empty()) {
-        db_span_storage.reserve(db_ptrs.size());
-        for (const ColorDB* p : db_ptrs) { db_span_storage.push_back(*p); }
-    }
-    std::vector<ColorDB> all_dbs =
-        request.preloaded_dbs.empty() ? std::move(owned_dbs) : std::move(db_span_storage);
+    std::vector<const ColorDB*> db_ptrs;
+    db_ptrs.reserve(db_shared.size());
+    for (const auto& sp : db_shared) { db_ptrs.push_back(sp.get()); }
 
     std::optional<FilamentConfig> fil_config;
     if (!request.preset_dir.empty()) {
@@ -122,8 +113,8 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     }
 
     PrintProfile profile =
-        PrintProfile::BuildFromColorDBs(all_dbs, request.color_layers, request.layer_height_mm,
-                                        fil_config ? &*fil_config : nullptr);
+        PrintProfile::BuildFromColorDBPtrs(db_ptrs, request.color_layers, request.layer_height_mm,
+                                           fil_config ? &*fil_config : nullptr);
     profile.nozzle_size      = request.nozzle_size;
     profile.face_orientation = request.face_orientation;
 
@@ -132,7 +123,7 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
         spdlog::info("Filtered profile palette to {} channel(s)", profile.NumChannels());
     }
 
-    const ModelPackage* model_pack_ptr = request.preloaded_model_pack;
+    const ModelPackage* model_pack_ptr = request.preloaded_model_pack.get();
     std::optional<ModelPackage> owned_model_pack;
     if (!model_pack_ptr && !request.model_pack_path.empty()) {
         owned_model_pack.emplace(ModelPackage::Load(request.model_pack_path));
@@ -202,8 +193,8 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     }
 
     MatchStats match_stats;
-    VectorRecipeMap recipe_map = VectorRecipeMap::Match(vimg, all_dbs, profile, match_cfg,
-                                                        model_pack_ptr, model_gate, &match_stats);
+    VectorRecipeMap recipe_map = VectorRecipeMap::MatchPtrs(
+        vimg, db_ptrs, profile, match_cfg, model_pack_ptr, model_gate, &match_stats);
 
     NotifyProgress(progress, ConvertStage::Matching, 1.0f);
     spdlog::info("MatchVector completed: {} entries, avg_de={:.2f}", recipe_map.entries.size(),
@@ -223,7 +214,7 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     mr.nozzle_size          = request.nozzle_size;
     mr.face_orientation     = request.face_orientation;
     mr.preset_dir           = request.preset_dir;
-    mr.dbs                  = std::move(all_dbs);
+    mr.dbs                  = std::move(db_shared);
     mr.match_config         = match_cfg;
     mr.model_gate           = model_gate;
     mr.generate_preview     = request.generate_preview;
@@ -368,6 +359,8 @@ ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progre
                                                    resolved_base_layers, mr.face_orientation);
         }
     }
+
+    { auto tmp = std::move(meshes); }
 
     NotifyProgress(progress, ConvertStage::Exporting, 1.0f);
     spdlog::info("GenerateVectorModel completed: 3mf={} bytes, preview={} bytes, "

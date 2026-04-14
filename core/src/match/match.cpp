@@ -145,48 +145,12 @@ void ValidateImageForMatch(const RasterProcResult& img, bool use_lab) {
     }
 }
 
-} // namespace
-
-RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<const ColorDB> dbs,
-                                     const PrintProfile& profile, const MatchConfig& cfg,
-                                     const ModelPackage* model_package,
-                                     const ModelGateConfig& model_gate, MatchStats* out_stats) {
-    profile.Validate();
-    if (dbs.empty() && !model_gate.model_only) {
-        throw InputError("MatchFromRaster requires at least one ColorDB");
-    }
-
-    spdlog::info("MatchFromRaster: image={}x{}, dbs={}, color_space={}, k={}, clusters={}",
-                 img.width, img.height, dbs.size(),
-                 cfg.color_space == ColorSpace::Lab ? "Lab" : "RGB", cfg.k_candidates,
-                 cfg.cluster_count);
-
-    const bool use_lab = (cfg.color_space == ColorSpace::Lab);
-    ValidateImageForMatch(img, use_lab);
-    const bool model_only = model_gate.model_only;
-
-    std::vector<detail::PreparedDB> prepared_dbs;
-    if (!model_only) {
-        prepared_dbs = detail::PrepareDBs(dbs, profile);
-        spdlog::debug("PrepareDBs: {} DB(s) prepared", prepared_dbs.size());
-    }
-
-    const std::optional<detail::PreparedModel> prepared_model =
-        detail::PrepareModel(model_package, model_gate, profile);
-    if (prepared_model.has_value()) {
-        spdlog::debug("PrepareModel: model ready, model_only={}", model_only);
-    } else {
-        spdlog::debug("PrepareModel: no model available");
-    }
-    if (model_only && !prepared_model.has_value()) {
-        throw ConfigError("Model-only matching requires a compatible model package");
-    }
-    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
-        throw ConfigError("No compatible ColorDB entries for color_layers=" +
-                          std::to_string(profile.color_layers) +
-                          "; try using the default layer count (5 or 10)");
-    }
-
+RecipeMap MatchFromRasterCore(const RasterProcResult& img,
+                              const std::vector<detail::PreparedDB>& prepared_dbs,
+                              const std::optional<detail::PreparedModel>& prepared_model,
+                              const PrintProfile& profile, const MatchConfig& cfg,
+                              const ModelGateConfig& model_gate, bool model_only, bool use_lab,
+                              MatchStats* out_stats) {
     int stat_total_queries   = 0;
     int stat_db_only         = 0;
     int stat_model_used      = 0;
@@ -433,7 +397,6 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
                 const int c           = static_cast<int>(idx % static_cast<std::size_t>(img.width));
                 const int label       = slic.labels.at<int>(r, c);
                 if (label < 0 || label >= slic_clusters) { throw InputError("Invalid SLIC label"); }
-
                 const detail::CandidateResult& best =
                     cluster_candidates[static_cast<std::size_t>(label)];
                 result.mapped_color[idx] = best.mapped_lab;
@@ -492,9 +455,9 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
     const bool use_cluster =
         (resolved_k > 1 && static_cast<std::size_t>(resolved_k) < valid_indices.size());
 
-    spdlog::debug("MatchFromRaster: valid_pixels={}, cluster_method=kmeans, clustering={} (k={}{})",
-                  valid_indices.size(), use_cluster ? "yes" : "no", resolved_k,
-                  auto_k ? ", auto" : "");
+    spdlog::debug("MatchFromRaster: valid_pixels={}, cluster_method=kmeans, clustering={} "
+                  "(resolved_k={}, auto={})",
+                  valid_indices.size(), use_cluster ? "yes" : "no", resolved_k, auto_k);
 
     if (!use_cluster) {
         run_per_pixel_matching();
@@ -502,8 +465,7 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
         return result;
     }
 
-    cv::Mat labels;
-    cv::Mat centers;
+    cv::Mat labels, centers;
     const cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER,
                                     kKMeansMaxIter, kKMeansEps);
 
@@ -511,24 +473,21 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
         cv::Mat sub_indices(num_valid, 1, CV_32SC1);
         for (int i = 0; i < num_valid; ++i) sub_indices.at<int>(i) = i;
         cv::randShuffle(sub_indices);
-
         cv::Mat sub_samples(kMaxClusterSubsamples, 3, CV_32FC1);
         for (int i = 0; i < kMaxClusterSubsamples; ++i) {
             samples.row(sub_indices.at<int>(i)).copyTo(sub_samples.row(i));
         }
-
         cv::Mat sub_labels;
         cv::kmeans(sub_samples, resolved_k, sub_labels, criteria, 3, cv::KMEANS_PP_CENTERS,
                    centers);
-
         labels = cv::Mat(num_valid, 1, CV_32SC1);
 #ifdef _OPENMP
 #    pragma omp parallel for schedule(static)
 #endif
         for (int i = 0; i < num_valid; ++i) {
-            const float* sample = samples.ptr<float>(i);
             float best_dist     = std::numeric_limits<float>::max();
             int best_label      = 0;
+            const float* sample = samples.ptr<float>(i);
             for (int k = 0; k < resolved_k; ++k) {
                 const float* center = centers.ptr<float>(k);
                 float dist          = 0.0f;
@@ -612,6 +571,91 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
 
     write_stats();
     return result;
+}
+
+} // namespace
+
+RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<const ColorDB> dbs,
+                                     const PrintProfile& profile, const MatchConfig& cfg,
+                                     const ModelPackage* model_package,
+                                     const ModelGateConfig& model_gate, MatchStats* out_stats) {
+    profile.Validate();
+    if (dbs.empty() && !model_gate.model_only) {
+        throw InputError("MatchFromRaster requires at least one ColorDB");
+    }
+
+    spdlog::info("MatchFromRaster: image={}x{}, dbs={}, color_space={}, k={}, clusters={}",
+                 img.width, img.height, dbs.size(),
+                 cfg.color_space == ColorSpace::Lab ? "Lab" : "RGB", cfg.k_candidates,
+                 cfg.cluster_count);
+
+    const bool use_lab = (cfg.color_space == ColorSpace::Lab);
+    ValidateImageForMatch(img, use_lab);
+    const bool model_only = model_gate.model_only;
+
+    std::vector<detail::PreparedDB> prepared_dbs;
+    if (!model_only) {
+        prepared_dbs = detail::PrepareDBs(dbs, profile);
+        spdlog::debug("PrepareDBs: {} DB(s) prepared", prepared_dbs.size());
+    }
+
+    const std::optional<detail::PreparedModel> prepared_model =
+        detail::PrepareModel(model_package, model_gate, profile);
+    if (prepared_model.has_value()) {
+        spdlog::debug("PrepareModel: model ready, model_only={}", model_only);
+    } else {
+        spdlog::debug("PrepareModel: no model available");
+    }
+    if (model_only && !prepared_model.has_value()) {
+        throw ConfigError("Model-only matching requires a compatible model package");
+    }
+    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
+        throw ConfigError("No compatible ColorDB entries for color_layers=" +
+                          std::to_string(profile.color_layers) +
+                          "; try using the default layer count (5 or 10)");
+    }
+
+    return MatchFromRasterCore(img, prepared_dbs, prepared_model, profile, cfg, model_gate,
+                               model_only, use_lab, out_stats);
+}
+
+RecipeMap RecipeMap::MatchFromRasterPtrs(const RasterProcResult& img,
+                                         std::span<const ColorDB* const> db_ptrs,
+                                         const PrintProfile& profile, const MatchConfig& cfg,
+                                         const ModelPackage* model_package,
+                                         const ModelGateConfig& model_gate, MatchStats* out_stats) {
+    profile.Validate();
+    if (db_ptrs.empty() && !model_gate.model_only) {
+        throw InputError("MatchFromRasterPtrs requires at least one ColorDB");
+    }
+
+    spdlog::info("MatchFromRasterPtrs: image={}x{}, dbs={}, color_space={}, k={}, clusters={}",
+                 img.width, img.height, db_ptrs.size(),
+                 cfg.color_space == ColorSpace::Lab ? "Lab" : "RGB", cfg.k_candidates,
+                 cfg.cluster_count);
+
+    const bool use_lab = (cfg.color_space == ColorSpace::Lab);
+    ValidateImageForMatch(img, use_lab);
+    const bool model_only = model_gate.model_only;
+
+    std::vector<detail::PreparedDB> prepared_dbs;
+    if (!model_only) {
+        prepared_dbs = detail::PrepareDBs(db_ptrs, profile);
+        spdlog::debug("PrepareDBs: {} DB(s) prepared (ptr overload)", prepared_dbs.size());
+    }
+
+    const std::optional<detail::PreparedModel> prepared_model =
+        detail::PrepareModel(model_package, model_gate, profile);
+    if (model_only && !prepared_model.has_value()) {
+        throw ConfigError("Model-only matching requires a compatible model package");
+    }
+    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
+        throw ConfigError("No compatible ColorDB entries for color_layers=" +
+                          std::to_string(profile.color_layers));
+    }
+
+    return MatchFromRasterCore(img, prepared_dbs, prepared_model, profile, cfg, model_gate,
+                               model_only, use_lab, out_stats);
 }
 
 } // namespace ChromaPrint3D

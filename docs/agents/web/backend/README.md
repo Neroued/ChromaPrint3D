@@ -61,6 +61,10 @@
 
 `GET /api/v1/model-pack/info` 返回所有已加载模型包的元数据（名称、schema 版本、scope、可用 mode 列表）。前端用此接口判断当前 ColorDB 组合是否有匹配的模型包。实现在 `ServerFacade::GetModelPackInfo()` → `ApiV1Controller::ModelPackInfo`。
 
+## Health 指标
+
+`GET /api/v1/health` 中的 `memory.colordb_pool_bytes` 表示“全局 ColorDB 缓存 + 会话 ColorDB”的总估算体量，由 `ColorDBCache` 与 `SessionStore` 增量维护，读取路径保持 O(1)。它是容量近似值，不是 RSS 的精确拆分。
+
 ## 配方编辑器
 
 `POST /api/v1/convert/raster/match-only` 提交 match-only 任务，完成颜色匹配但不生成 3MF。任务完成后通过以下端点进行配方编辑：
@@ -74,6 +78,12 @@
 `region-map` artifact 通过 `GET /api/v1/tasks/{id}/artifacts/region-map` 下载。
 
 约束：仅支持 `dither=None` 的 Raster 流水线，唯一配方数 ≤128。
+
+任务查询语义补充：
+
+- `GET /api/v1/tasks/{id}` 对 `match_only` 转换任务会返回 `generation` 子对象。
+- 顶层 `task.status` 只表示主生命周期；若 3MF 生成失败，会呈现为 `status=completed` 且 `generation.status=failed`。
+- 只有 `generation.status=succeeded` 时，`result.has_3mf` 才会为 `true`。
 
 核心实现：`task_runtime.h/.cpp`（`SubmitConvertRasterMatchOnly`、`GetRecipeEditorSummary`、`QueryRecipeAlternatives`、`ReplaceRecipe`、`SubmitGenerateModel`、`GetTaskPrintProfile`、`GetTaskColorDbNames`）、`recipe_editor_service.cpp`（`RecipeEditorSummary`、`RecipeEditorAlternatives`、`RecipeEditorReplace`、`RecipeEditorGenerate`、`RecipeEditorPredict`）。
 

@@ -20,7 +20,8 @@ set(TEST_SOURCES
     test_vector_mesh.cpp
     test_3mf_writer.cpp
     test_matting.cpp
-    test_slicer_preset.cpp)
+    test_slicer_preset.cpp
+    test_memory_utils.cpp)
 
 add_executable(chromaprint3d_tests ${TEST_SOURCES})
 target_link_libraries(chromaprint3d_tests PRIVATE ChromaPrint3D::core GTest::gtest_main)

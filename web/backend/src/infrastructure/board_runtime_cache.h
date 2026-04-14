@@ -45,9 +45,17 @@ struct BoardGeometryKeyHash {
     std::size_t operator()(const BoardGeometryKey& k) const;
 };
 
+struct GeometryRecord {
+    ChromaPrint3D::CalibrationBoardMeshes data;
+    std::chrono::steady_clock::time_point created_at;
+    std::chrono::steady_clock::time_point last_accessed_at;
+};
+
 class BoardRuntimeCache {
 public:
-    BoardRuntimeCache(std::int64_t ttl_seconds, const std::string& data_dir);
+    BoardRuntimeCache(std::int64_t ttl_seconds, const std::string& data_dir,
+                      std::int64_t geometry_ttl_seconds = 600,
+                      std::int64_t geometry_max_entries = 16);
 
     std::string StoreBoard(ChromaPrint3D::CalibrationBoardResult&& result);
     std::optional<BoardSnapshot> FindBoard(const std::string& id);
@@ -59,15 +67,16 @@ public:
 
 private:
     void CleanupExpiredLocked(const std::chrono::steady_clock::time_point& now);
+    void CleanupGeometryLocked(const std::chrono::steady_clock::time_point& now);
     static std::string NewBoardId();
 
     std::int64_t ttl_seconds_;
+    std::int64_t geometry_ttl_seconds_;
+    std::size_t geometry_max_entries_;
     std::filesystem::path temp_dir_;
     std::mutex mtx_;
     std::unordered_map<std::string, BoardRecord> boards_;
-    std::unordered_map<BoardGeometryKey, ChromaPrint3D::CalibrationBoardMeshes,
-                       BoardGeometryKeyHash>
-        geometry_;
+    std::unordered_map<BoardGeometryKey, GeometryRecord, BoardGeometryKeyHash> geometry_;
 };
 
 } // namespace chromaprint3d::backend

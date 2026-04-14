@@ -133,7 +133,10 @@ json TaskToJson(const TaskSnapshot& task) {
         j["stage"]      = ConvertStageToString(cp->stage);
         j["progress"]   = cp->progress;
         j["match_only"] = cp->match_only;
-        if (!cp->generate_error.empty()) { j["generate_error"] = cp->generate_error; }
+        j["generation"] = {
+            {"status", GenerationStatusToString(cp->generation.status)},
+            {"error", cp->generation.error.empty() ? json(nullptr) : json(cp->generation.error)},
+        };
         if (!cp->result.warnings.empty()) { j["warnings"] = cp->result.warnings; }
         if (task.status == RuntimeTaskStatus::Completed) {
             j["result"] = {

@@ -24,6 +24,8 @@ bool ConvertRecipeToProfile(const Entry& entry, const PreparedDB& prepared_db,
                             const PrintProfile& profile, std::vector<uint8_t>& out_recipe);
 
 std::vector<PreparedDB> PrepareDBs(std::span<const ColorDB> dbs, const PrintProfile& profile);
+std::vector<PreparedDB> PrepareDBs(std::span<const ColorDB* const> dbs,
+                                   const PrintProfile& profile);
 
 } // namespace detail
 } // namespace ChromaPrint3D

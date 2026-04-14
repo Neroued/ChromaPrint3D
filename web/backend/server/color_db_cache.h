@@ -1,10 +1,13 @@
 #pragma once
 
+#include "infrastructure/color_db_bytes.h"
+
 #include "chromaprint3d/color_db.h"
 
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -12,7 +15,7 @@
 using namespace ChromaPrint3D;
 
 struct ColorDBEntry {
-    ColorDB db;
+    std::shared_ptr<const ColorDB> db;
     std::string material_type; // "PLA", "PETG", ... (from directory structure)
     std::string vendor;        // "BambuLab", "Aliz", ... (from directory structure)
 };
@@ -20,6 +23,7 @@ struct ColorDBEntry {
 struct ColorDBCache {
     std::vector<ColorDBEntry> databases;
     std::unordered_map<std::string, size_t> name_to_index;
+    std::size_t estimated_total_bytes = 0;
 
     void LoadFromDirectory(const std::string& dir) {
         namespace fs = std::filesystem;
@@ -29,6 +33,9 @@ struct ColorDBCache {
         }
 
         const fs::path root(dir);
+        databases.clear();
+        name_to_index.clear();
+        estimated_total_bytes = 0;
 
         for (const auto& entry : fs::recursive_directory_iterator(root)) {
             if (!entry.is_regular_file()) { continue; }
@@ -37,16 +44,18 @@ struct ColorDBCache {
             auto [material, vendor] = InferMaterialVendor(root, entry.path());
 
             try {
-                ColorDB db       = ColorDB::LoadFromJson(entry.path().string());
-                std::string name = db.name;
+                auto db =
+                    std::make_shared<const ColorDB>(ColorDB::LoadFromJson(entry.path().string()));
+                std::string name = db->name;
                 size_t idx       = databases.size();
 
-                databases.push_back({std::move(db), std::move(material), std::move(vendor)});
+                databases.push_back({db, std::move(material), std::move(vendor)});
                 name_to_index[name] = idx;
+                estimated_total_bytes += chromaprint3d::backend::detail::EstimateColorDbBytes(*db);
 
                 const auto& e = databases.back();
                 spdlog::info("  Loaded ColorDB: {} ({} entries, {} ch) [{}::{}]", name,
-                             e.db.entries.size(), e.db.NumChannels(), e.material_type, e.vendor);
+                             e.db->entries.size(), e.db->NumChannels(), e.material_type, e.vendor);
             } catch (const std::exception& e) {
                 spdlog::warn("  Failed to load {}: {}", entry.path().string(), e.what());
             }
@@ -60,22 +69,21 @@ struct ColorDBCache {
         return &databases[it->second];
     }
 
-    const ColorDB* FindByName(const std::string& name) const {
+    std::shared_ptr<const ColorDB> FindByName(const std::string& name) const {
         const auto* entry = FindEntryByName(name);
-        return entry ? &entry->db : nullptr;
+        return entry ? entry->db : nullptr;
     }
 
-    std::vector<const ColorDB*> GetAll() const {
-        std::vector<const ColorDB*> result;
+    std::vector<std::shared_ptr<const ColorDB>> GetAll() const {
+        std::vector<std::shared_ptr<const ColorDB>> result;
         result.reserve(databases.size());
-        for (const auto& e : databases) { result.push_back(&e.db); }
+        for (const auto& e : databases) { result.push_back(e.db); }
         return result;
     }
 
+    std::size_t EstimateTotalBytes() const { return estimated_total_bytes; }
+
 private:
-    /// Derive material_type and vendor from directory structure.
-    /// Expected layout: root / Material / Vendor / file.json
-    /// Falls back to "Unknown" when the hierarchy is flat.
     static std::pair<std::string, std::string>
     InferMaterialVendor(const std::filesystem::path& root, const std::filesystem::path& file) {
         auto rel = std::filesystem::relative(file.parent_path(), root);

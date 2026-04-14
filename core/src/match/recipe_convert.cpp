@@ -182,5 +182,85 @@ std::vector<PreparedDB> PrepareDBs(std::span<const ColorDB> dbs, const PrintProf
     return prepared;
 }
 
+std::vector<PreparedDB> PrepareDBs(std::span<const ColorDB* const> db_ptrs,
+                                   const PrintProfile& profile) {
+    std::unordered_map<std::string, int> key_to_target_channel;
+    key_to_target_channel.reserve(profile.palette.size());
+    for (std::size_t i = 0; i < profile.palette.size(); ++i) {
+        const std::string key = BuildChannelKey(profile.palette[i]);
+        auto [it, inserted]   = key_to_target_channel.emplace(key, static_cast<int>(i));
+        if (!inserted) {
+            throw ConfigError("PrintProfile palette contains duplicated normalized channel");
+        }
+    }
+
+    std::vector<PreparedDB> prepared;
+    prepared.reserve(db_ptrs.size());
+    for (const ColorDB* p : db_ptrs) {
+        const ColorDB& db = *p;
+        if (db.entries.empty() || db.NumChannels() == 0) { continue; }
+        if (db.palette.size() != db.NumChannels()) {
+            throw ConfigError("ColorDB palette size does not match NumChannels");
+        }
+        PreparedDB item;
+        item.db = &db;
+        item.source_to_target_channel.assign(db.NumChannels(), -1);
+        bool has_unmapped = false;
+        for (std::size_t i = 0; i < db.palette.size(); ++i) {
+            const std::string key = BuildChannelKey(db.palette[i]);
+            auto it               = key_to_target_channel.find(key);
+            if (it != key_to_target_channel.end()) {
+                item.source_to_target_channel[i] = it->second;
+            } else {
+                has_unmapped = true;
+            }
+        }
+
+        if (has_unmapped) {
+            auto fdb              = std::make_unique<ColorDB>();
+            fdb->name             = db.name + "_filtered";
+            fdb->max_color_layers = db.max_color_layers;
+            fdb->base_layers      = db.base_layers;
+            fdb->base_channel_idx = db.base_channel_idx;
+            fdb->layer_height_mm  = db.layer_height_mm;
+            fdb->line_width_mm    = db.line_width_mm;
+            fdb->layer_order      = db.layer_order;
+            fdb->palette          = db.palette;
+
+            fdb->entries.reserve(db.entries.size());
+            std::vector<uint8_t> dummy_recipe;
+            for (const Entry& entry : db.entries) {
+                if (ConvertRecipeToProfile(entry, item, profile, dummy_recipe)) {
+                    fdb->entries.push_back(entry);
+                }
+            }
+
+            if (!fdb->entries.empty()) {
+                spdlog::info("PrepareDBs: filtered '{}' from {} to {} entries", db.name,
+                             db.entries.size(), fdb->entries.size());
+                item.filtered_db = std::move(fdb);
+            } else {
+                spdlog::debug(
+                    "PrepareDBs: skipping '{}' — 0 compatible entries after channel filtering",
+                    db.name);
+                continue;
+            }
+        }
+
+        const ColorDB* search_db = item.filtered_db ? item.filtered_db.get() : item.db;
+        if (search_db && !search_db->entries.empty()) {
+            (void)search_db->NearestEntry(search_db->entries.front().lab);
+        }
+
+        prepared.push_back(std::move(item));
+    }
+    if (prepared.empty()) {
+        spdlog::warn("PrepareDBs: all {} DB(s) filtered out — no compatible entries for the "
+                     "current profile (model fallback may still be available)",
+                     db_ptrs.size());
+    }
+    return prepared;
+}
+
 } // namespace detail
 } // namespace ChromaPrint3D

@@ -39,6 +39,14 @@ struct VectorRecipeMap {
                                  const ModelGateConfig& model_gate = {},
                                  MatchStats* out_stats             = nullptr);
 
+    /// Pointer-based overload for shared_ptr pipelines (avoids deep-copying ColorDB objects).
+    static VectorRecipeMap MatchPtrs(const VectorProcResult& result,
+                                     std::span<const ColorDB* const> db_ptrs,
+                                     const PrintProfile& profile, const MatchConfig& cfg = {},
+                                     const ModelPackage* model_package = nullptr,
+                                     const ModelGateConfig& model_gate = {},
+                                     MatchStats* out_stats             = nullptr);
+
     /// Replace the recipe for specified entries.
     void ReplaceRecipeForEntries(const std::vector<int>& entry_indices,
                                  const std::vector<uint8_t>& new_recipe,

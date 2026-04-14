@@ -14,7 +14,7 @@ import {
   NTooltip,
 } from 'naive-ui'
 import type { RecipeCandidate, LabColor, PaletteChannel } from '../../types'
-import { fetchRecipeAlternatives } from '../../api/recipeEditor'
+import { fetchRecipeAlternatives } from '../../services/recipeEditorService'
 import { hexToLab } from '../../utils/colorConvert'
 import { buildPaletteHint, validateRecipePattern } from '../../utils/recipePattern'
 import RecipeLayerBar from './RecipeLayerBar.vue'

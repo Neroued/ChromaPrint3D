@@ -52,6 +52,10 @@ struct PrintProfile {
                                           float layer_height_mm        = 0.0f,
                                           const FilamentConfig* config = nullptr);
 
+    static PrintProfile BuildFromColorDBPtrs(std::span<const ColorDB* const> dbs, int color_layers,
+                                             float layer_height_mm        = 0.0f,
+                                             const FilamentConfig* config = nullptr);
+
     /// Keep only channels whose normalized key is in \p allowed_keys.
     /// The base channel is always retained.
     void FilterChannels(const std::vector<std::string>& allowed_keys);

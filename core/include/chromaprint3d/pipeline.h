@@ -33,17 +33,14 @@ struct ConvertRasterRequest {
     // ColorDB input (preloaded_dbs takes priority if non-empty)
     std::vector<std::string>
         db_paths; ///< ColorDB file paths or directories (ignored if preloaded_dbs is non-empty).
-    std::vector<const ColorDB*>
+    std::vector<std::shared_ptr<const ColorDB>>
         preloaded_dbs; ///< Preloaded ColorDB instances (takes priority over db_paths).
-    /// Owned copies of session-uploaded ColorDBs; keeps preloaded_dbs pointers valid
-    /// after the originating session snapshot is destroyed.
-    std::vector<std::shared_ptr<const ColorDB>> session_owned_dbs;
 
     // Model package (optional, preloaded takes priority)
     std::string
         model_pack_path; ///< Path to model package file (ignored if preloaded_model_pack is set).
-    const ModelPackage* preloaded_model_pack =
-        nullptr; ///< Preloaded model package (takes priority over model_pack_path).
+    std::shared_ptr<const ModelPackage>
+        preloaded_model_pack; ///< Preloaded model package (takes priority over model_pack_path).
 
     // Image processing
     float scale    = 1.0f; ///< Image scaling factor.
@@ -167,7 +164,7 @@ struct MatchRasterResult {
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
     std::string preset_dir;
 
-    std::vector<ColorDB> dbs;
+    std::vector<std::shared_ptr<const ColorDB>> dbs;
     MatchConfig match_config;
     ModelGateConfig model_gate;
 
@@ -206,11 +203,10 @@ struct ConvertVectorRequest {
     std::string svg_name;            ///< Name when loading from buffer.
 
     std::vector<std::string> db_paths;
-    std::vector<const ColorDB*> preloaded_dbs;
-    std::vector<std::shared_ptr<const ColorDB>> session_owned_dbs;
+    std::vector<std::shared_ptr<const ColorDB>> preloaded_dbs;
 
     std::string model_pack_path;
-    const ModelPackage* preloaded_model_pack = nullptr;
+    std::shared_ptr<const ModelPackage> preloaded_model_pack;
 
     float target_width_mm  = 0.0f; ///< 0 = use SVG original size.
     float target_height_mm = 0.0f; ///< 0 = use SVG original size.
@@ -261,7 +257,7 @@ struct MatchVectorResult {
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
     std::string preset_dir;
 
-    std::vector<ColorDB> dbs;
+    std::vector<std::shared_ptr<const ColorDB>> dbs;
     MatchConfig match_config;
     ModelGateConfig model_gate;
 

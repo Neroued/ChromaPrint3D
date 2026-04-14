@@ -90,6 +90,12 @@ public:
     Build(std::span<const ColorDB> dbs, const PrintProfile& profile, const MatchConfig& match_cfg,
           const ModelPackage* model_package = nullptr, const ModelGateConfig& model_gate = {});
 
+    [[nodiscard]] static RecipeSearchCache Build(std::span<const ColorDB* const> db_ptrs,
+                                                 const PrintProfile& profile,
+                                                 const MatchConfig& match_cfg,
+                                                 const ModelPackage* model_package = nullptr,
+                                                 const ModelGateConfig& model_gate = {});
+
     bool IsValid() const;
 
     /// Access the merged palette used by this cache.

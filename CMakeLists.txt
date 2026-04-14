@@ -26,6 +26,36 @@ option(CHROMAPRINT3D_BUILD_TESTS "Build unit tests" OFF)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# ── jemalloc (optional, reduces heap fragmentation for long-running server) ──
+if(WIN32)
+    option(CHROMAPRINT3D_USE_JEMALLOC "Link jemalloc (experimental on Windows)" OFF)
+else()
+    option(CHROMAPRINT3D_USE_JEMALLOC "Link jemalloc for reduced heap fragmentation" ON)
+endif()
+
+if(CHROMAPRINT3D_USE_JEMALLOC)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(JEMALLOC IMPORTED_TARGET jemalloc)
+    endif()
+    if(NOT JEMALLOC_FOUND)
+        find_library(JEMALLOC_LIB NAMES jemalloc jemalloc_pic)
+        find_path(JEMALLOC_INCLUDE NAMES jemalloc/jemalloc.h)
+        if(JEMALLOC_LIB AND JEMALLOC_INCLUDE)
+            set(JEMALLOC_FOUND TRUE)
+            add_library(jemalloc::jemalloc UNKNOWN IMPORTED)
+            set_target_properties(jemalloc::jemalloc PROPERTIES
+                IMPORTED_LOCATION "${JEMALLOC_LIB}"
+                INTERFACE_INCLUDE_DIRECTORIES "${JEMALLOC_INCLUDE}")
+        endif()
+    endif()
+    if(JEMALLOC_FOUND)
+        message(STATUS "jemalloc found — linking for reduced fragmentation")
+    else()
+        message(STATUS "jemalloc not found — falling back to system allocator")
+    endif()
+endif()
+
 find_package(OpenCV 4.5 REQUIRED COMPONENTS core imgproc imgcodecs)
 message(STATUS "Found OpenCV ${OpenCV_VERSION}: ${OpenCV_INSTALL_PATH}")
 

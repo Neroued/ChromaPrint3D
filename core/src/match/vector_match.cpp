@@ -5,6 +5,7 @@
 #include "chromaprint3d/recipe_map.h"
 #include "chromaprint3d/error.h"
 #include "detail/candidate_select.h"
+#include "detail/recipe_convert.h"
 
 #include <spdlog/spdlog.h>
 
@@ -42,17 +43,11 @@ struct CachedMatch {
     bool from_model = false;
 };
 
-} // namespace
-
-VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span<const ColorDB> dbs,
-                                       const PrintProfile& profile, const MatchConfig& cfg,
-                                       const ModelPackage* model_package,
-                                       const ModelGateConfig& model_gate, MatchStats* out_stats) {
-    if (dbs.empty() && !model_gate.model_only) {
-        throw InputError("VectorRecipeMap::Match: no ColorDBs provided");
-    }
-    profile.Validate();
-
+VectorRecipeMap MatchVectorCore(const VectorProcResult& result,
+                                const std::vector<detail::PreparedDB>& prepared_dbs,
+                                const std::optional<detail::PreparedModel>& prepared_model,
+                                const PrintProfile& profile, const MatchConfig& cfg,
+                                bool model_only, MatchStats* out_stats) {
     VectorRecipeMap map;
     map.color_layers = profile.color_layers;
     map.num_channels = profile.NumChannels();
@@ -60,21 +55,7 @@ VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span
 
     if (result.shapes.empty()) { return map; }
 
-    const bool use_lab    = (cfg.color_space == ColorSpace::Lab);
-    const bool model_only = model_gate.model_only;
-    std::vector<detail::PreparedDB> prepared_dbs;
-    if (!model_only) { prepared_dbs = detail::PrepareDBs(dbs, profile); }
-
-    const std::optional<detail::PreparedModel> prepared_model =
-        detail::PrepareModel(model_package, model_gate, profile);
-    if (model_only && !prepared_model.has_value()) {
-        throw ConfigError("Model-only matching requires a compatible model package");
-    }
-    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
-        throw ConfigError("No compatible ColorDB entries for color_layers=" +
-                          std::to_string(profile.color_layers) +
-                          "; try using the default layer count (5 or 10)");
-    }
+    const bool use_lab = (cfg.color_space == ColorSpace::Lab);
 
     std::vector<int> shape_to_unique_idx(result.shapes.size(), -1);
     std::vector<Rgb> unique_colors;
@@ -196,7 +177,7 @@ VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span
         }
         const CachedMatch& cache = unique_matches[idx];
 
-        ShapeEntry entry;
+        VectorRecipeMap::ShapeEntry entry;
         entry.shape_idx     = static_cast<int>(i);
         entry.recipe        = cache.recipe;
         entry.matched_color = cache.matched_lab;
@@ -227,6 +208,65 @@ VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span
         stat_model_queries > 0 ? stat_sum_model_de / static_cast<double>(stat_model_queries) : 0.0);
 
     return map;
+}
+
+} // namespace
+
+VectorRecipeMap VectorRecipeMap::Match(const VectorProcResult& result, std::span<const ColorDB> dbs,
+                                       const PrintProfile& profile, const MatchConfig& cfg,
+                                       const ModelPackage* model_package,
+                                       const ModelGateConfig& model_gate, MatchStats* out_stats) {
+    if (dbs.empty() && !model_gate.model_only) {
+        throw InputError("VectorRecipeMap::Match: no ColorDBs provided");
+    }
+    profile.Validate();
+    const bool model_only = model_gate.model_only;
+
+    std::vector<detail::PreparedDB> prepared_dbs;
+    if (!model_only) { prepared_dbs = detail::PrepareDBs(dbs, profile); }
+
+    const std::optional<detail::PreparedModel> prepared_model =
+        detail::PrepareModel(model_package, model_gate, profile);
+    if (model_only && !prepared_model.has_value()) {
+        throw ConfigError("Model-only matching requires a compatible model package");
+    }
+    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
+        throw ConfigError("No compatible ColorDB entries for color_layers=" +
+                          std::to_string(profile.color_layers) +
+                          "; try using the default layer count (5 or 10)");
+    }
+
+    return MatchVectorCore(result, prepared_dbs, prepared_model, profile, cfg, model_only,
+                           out_stats);
+}
+
+VectorRecipeMap VectorRecipeMap::MatchPtrs(const VectorProcResult& result,
+                                           std::span<const ColorDB* const> db_ptrs,
+                                           const PrintProfile& profile, const MatchConfig& cfg,
+                                           const ModelPackage* model_package,
+                                           const ModelGateConfig& model_gate,
+                                           MatchStats* out_stats) {
+    if (db_ptrs.empty() && !model_gate.model_only) {
+        throw InputError("VectorRecipeMap::MatchPtrs: no ColorDBs provided");
+    }
+    profile.Validate();
+    const bool model_only = model_gate.model_only;
+
+    std::vector<detail::PreparedDB> prepared_dbs;
+    if (!model_only) { prepared_dbs = detail::PrepareDBs(db_ptrs, profile); }
+
+    const std::optional<detail::PreparedModel> prepared_model =
+        detail::PrepareModel(model_package, model_gate, profile);
+    if (model_only && !prepared_model.has_value()) {
+        throw ConfigError("Model-only matching requires a compatible model package");
+    }
+    if (!model_only && prepared_dbs.empty() && !prepared_model.has_value()) {
+        throw ConfigError("No compatible ColorDB entries for color_layers=" +
+                          std::to_string(profile.color_layers));
+    }
+
+    return MatchVectorCore(result, prepared_dbs, prepared_model, profile, cfg, model_only,
+                           out_stats);
 }
 
 void VectorRecipeMap::ReplaceRecipeForEntries(const std::vector<int>& entry_indices,

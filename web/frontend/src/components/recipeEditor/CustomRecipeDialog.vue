@@ -16,7 +16,7 @@ import {
 } from 'naive-ui'
 import type { LabColor, PaletteChannel } from '../../types'
 import { hexToLab, labToHex } from '../../utils/colorConvert'
-import { predictRecipeColor } from '../../api/recipeEditor'
+import { predictRecipeColor } from '../../services/recipeEditorService'
 
 const MAX_COLOR_LAYERS = 10
 

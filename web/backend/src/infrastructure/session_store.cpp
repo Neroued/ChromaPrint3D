@@ -1,8 +1,8 @@
 #include "infrastructure/session_store.h"
+#include "infrastructure/color_db_bytes.h"
 #include "infrastructure/random_utils.h"
 
 #include <regex>
-#include <sstream>
 
 namespace chromaprint3d::backend {
 
@@ -41,8 +41,13 @@ bool SessionStore::WithSession(const std::string& token,
     std::lock_guard<std::mutex> lock(mtx_);
     auto it = sessions_.find(token);
     if (it == sessions_.end()) return false;
-    it->second.last_access = std::chrono::steady_clock::now();
+    const auto before_bytes = it->second.estimated_db_bytes;
+    it->second.last_access  = std::chrono::steady_clock::now();
     mutator(it->second);
+    it->second.estimated_db_bytes = detail::EstimateColorDbMapBytes(it->second.color_dbs);
+    total_session_db_bytes_       = total_session_db_bytes_ -
+                              std::min(total_session_db_bytes_, before_bytes) +
+                              it->second.estimated_db_bytes;
     return true;
 }
 
@@ -50,21 +55,30 @@ bool SessionStore::RemoveSessionDb(const std::string& token, const std::string& 
     return WithSession(token, [&](SessionSnapshot& s) { s.color_dbs.erase(db_name); });
 }
 
-std::optional<ChromaPrint3D::ColorDB> SessionStore::GetSessionDb(const std::string& token,
-                                                                 const std::string& db_name) {
-    auto s = Snapshot(token);
-    if (!s) return std::nullopt;
-    auto it = s->color_dbs.find(db_name);
-    if (it == s->color_dbs.end()) return std::nullopt;
-    return it->second;
+std::shared_ptr<const ChromaPrint3D::ColorDB>
+SessionStore::GetSessionDb(const std::string& token, const std::string& db_name) {
+    if (token.empty()) return nullptr;
+    CleanupExpired();
+    std::lock_guard<std::mutex> lock(mtx_);
+    auto it = sessions_.find(token);
+    if (it == sessions_.end()) return nullptr;
+    it->second.last_access = std::chrono::steady_clock::now();
+    auto db_it             = it->second.color_dbs.find(db_name);
+    if (db_it == it->second.color_dbs.end()) return nullptr;
+    return db_it->second;
 }
 
-std::vector<ChromaPrint3D::ColorDB> SessionStore::ListSessionDbs(const std::string& token) {
-    auto s = Snapshot(token);
-    std::vector<ChromaPrint3D::ColorDB> out;
-    if (!s) return out;
-    out.reserve(s->color_dbs.size());
-    for (const auto& [_, db] : s->color_dbs) out.push_back(db);
+std::vector<std::shared_ptr<const ChromaPrint3D::ColorDB>>
+SessionStore::ListSessionDbs(const std::string& token) {
+    std::vector<std::shared_ptr<const ChromaPrint3D::ColorDB>> out;
+    if (token.empty()) return out;
+    CleanupExpired();
+    std::lock_guard<std::mutex> lock(mtx_);
+    auto it = sessions_.find(token);
+    if (it == sessions_.end()) return out;
+    it->second.last_access = std::chrono::steady_clock::now();
+    out.reserve(it->second.color_dbs.size());
+    for (const auto& [_, db] : it->second.color_dbs) out.push_back(db);
     return out;
 }
 
@@ -89,7 +103,16 @@ bool SessionStore::PutSessionDb(const std::string& token, ChromaPrint3D::ColorDB
         if (error) *error = "Session ColorDB limit reached";
         return false;
     }
-    s.color_dbs[db_name] = std::move(db);
+    const std::size_t before_bytes = existing != s.color_dbs.end() && existing->second
+                                         ? detail::EstimateColorDbBytes(*existing->second)
+                                         : 0;
+    auto db_ptr                    = std::make_shared<const ChromaPrint3D::ColorDB>(std::move(db));
+    const std::size_t after_bytes  = detail::EstimateColorDbBytes(*db_ptr);
+    s.color_dbs[db_name]           = std::move(db_ptr);
+    s.estimated_db_bytes =
+        s.estimated_db_bytes - std::min(s.estimated_db_bytes, before_bytes) + after_bytes;
+    total_session_db_bytes_ =
+        total_session_db_bytes_ - std::min(total_session_db_bytes_, before_bytes) + after_bytes;
     return true;
 }
 
@@ -100,11 +123,25 @@ void SessionStore::CleanupExpired() {
         auto elapsed =
             std::chrono::duration_cast<std::chrono::seconds>(now - it->second.last_access).count();
         if (elapsed > ttl_seconds_) {
+            total_session_db_bytes_ -=
+                std::min(total_session_db_bytes_, it->second.estimated_db_bytes);
             it = sessions_.erase(it);
         } else {
             ++it;
         }
     }
+}
+
+std::size_t SessionStore::EstimateSessionDbBytes(const std::string& token) const {
+    std::lock_guard<std::mutex> lock(mtx_);
+    auto it = sessions_.find(token);
+    if (it == sessions_.end()) return 0;
+    return it->second.estimated_db_bytes;
+}
+
+std::size_t SessionStore::EstimateAllSessionDbBytes() const {
+    std::lock_guard<std::mutex> lock(mtx_);
+    return total_session_db_bytes_;
 }
 
 bool SessionStore::IsValidDbName(const std::string& name) {

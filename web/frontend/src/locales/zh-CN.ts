@@ -53,6 +53,9 @@ export default {
     pollFailed: '任务状态轮询失败，请重试（{message}）',
     downloadFailed: '下载失败，请重试',
     videoTutorial: '视频教程',
+    memoryUsage: '内存 {pct}%',
+    memoryTooltip:
+      'RSS: {rss} MB / {limit} MB\n堆已分配: {heapAlloc} MB\n堆驻留: {heapRes} MB\n任务预算: {budgetUsed} MB / {budgetLimit} MB\nColorDB 池: {colordbPool} MB\n分配器: {allocator}',
   },
 
   taskErrors: {

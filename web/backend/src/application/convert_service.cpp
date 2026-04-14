@@ -201,7 +201,7 @@ ServiceResult ConvertService::BuildRasterRequest(const json& params,
 
     std::string common_vendor, common_material;
     auto selected = ResolveSelectedColorDbs(params, session, data_, out.preloaded_dbs,
-                                            out.session_owned_dbs, common_vendor, common_material);
+                                            common_vendor, common_material);
     if (!selected.ok) return selected;
 
     if (!common_vendor.empty() && !common_material.empty()) {
@@ -363,9 +363,8 @@ ServiceResult ConvertService::BuildVectorRequest(const json& params,
     if (std::filesystem::is_directory(vpresets)) { out.preset_dir = vpresets.string(); }
 
     std::string vec_common_vendor, vec_common_material;
-    auto selected =
-        ResolveSelectedColorDbs(params, session, data_, out.preloaded_dbs, out.session_owned_dbs,
-                                vec_common_vendor, vec_common_material);
+    auto selected = ResolveSelectedColorDbs(params, session, data_, out.preloaded_dbs,
+                                            vec_common_vendor, vec_common_material);
     if (!selected.ok) return selected;
 
     if (!vec_common_vendor.empty() && !vec_common_material.empty()) {

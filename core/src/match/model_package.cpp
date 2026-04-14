@@ -65,9 +65,10 @@ ModelPackage ModelPackage::Load(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in.is_open()) { throw IOError("Failed to open model package: " + path); }
 
-    const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)),
-                                     std::istreambuf_iterator<char>());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
     json j = json::from_msgpack(bytes);
+    { auto discard = std::move(bytes); }
 
     const int schema_ver = j.value("schema_version", 0);
     if (schema_ver != kSchemaVersion) {
@@ -195,9 +196,10 @@ void ModelPackageRegistry::LoadFromDirectory(const std::string& dir) {
 
     for (const auto& file : files) {
         try {
-            packages_.push_back(ModelPackage::Load(file.string()));
-            spdlog::info("Loaded model package: {} [{}::{}]", packages_.back().name,
-                         packages_.back().scope.vendor, packages_.back().scope.material_type);
+            auto pkg = std::make_shared<const ModelPackage>(ModelPackage::Load(file.string()));
+            spdlog::info("Loaded model package: {} [{}::{}]", pkg->name, pkg->scope.vendor,
+                         pkg->scope.material_type);
+            packages_.push_back(std::move(pkg));
         } catch (const std::exception& e) {
             spdlog::warn("Skipping invalid model package {}: {}", file.string(), e.what());
         }
@@ -207,12 +209,13 @@ void ModelPackageRegistry::LoadFromDirectory(const std::string& dir) {
 }
 
 void ModelPackageRegistry::LoadSingle(const std::string& path) {
-    packages_.push_back(ModelPackage::Load(path));
-    spdlog::info("Loaded model package: {} [{}::{}]", packages_.back().name,
-                 packages_.back().scope.vendor, packages_.back().scope.material_type);
+    auto pkg = std::make_shared<const ModelPackage>(ModelPackage::Load(path));
+    spdlog::info("Loaded model package: {} [{}::{}]", pkg->name, pkg->scope.vendor,
+                 pkg->scope.material_type);
+    packages_.push_back(std::move(pkg));
 }
 
-const ModelPackage*
+std::shared_ptr<const ModelPackage>
 ModelPackageRegistry::Select(const std::string& vendor, const std::string& material_type,
                              const std::vector<std::string>& profile_channel_keys) const {
     if (vendor.empty() || material_type.empty()) { return nullptr; }
@@ -220,14 +223,14 @@ ModelPackageRegistry::Select(const std::string& vendor, const std::string& mater
     const std::unordered_set<std::string> profile_keys(profile_channel_keys.begin(),
                                                        profile_channel_keys.end());
 
-    const ModelPackage* best  = nullptr;
+    std::shared_ptr<const ModelPackage> best;
     size_t best_channel_count = 0;
 
     for (const auto& pack : packages_) {
-        if (!pack.MatchesScope(vendor, material_type)) { continue; }
+        if (!pack->MatchesScope(vendor, material_type)) { continue; }
 
         bool all_keys_found = true;
-        for (const auto& key : pack.channel_keys) {
+        for (const auto& key : pack->channel_keys) {
             if (profile_keys.find(key) == profile_keys.end()) {
                 all_keys_found = false;
                 break;
@@ -235,9 +238,9 @@ ModelPackageRegistry::Select(const std::string& vendor, const std::string& mater
         }
         if (!all_keys_found) { continue; }
 
-        if (pack.channel_keys.size() > best_channel_count) {
-            best               = &pack;
-            best_channel_count = pack.channel_keys.size();
+        if (pack->channel_keys.size() > best_channel_count) {
+            best               = pack;
+            best_channel_count = pack->channel_keys.size();
         }
     }
 

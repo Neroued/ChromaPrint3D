@@ -73,7 +73,8 @@ target_sources(chromaprint3d PRIVATE
     src/matting/matting.cpp
     src/matting/matting_postprocess.cpp
     src/detail/icc_utils.cpp
-    src/model/forward_color_model.cpp)
+    src/model/forward_color_model.cpp
+    src/common/memory_utils.cpp)
 
 # ── Optional: infer module for DL matting ─────────────────────────────────────
 
@@ -110,6 +111,17 @@ endif()
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(chromaprint3d PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
+# ── jemalloc (propagates to all executables via PUBLIC link) ──────────────────
+
+if(CHROMAPRINT3D_USE_JEMALLOC AND JEMALLOC_FOUND)
+    if(TARGET PkgConfig::JEMALLOC)
+        target_link_libraries(chromaprint3d PUBLIC PkgConfig::JEMALLOC)
+    elseif(TARGET jemalloc::jemalloc)
+        target_link_libraries(chromaprint3d PUBLIC jemalloc::jemalloc)
+    endif()
+    target_compile_definitions(chromaprint3d PUBLIC CHROMAPRINT3D_HAS_JEMALLOC=1)
 endif()
 
 # ── Compiler flags (per-build-type, no hardcoded -O3) ────────────────────────

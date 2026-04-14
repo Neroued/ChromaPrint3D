@@ -16,14 +16,14 @@ ColorDbService::ColorDbService(DataRepository& data, SessionStore& sessions)
 ServiceResult ColorDbService::ListDatabases(const std::optional<std::string>& session_token) {
     json arr = json::array();
     for (const auto& entry : data_.ColorDbCache().databases) {
-        auto j      = ColorDbInfoToJson(entry.db, entry.material_type, entry.vendor);
+        auto j      = ColorDbInfoToJson(*entry.db, entry.material_type, entry.vendor);
         j["source"] = "global";
         arr.push_back(std::move(j));
     }
     if (session_token && !session_token->empty()) {
         auto dbs = sessions_.ListSessionDbs(*session_token);
         for (const auto& db : dbs) {
-            auto j      = ColorDbInfoToJson(db);
+            auto j      = ColorDbInfoToJson(*db);
             j["source"] = "session";
             arr.push_back(std::move(j));
         }
@@ -35,7 +35,7 @@ ServiceResult ColorDbService::ListSessionDatabases(const std::string& token) {
     if (token.empty()) return ServiceResult::Error(401, "unauthorized", "No session");
     json arr = json::array();
     for (const auto& db : sessions_.ListSessionDbs(token)) {
-        auto j      = ColorDbInfoToJson(db);
+        auto j      = ColorDbInfoToJson(*db);
         j["source"] = "session";
         arr.push_back(std::move(j));
     }

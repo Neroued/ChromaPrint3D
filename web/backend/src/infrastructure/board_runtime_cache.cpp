@@ -3,6 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -68,8 +69,11 @@ std::size_t BoardGeometryKeyHash::operator()(const BoardGeometryKey& k) const {
     return h;
 }
 
-BoardRuntimeCache::BoardRuntimeCache(std::int64_t ttl_seconds, const std::string& data_dir)
-    : ttl_seconds_(ttl_seconds),
+BoardRuntimeCache::BoardRuntimeCache(std::int64_t ttl_seconds, const std::string& data_dir,
+                                     std::int64_t geometry_ttl_seconds,
+                                     std::int64_t geometry_max_entries)
+    : ttl_seconds_(ttl_seconds), geometry_ttl_seconds_(geometry_ttl_seconds),
+      geometry_max_entries_(static_cast<std::size_t>(geometry_max_entries)),
       temp_dir_(std::filesystem::path(data_dir) / "tmp" / "results" / "boards") {
     std::error_code ec;
     std::filesystem::create_directories(temp_dir_, ec);
@@ -137,14 +141,18 @@ BoardRuntimeCache::FindGeometry(int num_channels, int color_layers, int board_va
     std::lock_guard<std::mutex> lock(mtx_);
     auto it = geometry_.find(BoardGeometryKey{num_channels, color_layers, board_variant});
     if (it == geometry_.end()) return std::nullopt;
-    return it->second;
+    it->second.last_accessed_at = std::chrono::steady_clock::now();
+    return it->second.data;
 }
 
 void BoardRuntimeCache::StoreGeometry(int num_channels, int color_layers,
                                       ChromaPrint3D::CalibrationBoardMeshes&& data,
                                       int board_variant) {
     std::lock_guard<std::mutex> lock(mtx_);
-    geometry_[BoardGeometryKey{num_channels, color_layers, board_variant}] = std::move(data);
+    auto now = std::chrono::steady_clock::now();
+    CleanupGeometryLocked(now);
+    geometry_[BoardGeometryKey{num_channels, color_layers, board_variant}] =
+        GeometryRecord{std::move(data), now, now};
 }
 
 void BoardRuntimeCache::CleanupExpiredLocked(const std::chrono::steady_clock::time_point& now) {
@@ -156,6 +164,27 @@ void BoardRuntimeCache::CleanupExpiredLocked(const std::chrono::steady_clock::ti
         } else {
             ++it;
         }
+    }
+    CleanupGeometryLocked(now);
+}
+
+void BoardRuntimeCache::CleanupGeometryLocked(const std::chrono::steady_clock::time_point& now) {
+    for (auto it = geometry_.begin(); it != geometry_.end();) {
+        auto elapsed =
+            std::chrono::duration_cast<std::chrono::seconds>(now - it->second.last_accessed_at)
+                .count();
+        if (elapsed > geometry_ttl_seconds_) {
+            it = geometry_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    while (geometry_.size() > geometry_max_entries_) {
+        auto oldest =
+            std::min_element(geometry_.begin(), geometry_.end(), [](const auto& a, const auto& b) {
+                return a.second.last_accessed_at < b.second.last_accessed_at;
+            });
+        geometry_.erase(oldest);
     }
 }
 

@@ -15,11 +15,13 @@ import {
 } from 'naive-ui'
 import type { RecipeEditorSummary, RecipeCandidate, LabColor, RecipeInfo } from '../../types'
 import {
+  fetchRecipeEditorPreview,
   fetchRecipeEditorSummary,
+  fetchRecipeTaskStatus,
   replaceRecipe,
   submitGenerateModel,
-} from '../../api/recipeEditor'
-import { fetchTaskStatus } from '../../api/tasks'
+  waitForRecipeGeneration,
+} from '../../services/recipeEditorService'
 import { useRegionMap } from '../../composables/useRegionMap'
 import { usePanZoom } from '../../composables/usePanZoom'
 import { useAppStore } from '../../stores/app'
@@ -29,10 +31,8 @@ import CustomRecipeDialog from './CustomRecipeDialog.vue'
 import CustomRecipeListPanel from './CustomRecipeListPanel.vue'
 import RegionOverlayCanvas from './RegionOverlayCanvas.vue'
 import ZoomableImageViewport from '../common/ZoomableImageViewport.vue'
-import { fetchBlobWithSession } from '../../runtime/protectedRequest'
-import { getPreviewPath, getResultPath } from '../../api/tasks'
-import { buildApiUrl } from '../../runtime/env'
 import { useBlobDownload } from '../../composables/useBlobDownload'
+import { getResultPath } from '../../services/resultService'
 
 const props = defineProps<{
   taskId: string
@@ -118,6 +118,7 @@ async function loadSummary() {
     summary.value = await fetchRecipeEditorSummary(props.taskId)
     await loadRegionMap(props.taskId, summary.value.width, summary.value.height)
     await loadPreview()
+    await syncCompletedTask()
     startKeepalive()
   } catch (e) {
     summaryError.value = e instanceof Error ? e.message : String(e)
@@ -129,10 +130,19 @@ async function loadSummary() {
 async function loadPreview() {
   if (previewBlobUrl.value) URL.revokeObjectURL(previewBlobUrl.value)
   try {
-    const blob = await fetchBlobWithSession(buildApiUrl(getPreviewPath(props.taskId)))
+    const blob = await fetchRecipeEditorPreview(props.taskId)
     previewBlobUrl.value = URL.createObjectURL(blob)
   } catch {
     previewBlobUrl.value = ''
+  }
+}
+
+async function syncCompletedTask() {
+  try {
+    const status = await fetchRecipeTaskStatus(props.taskId)
+    appStore.setCompletedTask(status)
+  } catch {
+    appStore.clearCompletedTask()
   }
 }
 
@@ -288,6 +298,7 @@ function handleSelectRecipe(index: number) {
 // ── Replace recipe ───────────────────────────────────────────────────────────
 
 async function handleCandidateSelect(candidate: RecipeCandidate) {
+  if (replacing.value || generating.value) return
   if (!summary.value || selectedRegionIds.value.size === 0 || selectedRecipeIndex.value === null) {
     message.warning(t('recipeEditor.noRegionSelected'))
     return
@@ -312,6 +323,7 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
 
     summary.value = newSummary
     await loadPreview()
+    await syncCompletedTask()
 
     const selectedSet = selectedRegionIds.value
     const firstRegion = newSummary.regions.find((r) => selectedSet.has(r.region_id))
@@ -329,6 +341,7 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
 }
 
 async function handleUndo() {
+  if (replacing.value || generating.value) return
   if (undoStack.value.length === 0 || !summary.value) return
   const entry = undoStack.value.pop()!
   replacing.value = true
@@ -342,6 +355,7 @@ async function handleUndo() {
     )
     summary.value = newSummary
     await loadPreview()
+    await syncCompletedTask()
 
     const undoSet = new Set(entry.regionIds)
     const firstRegion = newSummary.regions.find((r) => undoSet.has(r.region_id))
@@ -386,6 +400,7 @@ const customRecipeInitialHex = computed<string>(() => {
 })
 
 function openCustomRecipeDialog() {
+  if (replacing.value || generating.value) return
   if (!summary.value || selectedRegionIds.value.size === 0 || selectedRecipeIndex.value === null) {
     message.warning(t('recipeEditor.noRegionSelected'))
     return
@@ -430,25 +445,12 @@ async function handleGenerate() {
   appStore.clearCompletedTask()
   try {
     await submitGenerateModel(props.taskId)
-
-    for (let i = 0; i < 300; i++) {
-      await new Promise((r) => setTimeout(r, 1000))
-      const status = await fetchTaskStatus(props.taskId)
-      if (status.status === 'completed') {
-        if (status.generate_error) {
-          generateError.value = status.generate_error
-        } else {
-          appStore.setCompletedTask(status)
-          generateDone.value = true
-        }
-        return
-      }
-      if (status.status === 'failed') {
-        generateError.value = status.error ?? t('recipeEditor.generateFailed')
-        return
-      }
-    }
-    generateError.value = t('recipeEditor.generateTimeout')
+    const status = await waitForRecipeGeneration(props.taskId, {
+      failedMessage: t('recipeEditor.generateFailed'),
+      timeoutMessage: t('recipeEditor.generateTimeout'),
+    })
+    appStore.setCompletedTask(status)
+    generateDone.value = true
   } catch (e) {
     generateError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -544,7 +546,7 @@ onUnmounted(() => {
         <NButton
           size="small"
           quaternary
-          :disabled="replacing"
+          :disabled="replacing || generating"
           :style="canUndo ? undefined : { visibility: 'hidden', pointerEvents: 'none' }"
           @click="handleUndo"
         >
@@ -686,7 +688,7 @@ onUnmounted(() => {
       <NButton
         type="primary"
         :loading="generating"
-        :disabled="generating || !summary"
+        :disabled="generating || replacing || !summary"
         @click="handleGenerate"
       >
         {{
