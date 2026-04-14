@@ -2,7 +2,10 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstring>
+#include <latch>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -40,24 +43,34 @@ TEST(MemoryUtils, ReleaseFreedMemoryThrottlesCorrectly) {
     EXPECT_FALSE(ChromaPrint3D::ReleaseFreedMemory(60000));
 }
 
-TEST(MemoryUtils, ReleaseFreedMemoryConcurrentCAS) {
-    int success_count = 0;
+TEST(MemoryUtils, ReleaseFreedMemoryConcurrentCallsRespectThrottle) {
+    constexpr int kThreadCount    = 8;
+    constexpr int kMinIntervalMs  = 100;
+    constexpr int kStartupSlackMs = 10;
+    int success_count             = 0;
     std::mutex mtx;
+    std::latch ready(kThreadCount);
+    std::latch start(1);
     std::vector<std::thread> threads;
 
-    ChromaPrint3D::ReleaseFreedMemory(0);
+    // Let any prior successful purge age out so this test is independent
+    // from the previous test's static throttle state.
+    std::this_thread::sleep_for(std::chrono::milliseconds(kMinIntervalMs + kStartupSlackMs));
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < kThreadCount; ++i) {
         threads.emplace_back([&] {
-            bool ok = ChromaPrint3D::ReleaseFreedMemory(0);
+            ready.count_down();
+            start.wait();
+
+            bool ok = ChromaPrint3D::ReleaseFreedMemory(kMinIntervalMs);
             if (ok) {
                 std::lock_guard<std::mutex> lock(mtx);
                 ++success_count;
             }
         });
     }
+    ready.wait();
+    start.count_down();
     for (auto& t : threads) t.join();
 
     EXPECT_LE(success_count, 1);
