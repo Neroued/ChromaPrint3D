@@ -133,20 +133,32 @@ function trackVirtualPageview(url: string) {
   window.umami?.track((props: Record<string, unknown>) => ({ ...props, url }))
 }
 
-watch(activeTab, (tab) => {
-  const url = TAB_VIRTUAL_URLS[tab]
-  if (url) trackVirtualPageview(url)
-})
+watch(
+  activeTab,
+  (tab) => {
+    const url = TAB_VIRTUAL_URLS[tab]
+    if (url) trackVirtualPageview(url)
+  },
+  { immediate: true },
+)
 
-watch(activePreprocessTab, (sub) => {
-  const url = SUB_TAB_VIRTUAL_URLS['preprocess']?.[sub]
-  if (url) trackVirtualPageview(url)
-})
+watch(
+  activePreprocessTab,
+  (sub) => {
+    const url = SUB_TAB_VIRTUAL_URLS['preprocess']?.[sub]
+    if (url) trackVirtualPageview(url)
+  },
+  { immediate: true },
+)
 
-watch(activeCalibrationTab, (sub) => {
-  const url = SUB_TAB_VIRTUAL_URLS['calibration-tools']?.[sub]
-  if (url) trackVirtualPageview(url)
-})
+watch(
+  activeCalibrationTab,
+  (sub) => {
+    const url = SUB_TAB_VIRTUAL_URLS['calibration-tools']?.[sub]
+    if (url) trackVirtualPageview(url)
+  },
+  { immediate: true },
+)
 
 useAppLifecycle()
 

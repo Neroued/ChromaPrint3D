@@ -30,7 +30,6 @@ export async function downloadFromUrl(url: string, filename: string): Promise<vo
     } else {
       clickDownloadLink(blobUrl, filename)
     }
-    window.umami?.track('file-download', { filename })
   } finally {
     revokeBlobUrl(blobUrl)
   }

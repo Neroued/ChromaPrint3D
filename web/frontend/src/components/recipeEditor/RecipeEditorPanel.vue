@@ -332,6 +332,7 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
     }
 
     if (generateDone.value) editedAfterGenerate.value = true
+    window.umami?.track('recipe-replace', { regionCount: regionIds.length })
     message.success(t('recipeEditor.replaceSuccess'))
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
@@ -451,8 +452,11 @@ async function handleGenerate() {
     })
     appStore.setCompletedTask(status)
     generateDone.value = true
+    window.umami?.track('generate-model-complete')
   } catch (e) {
-    generateError.value = e instanceof Error ? e.message : String(e)
+    const msg = e instanceof Error ? e.message : String(e)
+    generateError.value = msg
+    window.umami?.track('generate-model-fail', { error: msg.slice(0, 120) })
   } finally {
     generating.value = false
   }

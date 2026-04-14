@@ -62,11 +62,20 @@ const {
   onCompleted(s) {
     appStore.setCompletedTask(s)
     window.umami?.track('convert-complete', {
+      inputType: inputType.value,
       has3mf: Boolean(s.result?.has_3mf),
+      elapsed_s: s.elapsed_ms != null ? Math.round(s.elapsed_ms / 1000) : -1,
+      width: s.result?.input_width ?? 0,
+      height: s.result?.input_height ?? 0,
+      avg_de: s.result?.stats?.avg_db_de ?? -1,
     })
   },
-  onFailed() {
+  onFailed(s) {
     appStore.markTaskFailed()
+    window.umami?.track('convert-fail', {
+      inputType: inputType.value,
+      error: (s.error ?? 'unknown').slice(0, 120),
+    })
   },
 })
 
@@ -140,7 +149,11 @@ const download3mfFilename = computed(() => {
 
 async function handleConvert() {
   if (!selectedFile.value) return
-  window.umami?.track('convert-start', { inputType: inputType.value })
+  window.umami?.track('convert-start', {
+    inputType: inputType.value,
+    color_layers: params.value.color_layers ?? 0,
+    model_enable: Boolean(params.value.model_enable),
+  })
   appStore.markTaskStarted()
   await submitTask()
 }
@@ -160,10 +173,21 @@ const {
   onCompleted(s) {
     appStore.setCompletedTask(s)
     appStore.setRecipeEditorTaskId(s.id)
+    window.umami?.track('match-preview-complete', {
+      inputType: inputType.value,
+      elapsed_s: s.elapsed_ms != null ? Math.round(s.elapsed_ms / 1000) : -1,
+      width: s.result?.input_width ?? 0,
+      height: s.result?.input_height ?? 0,
+      avg_de: s.result?.stats?.avg_db_de ?? -1,
+    })
     window.umami?.track('recipe-editor-open')
   },
-  onFailed() {
+  onFailed(s) {
     appStore.markTaskFailed()
+    window.umami?.track('match-preview-fail', {
+      inputType: inputType.value,
+      error: (s.error ?? 'unknown').slice(0, 120),
+    })
   },
 })
 
@@ -192,6 +216,11 @@ const canMatchPreview = computed(() => {
 
 async function handleMatchPreview() {
   if (!selectedFile.value) return
+  window.umami?.track('match-preview-start', {
+    inputType: inputType.value,
+    color_layers: params.value.color_layers ?? 0,
+    model_enable: Boolean(params.value.model_enable),
+  })
   appStore.markTaskStarted()
   await submitMatch()
 }
@@ -199,9 +228,10 @@ async function handleMatchPreview() {
 async function handleDownload3MF() {
   if (!canDownload3mf.value || isDownloading3mf.value) return
   isDownloading3mf.value = true
-  window.umami?.track('download-3mf')
+  const filename = download3mfFilename.value
   try {
-    await downloadByUrl(getResultPath(completedTaskId.value), download3mfFilename.value)
+    await downloadByUrl(getResultPath(completedTaskId.value), filename)
+    window.umami?.track('download-3mf', { filename })
   } catch {
     // error is already handled by runtime abstraction caller when needed
   } finally {

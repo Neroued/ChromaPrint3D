@@ -139,6 +139,9 @@ json TaskToJson(const TaskSnapshot& task) {
         };
         if (!cp->result.warnings.empty()) { j["warnings"] = cp->result.warnings; }
         if (task.status == RuntimeTaskStatus::Completed) {
+            j["elapsed_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  task.completed_at - task.created_at)
+                                  .count();
             j["result"] = {
                 {"input_width", cp->result.input_width},
                 {"input_height", cp->result.input_height},

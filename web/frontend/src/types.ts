@@ -147,6 +147,7 @@ export interface TaskStatus {
   stage: ConvertStage
   progress: number
   created_at_ms: number
+  elapsed_ms?: number
   error: string | null
   result: TaskResult | null
   match_only?: boolean

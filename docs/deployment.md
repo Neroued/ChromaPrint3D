@@ -883,7 +883,33 @@ VITE_UMAMI_WEBSITE_ID=<预览版 website-id>
 
 `website-id` 在 Umami 管理后台添加网站后获取。
 
-### 8.4 多标签 `memory-status` 去重
+### 8.4 自定义事件清单
+
+前端通过 `window.umami.track()` 上报以下自定义事件，用于用户旅程分析和性能监控。
+
+**用户旅程漏斗**：`image-select` → `convert-start` → `convert-complete` → `download-3mf`
+
+**配方编辑漏斗**：`match-preview-start` → `match-preview-complete` / `recipe-editor-open` → `recipe-replace` → `generate-model-complete` → `download-3mf`
+
+| 事件名 | 触发点 | 关键字段 |
+|--------|--------|----------|
+| image-select | 选择文件 | type |
+| convert-start | 点击转换 | inputType, color_layers, model_enable |
+| convert-complete | 转换成功 | inputType, has3mf, elapsed_s, width, height, avg_de |
+| convert-fail | 转换失败 | inputType, error |
+| match-preview-start | 点击配方预览 | inputType, color_layers, model_enable |
+| match-preview-complete | 预览完成 | inputType, elapsed_s, width, height, avg_de |
+| match-preview-fail | 预览失败 | inputType, error |
+| recipe-editor-open | 进入编辑器 | （无） |
+| recipe-replace | 替换配方 | regionCount |
+| generate-model-complete | 模型生成完成 | （无） |
+| generate-model-fail | 模型生成失败 | error |
+| download-3mf | 下载成功 | filename |
+| memory-status | 每 5 分钟 / leader | rss_mb, heap_mb, artifact_pct, usage_pct, allocator |
+
+此外，前端会对主 Tab 和子 Tab 切换发送**虚拟 pageview**（如 `/convert`、`/preprocess/vectorize`），使 Umami 后台能区分各功能页面的访问量。
+
+### 8.5 多标签 `memory-status` 去重
 
 前端会额外上报一个自定义事件 `memory-status`，用于观测服务端内存占用趋势。部署时建议理解它的去重策略：
 
@@ -892,15 +918,7 @@ VITE_UMAMI_WEBSITE_ID=<预览版 website-id>
 - leader tab 关闭或失联后，其它标签页会在 lease 超时后自动接管，无需人工刷新。
 - 当 `/api/v1/health` 请求失败时，前端会清空缓存的 health 状态并停止该事件上报，避免继续发送过期内存值。
 
-事件字段：
-
-- `rss_mb`
-- `heap_mb`
-- `artifact_pct`
-- `usage_pct`
-- `allocator`
-
-### 8.5 备份
+### 8.6 备份
 
 ```bash
 # 手动备份
