@@ -1,7 +1,7 @@
 {
-  "version": "1.3.2-rc.2",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.2-rc.2",
-  "changelog": "- 配方编辑器选中区域添加清晰描边，缩放时始终可见\n- 修复预览图坐标偏移问题\n- 优化预览图分辨率自适应，兼顾清晰度与性能\n- 提升内存使用效率与稳定性\n- 修复参数面板开关偶发重复渲染的问题",
-  "changelog_en": "- Added clear outlines for selected regions in recipe editor, visible at all zoom levels\n- Fixed preview image coordinate offset issue\n- Optimized adaptive preview resolution for better clarity and performance\n- Improved memory efficiency and stability\n- Fixed occasional duplicate rendering when toggling parameter panel switches",
+  "version": "1.3.2-rc.3",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.2-rc.3",
+  "changelog": "- 新增升级/维护通知：在页面顶部提前预告，不会打断正在进行的任务；可按版本一键隐藏",
+  "changelog_en": "- New upgrade and maintenance banner at the top of the page: announcements appear ahead of time without interrupting your work, and can be dismissed per revision",
   "published_at": "2026-04-16"
 }
