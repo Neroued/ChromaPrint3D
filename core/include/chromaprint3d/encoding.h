@@ -35,8 +35,12 @@ constexpr int kPreviewMaxDim = 2048;
 /// Downsamples with INTER_AREA; upsamples with INTER_NEAREST to preserve
 /// discrete color boundaries in recipe maps.
 /// Returns the original image unmodified when already in range.
-cv::Mat ResizeForPreview(const cv::Mat& image, int min_dim = kPreviewMinDim,
-                         int max_dim = kPreviewMaxDim);
+///
+/// \note Upsampling (min_dim > 0) must NOT be used when the output image must
+/// stay pixel-aligned with a coordinate map of fixed resolution (e.g. raster
+/// recipe editor where the region map matches the recipe map dimensions).
+/// The default min_dim is 0 (downscale only) for this reason.
+cv::Mat ResizeForPreview(const cv::Mat& image, int min_dim = 0, int max_dim = kPreviewMaxDim);
 
 /// Compute an adaptive pixels-per-mm value so the longest side of a
 /// \p width_mm x \p height_mm model hits exactly \p max_dim pixels.
