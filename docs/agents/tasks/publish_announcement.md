@@ -13,7 +13,7 @@
 - `scripts/announce.sh` — CLI 工具（list / create / delete / from-file）
 - `.cursor/skills/publish-announcement/SKILL.md` — Agent 协作 SOP
 - `docs/deployment.md#公告系统announcements` — 部署契约与 token 管理
-- 运行时数据：`${data_dir}/announcements.json`（后端原子写入，无需手改）
+- 运行时数据：`${announcements_dir:-${data_dir}}/announcements.json`（后端原子写入，无需手改）。`read_only: true` 容器必须通过 `--announcements-dir` 指向独立可写 bind mount。
 
 ## 前置条件
 

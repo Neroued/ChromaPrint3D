@@ -80,6 +80,9 @@ std::string BuildUsage(const char* exe_name) {
         << "                              write routes return 404 and the feature is disabled\n"
         << "  --announcement-allow-http BOOL  Allow non-HTTPS announcement writes (default: 0,\n"
         << "                                  local debugging only)\n"
+        << "  --announcements-dir DIR    Directory that stores announcements.json (default: same\n"
+        << "                              as --data). Point this at a writable bind mount when\n"
+        << "                              the container root is read-only.\n"
         << "  -h, --help                  Show this help\n";
     return oss.str();
 }
@@ -178,6 +181,10 @@ ConfigParseResult ParseConfig(int argc, char** argv) {
                 return result;
             }
             cfg.announcement_allow_http = parsed;
+            continue;
+        }
+        if (arg == "--announcements-dir") {
+            cfg.announcements_dir = value;
             continue;
         }
 

@@ -253,6 +253,16 @@ json AnnouncementService::ToWireJson(const Announcement& a) {
 
 AnnouncementService::AnnouncementService(std::filesystem::path data_dir)
     : data_dir_(std::move(data_dir)), data_file_(data_dir_ / kAnnouncementsFile) {
+    std::error_code ec;
+    std::filesystem::create_directories(data_dir_, ec);
+    if (ec) {
+        // Not fatal: the service still comes up with an empty in-memory
+        // state. The first Upsert() will retry creating the directory and
+        // fail with a clear error if the path is still unwritable.
+        spdlog::warn("announcements: failed to create data dir {}: {}", data_dir_.string(),
+                     ec.message());
+    }
+
     std::unique_lock lk(mtx_);
     LoadFromDiskLocked();
     RefreshVersionHashLocked();

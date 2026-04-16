@@ -390,4 +390,42 @@ TEST(AnnouncementServiceIsoValidator, AcceptsAndRejectsExpectedForms) {
     EXPECT_FALSE(AnnouncementService::IsValidIso8601Utc(""));
 }
 
+// Mirrors the docker-compose + --announcements-dir layout where the
+// announcements directory is a separate writable volume mounted outside
+// the main data_dir. The service must auto-create the target directory
+// on startup and write announcements.json into it.
+TEST(AnnouncementServicePersistence, CreatesMissingDirectoryOnStartup) {
+    TempDataDir parent;
+    const auto target = parent.path() / "nested" / "announcements";
+    ASSERT_FALSE(std::filesystem::exists(target));
+
+    AnnouncementService svc(target);
+    EXPECT_TRUE(std::filesystem::is_directory(target));
+
+    const auto ends_at = IsoShift(clock_type::now(), std::chrono::hours(1));
+    const auto res     = svc.Upsert(MakeBaseAnnouncement("nested", ends_at));
+    ASSERT_TRUE(res.ok) << res.message;
+    EXPECT_TRUE(std::filesystem::exists(target / "announcements.json"));
+}
+
+// Simulates the production layout where announcements_dir is completely
+// independent of data_dir. Data persisted via one service instance must
+// reload from the same directory on a fresh instance.
+TEST(AnnouncementServicePersistence, StandaloneDirectoryReloadsAcrossInstances) {
+    TempDataDir dir;
+    const auto standalone = dir.path() / "announcements_only";
+    const auto ends_at    = IsoShift(clock_type::now(), std::chrono::hours(1));
+
+    {
+        AnnouncementService svc(standalone);
+        ASSERT_TRUE(svc.Upsert(MakeBaseAnnouncement("iso1", ends_at)).ok);
+    }
+    {
+        AnnouncementService svc(standalone);
+        const auto list = svc.ListActive();
+        ASSERT_EQ(list.size(), 1u);
+        EXPECT_EQ(list.front().id, "iso1");
+    }
+}
+
 } // namespace chromaprint3d::backend

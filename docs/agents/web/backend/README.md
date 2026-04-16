@@ -76,9 +76,13 @@
   - `POST /api/v1/announcements`（需 `x-announcement-token` 头 + HTTPS + body ≤ 16KB）
   - `DELETE /api/v1/announcements/{id}`（需 token）
 - 鉴权：`presentation/announcement_auth_advice.cpp` 前置 advice，未配置 token 时写入路由统一返回 `404 not_found`；非 HTTPS 返回 `403 insecure_transport`；token 用常量时间比较。
-- 领域：`application/announcement_service.{h,cpp}` 提供 schema 校验（id 正则、双语至少一种、时间窗口合法）、原子持久化（`${data_dir}/announcements.json` 写 tmp + rename）、FNV-1a 版本戳、按严重度排序的有效列表。
-- Facade：`ServerFacade::ListAnnouncements/UpsertAnnouncement/DeleteAnnouncement` 三个方法。
-- 单测：`web/backend/tests/test_announcement_service.cpp` 覆盖 schema、时间窗口、原子写、版本戳、幂等与跨进程 reload。
+- 领域：`application/announcement_service.{h,cpp}` 提供 schema 校验（id 正则、双语至少一种、时间窗口合法）、原子持久化、FNV-1a 版本戳、按严重度排序的有效列表。
+- 存储目录：
+  - 默认：`${data_dir}/announcements.json`（向后兼容）
+  - 独立目录：启动附加 `--announcements-dir <PATH>`，写 `<PATH>/announcements.json`，用于 `read_only: true` 容器的独立可写卷场景。
+  - 构造 `AnnouncementService` 时自动 `create_directories`，并做 tmp + rename 原子写。
+- Facade：`ServerFacade` 构造时根据 `cfg.announcements_dir` 选择目录，否则回退 `cfg.data_dir`；对外暴露 `ListAnnouncements/UpsertAnnouncement/DeleteAnnouncement`。
+- 单测：`web/backend/tests/test_announcement_service.cpp` 覆盖 schema、时间窗口、原子写、版本戳、幂等、跨进程 reload、缺目录自建、独立目录持久化。
 - 详细契约与部署：[docs/development.md#543-health](../../../development.md)、[docs/deployment.md#公告系统announcements](../../../deployment.md)。
 
 ## 配方编辑器

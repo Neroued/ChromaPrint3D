@@ -26,7 +26,7 @@ ServerFacade::ServerFacade(ServerConfig cfg)
       color_db_svc_(data_, sessions_), task_svc_(tasks_),
       convert_svc_(cfg_, data_, sessions_, tasks_), matting_svc_(cfg_, data_, tasks_),
       recipe_svc_(data_, tasks_), calib_svc_(cfg_, data_, sessions_, boards_),
-      announcement_svc_(cfg_.data_dir) {}
+      announcement_svc_(cfg_.announcements_dir.empty() ? cfg_.data_dir : cfg_.announcements_dir) {}
 
 std::string ServerFacade::EnsureSession(const std::optional<std::string>& existing_token,
                                         bool* created) {

@@ -256,7 +256,7 @@ npm run dev
   - `starts_at`（可选）、`ends_at`（必填）、`scheduled_update_at`（可选）：全部 ISO8601 UTC，均与当前时间字符串比较，无需客户端解析时区。
   - `dismissible`：默认 `true`；`false` 时前端不展示"不再提醒"按钮。
 - 成功响应：POST / DELETE / GET 均返回 `announcements_version`（与 health 同步），便于前端局部更新。
-- 持久化：`${data_dir}/announcements.json`，原子写（临时文件 rename）。
+- 持久化：默认写 `${data_dir}/announcements.json`；启动时如指定 `--announcements-dir <PATH>`，则改写 `<PATH>/announcements.json`。原子写（临时文件 rename），启动时自动建父目录。
 - 有关部署与 token 分发策略，见 [docs/deployment.md#公告系统announcements](deployment.md#公告系统announcements)。
 
 ### 5.4 Bambu Studio 预设参数

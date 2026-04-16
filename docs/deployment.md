@@ -1003,19 +1003,39 @@ docker compose pull && docker compose up -d
    # ~/chromaprint3d-deploy/.env
    CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=<上一步的 token>
    ```
-3. 修改 `docker-compose.yml` 的 `chromaprint3d` 服务：
+3. 在宿主机准备公告数据目录（路径任意，建议和 `data_dir` 分离，便于单独备份与挂载权限控制）：
+   ```bash
+   mkdir -p ~/chromaprint3d-deploy/data/announcements
+   chmod 700 ~/chromaprint3d-deploy/data/announcements
+   ```
+4. 修改 `docker-compose.yml` 的 `chromaprint3d` 服务。当容器根是 `read_only: true`（推荐）时，必须显式 bind-mount 一个可写卷作为公告目录，并用 `--announcements-dir` 指向容器内挂载点：
    ```yaml
+   services:
+     chromaprint3d:
+       # ... 其他保持不变 ...
+       read_only: true
        environment:
          - CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=${CHROMAPRINT3D_ANNOUNCEMENT_TOKEN}
+       volumes:
+         # 公告持久化目录：映射到宿主，保证镜像重启 / 升级后公告不丢
+         - ./data/announcements:/app/data/announcements
+       tmpfs:
+         - /tmp
+         - /app/data/tmp
        command:
-         # 其他参数保持不变
-         # --announcement-token 会被容器进程读取；也可改用上面的环境变量
+         - /app/chromaprint3d_server
+         - --data
+         - /app/data
+         - --announcements-dir
+         - /app/data/announcements
+         # 其他参数保持原样
    ```
-4. 滚动更新：
+   如果容器不是只读（`read_only: false` 或未设置），且 `data_dir` 本身是可写卷，可以省略 `--announcements-dir`，公告将落在 `${data_dir}/announcements.json`（向后兼容）。
+5. 滚动更新：
    ```bash
    docker compose up -d chromaprint3d
    ```
-5. 在 Nginx 的 `api.chromaprint3d.com` server block 中，对公告路由开启网段白名单（见本文档 2.4 章的 `location /api/v1/announcements` 块）。
+6. 在 Nginx 的 `api.chromaprint3d.com` server block 中，对公告路由开启网段白名单（见本文档 2.4 章的 `location /api/v1/announcements` 块）。
 
 > 未配置 token 时后端会把 POST/DELETE 一律返回 `404 not_found`，从外部观察不到"公告功能存在"。这是有意为之，降低指纹化探测的价值。
 
@@ -1041,9 +1061,13 @@ export CHROMAPRINT3D_API_URL=https://api.chromaprint3d.com:9443
 
 ### 存储与备份
 
-- 数据文件：`${data_dir}/announcements.json`
-- 写入：先写 `.tmp` 再 `rename`（原子）
-- 建议纳入现有备份计划（与 `data_dir` 其他状态一起备份即可）
+- 数据文件：`${announcements_dir:-${data_dir}}/announcements.json`
+  - 未设 `--announcements-dir` 时沿用 `${data_dir}/announcements.json`（旧部署行为）。
+  - 设了 `--announcements-dir <PATH>` 时落在该目录下的 `announcements.json`，推荐独立 bind mount。
+- 写入：先写 `.tmp` 再 `rename`（原子）。启动时若目录不存在会自动创建（仅限父目录可写的情况）。
+- 建议：
+  - 与 `data_dir` 分离的独立目录更容易单独备份、单独设权限（如 `chmod 700`）。
+  - 若镜像是 `read_only: true`，该目录必须是独立的可写卷，否则首次 POST 会因为无法建父目录而返回 `500`。
 
 ### Token 轮换建议
 
@@ -1061,4 +1085,6 @@ export CHROMAPRINT3D_API_URL=https://api.chromaprint3d.com:9443
 | `403 insecure_transport` | 请求走明文 HTTP | 检查 Nginx 是否透传 `X-Forwarded-Proto: https` |
 | `401 unauthorized` | token 错误 / 轮换后未同步 | 用 `openssl rand -hex 32` 重新生成并重启 |
 | `413 payload_too_large` | 公告 body > 16 KiB | 精简文案或拆条 |
+| `500 internal_error` + 日志含 `cannot create parent dir` / `rename ... failed` | 容器 `read_only: true` 但公告目录不是独立可写卷 | 按启用步骤 4 加 `--announcements-dir` 和对应 bind mount |
+| 重启镜像后公告全部消失 | 公告目录挂在 `tmpfs` 或容器内临时层（未持久化） | 改用宿主 bind mount（见启用步骤 3/4） |
 | 前端没看到新公告 | `announcements_version` 没变化 或被本地 dismiss | `./scripts/announce.sh list` 核对；编辑 `updated_at` 会重新唤起 |

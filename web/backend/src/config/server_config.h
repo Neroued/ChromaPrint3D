@@ -42,6 +42,11 @@ struct ServerConfig {
     // When false (default) the auth advice rejects non-HTTPS announcement
     // writes. Set via --announcement-allow-http for local debugging only.
     bool announcement_allow_http = false;
+    // Directory that stores `announcements.json`. When empty, falls back to
+    // `data_dir`. Kept separate so deployments can bind-mount a writable
+    // volume at this path while the rest of `data_dir` (and the container
+    // root filesystem) stays read-only.
+    std::string announcements_dir;
 };
 
 struct ConfigParseResult {

@@ -10,7 +10,7 @@ description: Help the operator publish, list, and remove user-visible announceme
 公告是用户打开 ChromaPrint3D 时顶部看到的 banner，**面向海内外用户同时展示**。
 发布流程由后端 `/api/v1/announcements` 和 `scripts/announce.sh` 驱动：
 
-1. 后端存储：`${data_dir}/announcements.json`（原子写，单文件）
+1. 后端存储：默认 `${data_dir}/announcements.json`，若启动带 `--announcements-dir <PATH>` 则落到 `<PATH>/announcements.json`（原子写，单文件）
 2. 鉴权：所有写操作需要 `x-announcement-token` 头，且只能通过 HTTPS
 3. 前端：启动时拉取一次；`/api/v1/health` 携带 `announcements_version`，
    该值变化时前端自动重新拉取
