@@ -71,6 +71,11 @@ const fitParams = computed(() => {
 const internalPanZoom = usePanZoom()
 const panZoom = computed<PanZoomController>(() => props.controller ?? internalPanZoom)
 
+const effectiveScale = computed(() => {
+  const fp = fitParams.value
+  return fp ? fp.fitScale * panZoom.value.scale.value : panZoom.value.scale.value
+})
+
 const transformValue = computed(() => {
   const pz = panZoom.value
   const s = pz.scale.value
@@ -153,7 +158,7 @@ defineExpose({
       draggable="false"
       :alt="alt"
     />
-    <slot :transform="transformValue" />
+    <slot :transform="transformValue" :effective-scale="effectiveScale" />
   </div>
 </template>
 

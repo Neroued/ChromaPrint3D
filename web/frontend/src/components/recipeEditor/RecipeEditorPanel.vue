@@ -580,11 +580,12 @@ onUnmounted(() => {
           :content-width="summary?.width ?? 0"
           :content-height="summary?.height ?? 0"
         >
-          <template #default="{ transform }">
+          <template #default="{ transform, effectiveScale }">
             <RegionOverlayCanvas
               :region-map="regionMap"
               :selected-region-ids="selectedRegionIds"
               :transform="transform"
+              :effective-scale="effectiveScale"
               :source-width="summary?.width ?? 0"
               :source-height="summary?.height ?? 0"
             />
