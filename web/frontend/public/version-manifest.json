@@ -1,6 +1,6 @@
 {
-  "version": "1.3.2-rc.3",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.2-rc.3",
+  "version": "1.3.2-rc.4",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.2-rc.4",
   "changelog": "- 新增升级/维护通知：在页面顶部提前预告，不会打断正在进行的任务；可按版本一键隐藏",
   "changelog_en": "- New upgrade and maintenance banner at the top of the page: announcements appear ahead of time without interrupting your work, and can be dismissed per revision",
   "published_at": "2026-04-16"
