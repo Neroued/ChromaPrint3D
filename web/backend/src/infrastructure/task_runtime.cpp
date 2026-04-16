@@ -364,7 +364,7 @@ SubmitResult TaskRuntime::SubmitConvertRasterMatchOnly(const std::string& owner,
             auto region_map = ChromaPrint3D::RasterRegionMap::Build(match_result.recipe_map);
 
             cv::Mat preview_bgra =
-                ChromaPrint3D::DownsampleForPreview(match_result.recipe_map.ToBgraImage());
+                ChromaPrint3D::ResizeForPreview(match_result.recipe_map.ToBgraImage());
             std::vector<uint8_t> preview_png;
             if (!preview_bgra.empty()) { preview_png = ChromaPrint3D::EncodePng(preview_bgra); }
 
@@ -433,17 +433,21 @@ SubmitResult TaskRuntime::SubmitConvertVectorMatchOnly(const std::string& owner,
                     std::to_string(kMaxUniqueRecipes));
             }
 
-            cv::Mat region_ids_mat  = ChromaPrint3D::RenderVectorRegionIds(match_result.proc_result,
-                                                                           match_result.recipe_map);
+            const float preview_ppm = ChromaPrint3D::ComputePreviewPixelsPerMm(
+                match_result.proc_result.width_mm, match_result.proc_result.height_mm);
+
+            cv::Mat region_ids_mat = ChromaPrint3D::RenderVectorRegionIds(
+                match_result.proc_result, match_result.recipe_map, preview_ppm);
             const std::size_t total = static_cast<std::size_t>(region_ids_mat.rows) *
                                       static_cast<std::size_t>(region_ids_mat.cols);
             std::vector<uint8_t> region_binary(total * sizeof(uint32_t));
             std::memcpy(region_binary.data(), region_ids_mat.data, region_binary.size());
 
             auto preview_png = ChromaPrint3D::RenderVectorPreviewPng(
-                match_result.proc_result, match_result.recipe_map, match_result.profile.palette);
+                match_result.proc_result, match_result.recipe_map, match_result.profile.palette,
+                preview_ppm);
             auto source_mask_png = ChromaPrint3D::RenderVectorSourceMaskPng(
-                match_result.proc_result, match_result.recipe_map);
+                match_result.proc_result, match_result.recipe_map, preview_ppm);
 
             const int img_w = region_ids_mat.cols;
             const int img_h = region_ids_mat.rows;
@@ -884,7 +888,7 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             info.from_model   = new_from_model;
         }
 
-        cv::Mat preview_bgra = ChromaPrint3D::DownsampleForPreview(mstate.recipe_map.ToBgraImage());
+        cv::Mat preview_bgra = ChromaPrint3D::ResizeForPreview(mstate.recipe_map.ToBgraImage());
         if (!preview_bgra.empty()) {
             cp->result.preview_png = ChromaPrint3D::EncodePng(preview_bgra);
         } else {
@@ -913,10 +917,12 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
             return false;
         }
 
+        const float preview_ppm = ChromaPrint3D::ComputePreviewPixelsPerMm(
+            vstate.proc_result.width_mm, vstate.proc_result.height_mm);
         cp->result.preview_png = ChromaPrint3D::RenderVectorPreviewPng(
-            vstate.proc_result, vstate.recipe_map, vstate.profile.palette);
-        cp->result.source_mask_png =
-            ChromaPrint3D::RenderVectorSourceMaskPng(vstate.proc_result, vstate.recipe_map);
+            vstate.proc_result, vstate.recipe_map, vstate.profile.palette, preview_ppm);
+        cp->result.source_mask_png = ChromaPrint3D::RenderVectorSourceMaskPng(
+            vstate.proc_result, vstate.recipe_map, preview_ppm);
     }
 
     if (cp->match_only) {
@@ -1325,7 +1331,7 @@ std::optional<TaskArtifact> TaskRuntime::LoadArtifact(const std::string& owner,
             const ChromaPrint3D::RecipeMap* rmap = nullptr;
             if (cp->raster_match_state.has_value()) { rmap = &cp->raster_match_state->recipe_map; }
             if (rmap && !channels.empty()) {
-                cv::Mat layer_bgra = ChromaPrint3D::DownsampleForPreview(
+                cv::Mat layer_bgra = ChromaPrint3D::ResizeForPreview(
                     rmap->ToLayerBgraImage(static_cast<int>(idx), channels));
                 if (!layer_bgra.empty()) {
                     auto rendered = ChromaPrint3D::EncodePng(layer_bgra);

@@ -28,9 +28,18 @@ std::vector<uint8_t> EncodeJpeg(const cv::Mat& image, int quality = 95);
 /// \return True if successful, false otherwise
 bool SaveImage(const cv::Mat& image, const std::string& path);
 
-/// Downsample an image if either dimension exceeds \p max_dim.
-/// Uses area interpolation and preserves aspect ratio.
-/// Returns the original image unmodified when no downsampling is needed.
-cv::Mat DownsampleForPreview(const cv::Mat& image, int max_dim = 2048);
+constexpr int kPreviewMinDim = 512;
+constexpr int kPreviewMaxDim = 2048;
+
+/// Resize an image so its longest side falls within [\p min_dim, \p max_dim].
+/// Downsamples with INTER_AREA; upsamples with INTER_NEAREST to preserve
+/// discrete color boundaries in recipe maps.
+/// Returns the original image unmodified when already in range.
+cv::Mat ResizeForPreview(const cv::Mat& image, int min_dim = kPreviewMinDim,
+                         int max_dim = kPreviewMaxDim);
+
+/// Compute an adaptive pixels-per-mm value so the longest side of a
+/// \p width_mm x \p height_mm model hits exactly \p max_dim pixels.
+float ComputePreviewPixelsPerMm(float width_mm, float height_mm, int max_dim = kPreviewMaxDim);
 
 } // namespace ChromaPrint3D

@@ -311,7 +311,7 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
 
     // === Generate preview and source mask ===
     if (mr.generate_preview) {
-        cv::Mat preview_bgra = DownsampleForPreview(mr.recipe_map.ToBgraImage());
+        cv::Mat preview_bgra = ResizeForPreview(mr.recipe_map.ToBgraImage());
         if (!preview_bgra.empty()) { result.preview_png = EncodePng(preview_bgra); }
     }
     if (mr.generate_source_mask) {
@@ -341,7 +341,7 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
 
         try {
             cv::Mat layer_bgra =
-                DownsampleForPreview(mr.recipe_map.ToLayerBgraImage(layer_idx, mr.profile.palette));
+                ResizeForPreview(mr.recipe_map.ToLayerBgraImage(layer_idx, mr.profile.palette));
             if (layer_bgra.empty()) {
                 throw InputError("Failed to render raster layer preview image");
             }

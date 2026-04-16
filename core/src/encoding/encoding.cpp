@@ -43,17 +43,36 @@ bool SaveImage(const cv::Mat& image, const std::string& path) {
     return cv::imwrite(path, image);
 }
 
-cv::Mat DownsampleForPreview(const cv::Mat& image, int max_dim) {
+cv::Mat ResizeForPreview(const cv::Mat& image, int min_dim, int max_dim) {
     if (image.empty() || max_dim <= 0) return image;
     const int max_side = std::max(image.cols, image.rows);
-    if (max_side <= max_dim) return image;
-    const double scale = static_cast<double>(max_dim) / max_side;
-    const int new_w    = std::max(1, static_cast<int>(std::round(image.cols * scale)));
-    const int new_h    = std::max(1, static_cast<int>(std::round(image.rows * scale)));
-    cv::Mat dst;
-    cv::resize(image, dst, cv::Size(new_w, new_h), 0, 0, cv::INTER_AREA);
-    spdlog::debug("DownsampleForPreview: {}x{} -> {}x{}", image.cols, image.rows, new_w, new_h);
-    return dst;
+    if (max_side > max_dim) {
+        const double scale = static_cast<double>(max_dim) / max_side;
+        const int new_w    = std::max(1, static_cast<int>(std::round(image.cols * scale)));
+        const int new_h    = std::max(1, static_cast<int>(std::round(image.rows * scale)));
+        cv::Mat dst;
+        cv::resize(image, dst, cv::Size(new_w, new_h), 0, 0, cv::INTER_AREA);
+        spdlog::debug("ResizeForPreview: {}x{} -> {}x{} (downsample)", image.cols, image.rows,
+                      new_w, new_h);
+        return dst;
+    }
+    if (min_dim > 0 && max_side < min_dim) {
+        const double scale = static_cast<double>(min_dim) / max_side;
+        const int new_w    = std::max(1, static_cast<int>(std::round(image.cols * scale)));
+        const int new_h    = std::max(1, static_cast<int>(std::round(image.rows * scale)));
+        cv::Mat dst;
+        cv::resize(image, dst, cv::Size(new_w, new_h), 0, 0, cv::INTER_NEAREST);
+        spdlog::debug("ResizeForPreview: {}x{} -> {}x{} (upsample)", image.cols, image.rows, new_w,
+                      new_h);
+        return dst;
+    }
+    return image;
+}
+
+float ComputePreviewPixelsPerMm(float width_mm, float height_mm, int max_dim) {
+    const float long_side = std::max(width_mm, height_mm);
+    if (long_side <= 0.0f || max_dim <= 0) return 5.0f;
+    return static_cast<float>(max_dim) / long_side;
 }
 
 } // namespace ChromaPrint3D

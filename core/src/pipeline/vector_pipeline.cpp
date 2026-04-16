@@ -7,6 +7,7 @@
 #include "chromaprint3d/slicer_preset.h"
 #include "chromaprint3d/color_db.h"
 #include "chromaprint3d/print_profile.h"
+#include "chromaprint3d/encoding.h"
 #include "chromaprint3d/error.h"
 #include "match/detail/match_utils.h"
 
@@ -47,8 +48,6 @@ ResolvedGeometryOptions ResolveGeometryOptions(const ConvertVectorRequest& reque
     out.double_sided = request.double_sided;
     return out;
 }
-
-constexpr float kLayerPreviewPixelsPerMm = 5.0f;
 
 } // namespace
 
@@ -286,19 +285,21 @@ ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progre
     result.physical_width_mm  = vimg.width_mm;
     result.physical_height_mm = vimg.height_mm;
 
+    const float preview_ppm = ComputePreviewPixelsPerMm(vimg.width_mm, vimg.height_mm);
+
     if (mr.generate_preview) {
-        result.preview_png = RenderVectorPreviewPng(vimg, recipe_map, profile.palette);
+        result.preview_png = RenderVectorPreviewPng(vimg, recipe_map, profile.palette, preview_ppm);
     }
     if (mr.generate_source_mask) {
-        result.source_mask_png = RenderVectorSourceMaskPng(vimg, recipe_map);
+        result.source_mask_png = RenderVectorSourceMaskPng(vimg, recipe_map, preview_ppm);
     }
 
     result.layer_previews.layers      = recipe_map.color_layers;
     result.layer_previews.layer_order = recipe_map.layer_order;
     result.layer_previews.width =
-        std::max(1, static_cast<int>(std::ceil(vimg.width_mm * kLayerPreviewPixelsPerMm)));
+        std::max(1, static_cast<int>(std::ceil(vimg.width_mm * preview_ppm)));
     result.layer_previews.height =
-        std::max(1, static_cast<int>(std::ceil(vimg.height_mm * kLayerPreviewPixelsPerMm)));
+        std::max(1, static_cast<int>(std::ceil(vimg.height_mm * preview_ppm)));
     result.layer_previews.palette.reserve(profile.palette.size());
     for (std::size_t i = 0; i < profile.palette.size(); ++i) {
         const auto& channel = profile.palette[i];
@@ -306,7 +307,7 @@ ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progre
             LayerPreviewChannel{static_cast<int>(i), channel.color, channel.material});
     }
     result.layer_previews.layer_pngs =
-        RenderVectorLayerPreviewPngs(vimg, recipe_map, profile.palette, kLayerPreviewPixelsPerMm);
+        RenderVectorLayerPreviewPngs(vimg, recipe_map, profile.palette, preview_ppm);
 
     PrintProfile export_profile = profile;
     export_profile.base_layers  = resolved_base_layers;
