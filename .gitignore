@@ -52,4 +52,12 @@ scripts/deploy_split*.env
 scripts/deploy_split.local.env
 scripts/*.local.env
 
+# Announcement secrets / payload drafts
+announcement.env
+.env.local
+.chromaprint3d-announcement-token
+announcements/*.local.yaml
+announcements/*.local.yml
+announcements/*.local.json
+
 test_data/

@@ -521,6 +521,31 @@ void ApiV1Controller::BuildColorDb(const drogon::HttpRequestPtr& req, Callback&&
     ReplyJson(std::move(cb), result, created ? std::optional<std::string>(token) : std::nullopt);
 }
 
+void ApiV1Controller::ListAnnouncements(const drogon::HttpRequestPtr& /*req*/, Callback&& cb) {
+    ReplyJson(std::move(cb), Facade().ListAnnouncements());
+}
+
+void ApiV1Controller::UpsertAnnouncement(const drogon::HttpRequestPtr& req, Callback&& cb) {
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req->body());
+    } catch (...) {
+        ReplyJson(std::move(cb), ServiceResult::Error(400, "invalid_json", "Expected JSON body"));
+        return;
+    }
+    if (!body.is_object()) {
+        ReplyJson(std::move(cb),
+                  ServiceResult::Error(400, "invalid_json", "Expected JSON object body"));
+        return;
+    }
+    ReplyJson(std::move(cb), Facade().UpsertAnnouncement(body));
+}
+
+void ApiV1Controller::DeleteAnnouncement(const drogon::HttpRequestPtr& /*req*/, Callback&& cb,
+                                         const std::string& id) {
+    ReplyJson(std::move(cb), Facade().DeleteAnnouncement(id));
+}
+
 void ApiV1Controller::ApplySessionCookie(const drogon::HttpResponsePtr& resp,
                                          const std::string& token) const {
     drogon::Cookie cookie("session", token);

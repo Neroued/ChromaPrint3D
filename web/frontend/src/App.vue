@@ -36,6 +36,7 @@ import VectorizePanel from './components/VectorizePanel.vue'
 import ColorDBBuildSection from './components/calibration/ColorDBBuildSection.vue'
 import ColorDBUploadSection from './components/calibration/ColorDBUploadSection.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
+import AnnouncementBanner from './components/AnnouncementBanner.vue'
 import WhatsNewModal from './components/WhatsNewModal.vue'
 import CheckUpdateLink from './components/CheckUpdateLink.vue'
 import { darkThemeOverrides, lightThemeOverrides } from './theme'
@@ -250,6 +251,7 @@ function toggleLocale() {
 
         <NLayoutContent class="app-shell__content">
           <div class="app-shell__content-inner">
+            <AnnouncementBanner />
             <UpdateBanner />
             <WhatsNewModal />
             <div class="app-shell__announce">

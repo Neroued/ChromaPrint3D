@@ -22,6 +22,9 @@ case "$filename" in
     .env.*.local)
         deny_with "本地环境变量文件可能包含密钥"
         ;;
+    announcement.env|.chromaprint3d-announcement-token)
+        deny_with "公告 token 文件"
+        ;;
     credentials.json|service-account*.json)
         deny_with "凭据文件"
         ;;

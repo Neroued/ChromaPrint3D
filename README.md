@@ -52,6 +52,7 @@ docker run -d -p 8080:8080 --name chromaprint3d neroued/chromaprint3d:latest
 - 本地开发与调试：[docs/development.md](docs/development.md)
 - 发布流程：[docs/development.md#8-发布流程](docs/development.md#8-发布流程)
 - 部署：[docs/deployment.md](docs/deployment.md)
+- 运维公告（升级预告/维护通知）：[docs/deployment.md#公告系统announcements](docs/deployment.md#公告系统announcements)
 - 协作导航：[AGENTS.md](AGENTS.md)
 - 模块索引：[docs/agents/README.md](docs/agents/README.md)
 - 任务手册：[docs/agents/tasks/README.md](docs/agents/tasks/README.md)

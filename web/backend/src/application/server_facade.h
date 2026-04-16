@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/announcement_service.h"
 #include "application/calibration_service.h"
 #include "application/color_db_service.h"
 #include "application/convert_service.h"
@@ -101,6 +102,11 @@ public:
                                const std::string& meta_json, const std::string& db_name,
                                const std::string& corners_json = "");
 
+    // Announcements (public read, token-guarded writes).
+    ServiceResult ListAnnouncements() const;
+    ServiceResult UpsertAnnouncement(const nlohmann::json& body);
+    ServiceResult DeleteAnnouncement(const std::string& id);
+
 private:
     ServerConfig cfg_;
     DataRepository data_;
@@ -114,6 +120,7 @@ private:
     MattingVectorizeService matting_svc_;
     RecipeEditorService recipe_svc_;
     CalibrationService calib_svc_;
+    AnnouncementService announcement_svc_;
 };
 
 } // namespace chromaprint3d::backend

@@ -258,6 +258,28 @@ server {
         proxy_read_timeout 10s;
     }
 
+    # --- 公告 API：GET 对所有 IP 开放（前端拉取 banner），
+    #     POST/DELETE 只允许受控网段，额外加一层网络层防御。
+    #     将下方 CIDR 替换为运维机 / VPN 出口的地址段。
+    location /api/v1/announcements {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        limit_except GET OPTIONS {
+            allow 10.0.0.0/8;           # 示例：内部管理网
+            allow 192.168.0.0/16;       # 示例：家庭/办公网
+            # allow <VPN 出口 IP>/32;
+            deny all;
+        }
+
+        proxy_pass http://chromaprint3d:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 15s;
+        client_max_body_size 32k;       # 配合后端 16KB body 上限，留少量头余量
+    }
+
     # --- 校准板生成：计算量大，需要长超时 ---
     location /api/v1/calibration/boards {
         limit_req zone=upload_limit burst=5 nodelay;
@@ -941,3 +963,102 @@ docker compose pull && docker compose up -d
 ```
 
 升级前建议先执行一次手动备份。
+
+---
+
+## 公告系统（Announcements）
+
+公告系统用于在用户面前以 banner 形式宣告维护、升级、临时状态等信息。写入通道受 token 保护，读取公开、对前端低延迟。设计目标：
+
+- **不打扰在线用户**：公告内容与在线用户的任务状态完全解耦，发布/撤回不会触发后端重启。
+- **跨时区可见**：公告使用 ISO8601 UTC 时间戳，前端按本地时区渲染倒计时。
+- **防误触**：Kerckhoffs 原则，所有防御依赖 token 机密与网络/传输层控制；源码公开不构成风险。
+
+### 威胁模型与防御层次（概览）
+
+| 层级 | 对抗能力 | 关键配置 |
+|---|---|---|
+| 网络 | 限制 POST/DELETE 只从管理网段进入 | Nginx `limit_except GET OPTIONS` + `allow`/`deny` |
+| 传输 | 非 loopback 来源必须 HTTPS（或反代带 `X-Forwarded-Proto: https`） | 后端默认启用；`--announcement-allow-http` 放宽 |
+| 身份 | token 机密 + 常量时间比较 | `--announcement-token` + `x-announcement-token` 头 |
+| Schema | id 正则 / 时间合法 / 长度 / body size 16KB | `AnnouncementService::ValidateAndBuild` |
+| 渲染 | 前端纯文本、禁用 `v-html` | `AnnouncementBanner.vue` |
+| 秘密 | gitleaks CI + .gitignore + beforeReadFile 钩子 | 见 `.gitleaks.toml`、`.cursor/hooks/protect-secrets.sh` |
+
+> 传输层说明：为了适配"Nginx 终端 TLS，通过 docker 网络代理到后端"的典型部署，
+> 后端把 `peerAddr().isLoopbackIp()` 视为安全来源（容器内 Nginx → 后端 127.0.0.1 明文也被允许）。
+> 这与"攻击者已经拿到后端容器 shell"是同一威胁假设；token 与网络层白名单仍保留防御价值。
+> 跨机流量必须走 HTTPS（浏览器 TLS 或反代注入 `X-Forwarded-Proto: https`），
+> 否则返回 `403 insecure_transport`。
+
+### 启用步骤
+
+1. 在家庭主机上生成 ≥ 32 字节随机 token：
+   ```bash
+   openssl rand -hex 32 > ~/.chromaprint3d-announcement-token
+   chmod 600 ~/.chromaprint3d-announcement-token
+   ```
+2. 把 token 写入部署环境（`.env`，**不入 Git**）：
+   ```env
+   # ~/chromaprint3d-deploy/.env
+   CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=<上一步的 token>
+   ```
+3. 修改 `docker-compose.yml` 的 `chromaprint3d` 服务：
+   ```yaml
+       environment:
+         - CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=${CHROMAPRINT3D_ANNOUNCEMENT_TOKEN}
+       command:
+         # 其他参数保持不变
+         # --announcement-token 会被容器进程读取；也可改用上面的环境变量
+   ```
+4. 滚动更新：
+   ```bash
+   docker compose up -d chromaprint3d
+   ```
+5. 在 Nginx 的 `api.chromaprint3d.com` server block 中，对公告路由开启网段白名单（见本文档 2.4 章的 `location /api/v1/announcements` 块）。
+
+> 未配置 token 时后端会把 POST/DELETE 一律返回 `404 not_found`，从外部观察不到"公告功能存在"。这是有意为之，降低指纹化探测的价值。
+
+### 发布 / 撤回
+
+推荐使用 `scripts/announce.sh`（详见 `.cursor/skills/publish-announcement/SKILL.md`）：
+
+```bash
+export CHROMAPRINT3D_ANNOUNCEMENT_TOKEN_FILE=~/.chromaprint3d-announcement-token
+export CHROMAPRINT3D_API_URL=https://api.chromaprint3d.com:9443
+
+./scripts/announce.sh list
+./scripts/announce.sh create maint-2026-04-20 maintenance warning \
+  '2026-04-20T10:30:00Z' \
+  --title-zh '2026-04-20 维护通知' --title-en 'Maintenance 2026-04-20' \
+  --body-zh '我们将在 UTC 10:00 升级，约 10 分钟。' \
+  --body-en  'Upgrade at 10:00 UTC for ~10 minutes.' \
+  --starts-at '2026-04-19T10:00:00Z' \
+  --scheduled-update-at '2026-04-20T10:00:00Z'
+
+./scripts/announce.sh delete maint-2026-04-20
+```
+
+### 存储与备份
+
+- 数据文件：`${data_dir}/announcements.json`
+- 写入：先写 `.tmp` 再 `rename`（原子）
+- 建议纳入现有备份计划（与 `data_dir` 其他状态一起备份即可）
+
+### Token 轮换建议
+
+- 每季度或怀疑泄露时轮换：
+  1. 生成新 token，写入 `~/.chromaprint3d-announcement-token`
+  2. `docker compose up -d chromaprint3d`（读取新环境变量）
+  3. 旧 token 即刻失效
+- 轮换历史建议登记到独立安全笔记，**不要提交到代码仓库**。
+
+### 故障排除
+
+| 现象 | 可能原因 | 处置 |
+|---|---|---|
+| `404 not_found` 对 POST/DELETE | 后端未配置 token | 补 `--announcement-token` 或 `CHROMAPRINT3D_ANNOUNCEMENT_TOKEN` |
+| `403 insecure_transport` | 请求走明文 HTTP | 检查 Nginx 是否透传 `X-Forwarded-Proto: https` |
+| `401 unauthorized` | token 错误 / 轮换后未同步 | 用 `openssl rand -hex 32` 重新生成并重启 |
+| `413 payload_too_large` | 公告 body > 16 KiB | 精简文案或拆条 |
+| 前端没看到新公告 | `announcements_version` 没变化 或被本地 dismiss | `./scripts/announce.sh list` 核对；编辑 `updated_at` 会重新唤起 |

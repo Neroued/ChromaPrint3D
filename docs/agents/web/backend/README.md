@@ -24,6 +24,7 @@
     - `matting_vectorize_service.*` — 抠图与矢量化任务
     - `recipe_editor_service.*` — 配方编辑器（摘要/候选/替换/生成/预测）
     - `calibration_service.*` — 校准板生成/定位/ColorDB 构建
+    - `announcement_service.*` — 公告 CRUD、schema 校验、原子持久化、版本戳
   - 共享内核：
     - `request_parsing.*` — 请求解析与校验工具
     - `json_serialization.*` — JSON 序列化辅助函数
@@ -32,6 +33,7 @@
   - 路由与请求处理：`api_v1_controller.*`
   - 运行时注册：`backend_runtime.*`
   - CORS 处理：`cors_advice.*`
+  - 公告写入鉴权与传输 / body-size 前置 advice：`announcement_auth_advice.*`
 
 ## 常见改动落点
 
@@ -64,6 +66,20 @@
 ## Health 指标
 
 `GET /api/v1/health` 中的 `memory.colordb_pool_bytes` 表示“全局 ColorDB 缓存 + 会话 ColorDB”的总估算体量，由 `ColorDBCache` 与 `SessionStore` 增量维护，读取路径保持 O(1)。它是容量近似值，不是 RSS 的精确拆分。
+
+响应同时带有 `announcements_version`（公告内容的 8 位 FNV-1a 指纹）与 `active_announcement_count`，前端通过 watch 前者变化触发重拉。
+
+## 公告系统
+
+- 路由：
+  - `GET /api/v1/announcements`（公开）
+  - `POST /api/v1/announcements`（需 `x-announcement-token` 头 + HTTPS + body ≤ 16KB）
+  - `DELETE /api/v1/announcements/{id}`（需 token）
+- 鉴权：`presentation/announcement_auth_advice.cpp` 前置 advice，未配置 token 时写入路由统一返回 `404 not_found`；非 HTTPS 返回 `403 insecure_transport`；token 用常量时间比较。
+- 领域：`application/announcement_service.{h,cpp}` 提供 schema 校验（id 正则、双语至少一种、时间窗口合法）、原子持久化（`${data_dir}/announcements.json` 写 tmp + rename）、FNV-1a 版本戳、按严重度排序的有效列表。
+- Facade：`ServerFacade::ListAnnouncements/UpsertAnnouncement/DeleteAnnouncement` 三个方法。
+- 单测：`web/backend/tests/test_announcement_service.cpp` 覆盖 schema、时间窗口、原子写、版本戳、幂等与跨进程 reload。
+- 详细契约与部署：[docs/development.md#543-health](../../../development.md)、[docs/deployment.md#公告系统announcements](../../../deployment.md)。
 
 ## 配方编辑器
 

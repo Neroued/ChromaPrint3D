@@ -30,6 +30,7 @@
 | 修改前端页面与参数面板 | [docs/agents/web/frontend/README.md](docs/agents/web/frontend/README.md) |
 | 矢量化质量评估与回归检测 | [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)（已迁移） |
 | 更新建模拟合流程 | [docs/agents/modeling/README.md](docs/agents/modeling/README.md) |
+| 发布/撤回运维公告 | [docs/agents/tasks/publish_announcement.md](docs/agents/tasks/publish_announcement.md) + [.cursor/skills/publish-announcement/SKILL.md](.cursor/skills/publish-announcement/SKILL.md) |
 
 ## 模块索引入口
 

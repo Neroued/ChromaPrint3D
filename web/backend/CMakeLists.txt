@@ -64,8 +64,10 @@ set(CHROMAPRINT3D_BACKEND_LIBRARY_SOURCES
     src/application/matting_vectorize_service.cpp
     src/application/recipe_editor_service.cpp
     src/application/server_facade.cpp
+    src/application/announcement_service.cpp
     src/presentation/backend_runtime.cpp
     src/presentation/cors_advice.cpp
+    src/presentation/announcement_auth_advice.cpp
     src/presentation/api_v1_controller.cpp)
 
 if(TARGET Drogon::Drogon)

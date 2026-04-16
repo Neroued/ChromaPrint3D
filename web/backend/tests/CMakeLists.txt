@@ -1,6 +1,7 @@
 set(TEST_SOURCES
     test_server_facade.cpp
-    test_task_runtime.cpp)
+    test_task_runtime.cpp
+    test_announcement_service.cpp)
 
 add_executable(chromaprint3d_backend_tests ${TEST_SOURCES})
 

@@ -93,6 +93,23 @@ export default {
       makerWorldLink: 'MakerWorld',
       makerWorldSuffix: '上查看我的打印作品',
     },
+    announcements: {
+      dismiss: '不再提醒此版本',
+      scheduledUpdate: '计划升级时间：{time}（{relative}）',
+      scheduledUpdatePast: '计划升级时间：{time}（已到升级窗口）',
+      relative: {
+        days: '{count} 天后',
+        hours: '{count} 小时后',
+        minutes: '{count} 分钟后',
+        seconds: '{count} 秒内',
+        now: '即将开始',
+      },
+      typeLabels: {
+        info: '公告',
+        warning: '注意',
+        maintenance: '维护通知',
+      },
+    },
     update: {
       newVersionAvailable: '新版本 {version} 已发布',
       changelog: '更新内容',

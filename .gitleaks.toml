@@ -1,0 +1,35 @@
+title = "ChromaPrint3D gitleaks config"
+
+# Extend the upstream default ruleset.
+# See: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+[extend]
+useDefault = true
+
+[[rules]]
+id = "chromaprint3d-announcement-token"
+description = "ChromaPrint3D announcement token literal"
+regex = '''(?i)(chromaprint3d[_-]?announcement[_-]?token|x-announcement-token)\s*[:=]\s*["'`][A-Za-z0-9_\-]{16,}["'`]'''
+tags = ["secret", "token", "chromaprint3d"]
+
+[allowlist]
+description = "Paths that are ok to ignore — tests, docs, lockfiles, bundled deps."
+paths = [
+    '''(^|/)3dparty/''',
+    '''(^|/)node_modules/''',
+    '''(^|/)web/frontend/dist/''',
+    '''(^|/)build/''',
+    # Documented placeholders (never literal secrets):
+    '''(^|/)docs/.*\.md$''',
+    '''(^|/)README.md$''',
+    '''(^|/).cursor/skills/''',
+    # Tooling we control:
+    '''(^|/)scripts/announce\.sh$''',
+]
+
+# Common placeholders / env var names that look like literals but aren't.
+regexTarget = "match"
+regexes = [
+    '''CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=["']?\$\{?[A-Z_]+\}?''',
+    '''CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=<your[- _]?token>''',
+    '''x-announcement-token:\s*\$TOKEN''',
+]

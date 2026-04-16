@@ -25,7 +25,8 @@ ServerFacade::ServerFacade(ServerConfig cfg)
               cfg_.board_geometry_cache_max),
       color_db_svc_(data_, sessions_), task_svc_(tasks_),
       convert_svc_(cfg_, data_, sessions_, tasks_), matting_svc_(cfg_, data_, tasks_),
-      recipe_svc_(data_, tasks_), calib_svc_(cfg_, data_, sessions_, boards_) {}
+      recipe_svc_(data_, tasks_), calib_svc_(cfg_, data_, sessions_, boards_),
+      announcement_svc_(cfg_.data_dir) {}
 
 std::string ServerFacade::EnsureSession(const std::optional<std::string>& existing_token,
                                         bool* created) {
@@ -56,13 +57,16 @@ ServiceResult ServerFacade::Health() const {
         {"allocator", ChromaPrint3D::AllocatorName()},
     };
 
-    return ServiceResult::Success(200, {
-                                           {"status", "ok"},
-                                           {"version", CHROMAPRINT3D_VERSION_STRING},
-                                           {"active_tasks", tasks_.ActiveTaskCount()},
-                                           {"total_tasks", tasks_.TotalTaskCount()},
-                                           {"memory", std::move(memory)},
-                                       });
+    return ServiceResult::Success(
+        200, {
+                 {"status", "ok"},
+                 {"version", CHROMAPRINT3D_VERSION_STRING},
+                 {"active_tasks", tasks_.ActiveTaskCount()},
+                 {"total_tasks", tasks_.TotalTaskCount()},
+                 {"memory", std::move(memory)},
+                 {"announcements_version", announcement_svc_.VersionHash()},
+                 {"active_announcement_count", announcement_svc_.ActiveCount()},
+             });
 }
 
 ServiceResult ServerFacade::ConvertDefaults() const {
@@ -339,6 +343,29 @@ ServiceResult ServerFacade::BuildColorDb(const std::string& owner,
                                          const std::string& meta_json, const std::string& db_name,
                                          const std::string& corners_json) {
     return calib_svc_.BuildColorDb(owner, image, meta_json, db_name, corners_json);
+}
+
+// ---------------------------------------------------------------------------
+// Announcements delegation
+// ---------------------------------------------------------------------------
+
+ServiceResult ServerFacade::ListAnnouncements() const {
+    const auto items = announcement_svc_.ListActive();
+    json arr         = json::array();
+    for (const auto& a : items) { arr.push_back(AnnouncementService::ToWireJson(a)); }
+    return ServiceResult::Success(200,
+                                  {
+                                      {"announcements", std::move(arr)},
+                                      {"announcements_version", announcement_svc_.VersionHash()},
+                                  });
+}
+
+ServiceResult ServerFacade::UpsertAnnouncement(const nlohmann::json& body) {
+    return announcement_svc_.Upsert(body);
+}
+
+ServiceResult ServerFacade::DeleteAnnouncement(const std::string& id) {
+    return announcement_svc_.Remove(id);
 }
 
 } // namespace chromaprint3d::backend

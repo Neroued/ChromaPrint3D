@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -74,6 +75,11 @@ std::string BuildUsage(const char* exe_name) {
         << "  --board-cache-ttl N         Calibration board cache TTL seconds (default: 600)\n"
         << "  --board-geometry-cache-ttl N Board geometry cache TTL seconds (default: 600)\n"
         << "  --board-geometry-cache-max N Max cached board geometries (default: 16)\n"
+        << "  --announcement-token TOKEN  Secret for writing announcements (overrides env\n"
+        << "                              CHROMAPRINT3D_ANNOUNCEMENT_TOKEN); when empty, the\n"
+        << "                              write routes return 404 and the feature is disabled\n"
+        << "  --announcement-allow-http BOOL  Allow non-HTTPS announcement writes (default: 0,\n"
+        << "                                  local debugging only)\n"
         << "  -h, --help                  Show this help\n";
     return oss.str();
 }
@@ -81,6 +87,12 @@ std::string BuildUsage(const char* exe_name) {
 ConfigParseResult ParseConfig(int argc, char** argv) {
     ConfigParseResult result;
     ServerConfig cfg;
+
+    // Seed announcement token from environment first; CLI overrides it below.
+    if (const char* env_token = std::getenv("CHROMAPRINT3D_ANNOUNCEMENT_TOKEN");
+        env_token != nullptr) {
+        cfg.announcement_token = env_token;
+    }
 
     std::unordered_map<std::string, std::int64_t*> i64_flags = {
         {"--max-upload-mb", &cfg.max_upload_mb},
@@ -152,6 +164,20 @@ ConfigParseResult ParseConfig(int argc, char** argv) {
                 return result;
             }
             cfg.require_cors_origin = parsed;
+            continue;
+        }
+        if (arg == "--announcement-token") {
+            cfg.announcement_token = value;
+            continue;
+        }
+        if (arg == "--announcement-allow-http") {
+            bool parsed = false;
+            if (!ParseBool(value, parsed)) {
+                result.error_message =
+                    "Invalid boolean value for --announcement-allow-http: " + value;
+                return result;
+            }
+            cfg.announcement_allow_http = parsed;
             continue;
         }
 

@@ -19,4 +19,5 @@
 - [tune_color_match.md](tune_color_match.md)
 - [update_frontend_param.md](update_frontend_param.md)
 - [sync_docs_after_behavior_change.md](sync_docs_after_behavior_change.md)
+- [publish_announcement.md](publish_announcement.md)
 

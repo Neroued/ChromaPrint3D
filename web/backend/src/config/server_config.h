@@ -33,6 +33,15 @@ struct ServerConfig {
     std::int64_t board_geometry_cache_max = 16;
     bool require_cors_origin              = false;
     bool allow_open_cors                  = true;
+
+    // Announcement system: a shared secret that guards POST/DELETE on
+    // /api/v1/announcements. When empty, write routes return 404 (not 401) so
+    // that servers without the feature enabled do not leak route existence.
+    // Precedence: CLI --announcement-token > CHROMAPRINT3D_ANNOUNCEMENT_TOKEN env.
+    std::string announcement_token;
+    // When false (default) the auth advice rejects non-HTTPS announcement
+    // writes. Set via --announcement-allow-http for local debugging only.
+    bool announcement_allow_http = false;
 };
 
 struct ConfigParseResult {

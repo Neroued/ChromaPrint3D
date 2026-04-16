@@ -28,6 +28,7 @@
 | 调整自定义配方与颜色预测 | `src/components/recipeEditor/CustomRecipeDialog.vue` + `src/services/recipeEditorService.ts` |
 | 调整多标签健康上报/leader 选举 | `src/composables/feature/useLeaderLease.ts` + `src/composables/feature/useAppLifecycle.ts` |
 | 调整 Browser/Electron 行为差异 | `src/runtime/*.ts` + `src/electron.d.ts` |
+| 调整公告 banner 展示 / dismiss 行为 | `src/components/AnnouncementBanner.vue` + `src/composables/useAnnouncements.ts` + `src/api/announcements.ts` + `src/locales/{zh-CN,en}.ts` |
 
 ## 分层边界（强约束）
 
@@ -45,6 +46,14 @@
 - 上传约束变化时，检查：
   - `src/domain/upload/imageUploadValidation.ts`
   - `src/runtime/env.ts`
+
+## 公告系统（只读端）
+
+- 前端只消费公告，不写入；写入由 `scripts/announce.sh` + 后端完成。
+- 健康检查中 `announcements_version` 变化驱动重拉：`src/stores/app.ts` 暴露 ref → `src/composables/useAnnouncements.ts` 监听 → `fetchAnnouncements()`。
+- Dismiss 持久化在 `localStorage`，键为 `chromaprint3d-dismissed-announcements`，按 `{id: updated_at}` 存储。修改 `updated_at` 即可重新唤起。
+- 渲染严禁 `v-html`，所有 body 行走 `{{ line }}` 插值。多语言 fallback：优先当前 locale，再降级到另一语言。
+- 相关翻译 key：`app.announcements.*`，新增字段时同步 zh-CN 与 en 两份。
 
 ## 最小验证
 

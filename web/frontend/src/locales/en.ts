@@ -65,6 +65,23 @@ export default {
       makerWorldLink: 'MakerWorld',
       makerWorldSuffix: '',
     },
+    announcements: {
+      dismiss: "Don't show again for this revision",
+      scheduledUpdate: 'Scheduled upgrade: {time} ({relative})',
+      scheduledUpdatePast: 'Scheduled upgrade: {time} (window active)',
+      relative: {
+        days: 'in {count} days',
+        hours: 'in {count} hours',
+        minutes: 'in {count} minutes',
+        seconds: 'in a few seconds',
+        now: 'starting soon',
+      },
+      typeLabels: {
+        info: 'Announcement',
+        warning: 'Attention',
+        maintenance: 'Maintenance notice',
+      },
+    },
     update: {
       newVersionAvailable: 'New version {version} is available',
       changelog: 'Changelog',

@@ -30,6 +30,8 @@ export const useAppStore = defineStore('app', () => {
   const activeTasks = ref(0)
   const totalTasks = ref(0)
   const serverMemory = ref<HealthMemory | null>(null)
+  const announcementsVersion = ref('')
+  const activeAnnouncementCount = ref(0)
 
   const isDark = ref(false)
   const recipeEditorTaskId = ref<string | null>(null)
@@ -89,12 +91,18 @@ export const useAppStore = defineStore('app', () => {
       activeTasks.value = h.active_tasks ?? 0
       totalTasks.value = h.total_tasks ?? 0
       serverMemory.value = h.memory ?? null
+      announcementsVersion.value = h.announcements_version ?? ''
+      activeAnnouncementCount.value = h.active_announcement_count ?? 0
     } catch {
       serverOnline.value = false
       serverVersion.value = ''
       activeTasks.value = 0
       totalTasks.value = 0
       serverMemory.value = null
+      // Intentionally keep announcementsVersion / activeAnnouncementCount
+      // as-is on transient health failures: the banner hides when the
+      // active list is empty anyway, and we don't want every network blip
+      // to re-trigger a full announcements refetch.
     }
   }
 
@@ -142,6 +150,8 @@ export const useAppStore = defineStore('app', () => {
     activeTasks,
     totalTasks,
     serverMemory,
+    announcementsVersion,
+    activeAnnouncementCount,
     isDark,
     recipeEditorTaskId,
     setSelectedFile,

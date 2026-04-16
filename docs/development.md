@@ -100,6 +100,19 @@ npm run typecheck
 curl -s http://127.0.0.1:8080/api/v1/health
 curl -s http://127.0.0.1:8080/api/v1/convert/defaults
 curl -s http://127.0.0.1:8080/api/v1/vectorize/defaults
+curl -s http://127.0.0.1:8080/api/v1/announcements
+```
+
+本地联调公告写入（需附 `--announcement-token dev-token --announcement-allow-http`）：
+
+```bash
+./scripts/announce.sh list
+
+CHROMAPRINT3D_API_URL=http://127.0.0.1:8080 \
+CHROMAPRINT3D_ANNOUNCEMENT_TOKEN=dev-token \
+./scripts/announce.sh create test-001 info info '2026-12-31T23:59:59Z' \
+  --title-zh '测试公告' --title-en 'Test announcement' \
+  --body-zh '这是一条测试公告。' --body-en 'A test announcement.'
 ```
 
 ### 3.3 常用 CLI 调试命令
@@ -172,7 +185,7 @@ npm run dev
 
 ### 5.3 Health 端点响应格式
 
-`GET /api/v1/health` 响应包含 `memory` 对象，提供服务端内存状态：
+`GET /api/v1/health` 响应包含 `memory` 对象以及公告版本戳，提供服务端内存状态与公告变更指示：
 
 ```json
 {
@@ -191,7 +204,9 @@ npm run dev
       "colordb_pool_bytes": 52428800,
       "memory_limit_bytes": 4294967296,
       "allocator": "jemalloc"
-    }
+    },
+    "announcements_version": "39bd1beb",
+    "active_announcement_count": 1
   }
 }
 ```
@@ -206,6 +221,8 @@ npm run dev
 | `colordb_pool_bytes` | ColorDB 缓存 + 会话 DB 的总估算体量 |
 | `memory_limit_bytes` | 容器内存限制（cgroup）或物理内存总量 |
 | `allocator` | 编译时链接的分配器（`jemalloc` / `glibc` / `system`） |
+| `announcements_version` | 公告内容的 8 位 hex 指纹（FNV-1a）；变化表示公告增删改，前端据此重新拉取 |
+| `active_announcement_count` | 当前有效公告条数（按 `starts_at` ≤ now < `ends_at` 过滤） |
 
 补充说明：
 
@@ -223,6 +240,24 @@ npm run dev
 | 配方编辑器 | `GET /api/v1/tasks/{id}/recipe-editor/summary`、`POST /api/v1/tasks/{id}/recipe-editor/alternatives`、`POST /api/v1/tasks/{id}/recipe-editor/replace`、`POST /api/v1/tasks/{id}/recipe-editor/generate`、`POST /api/v1/tasks/{id}/recipe-editor/predict` |
 | 任务查询与产物 | `GET /api/v1/tasks`、`GET /api/v1/tasks/{id}`、`GET /api/v1/tasks/{id}/artifacts/{artifact}` |
 | 校准链路 | `POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`、`POST /api/v1/calibration/locate`、`POST /api/v1/calibration/colordb` |
+| 公告 | `GET /api/v1/announcements`（公开）、`POST /api/v1/announcements`（需 token）、`DELETE /api/v1/announcements/{id}`（需 token） |
+
+### 5.4.1 公告 API 契约
+
+- 写入身份：`x-announcement-token` 头 + HTTPS；未配置 token 时 POST/DELETE 一律返回 `404 not_found`（避免向外暴露功能存在性）。
+- 传输：生产环境写入必须走 HTTPS（通过 TLS 或反代带 `X-Forwarded-Proto: https`），否则返回 `403 insecure_transport`。
+  本地联调可启动时附加 `--announcement-allow-http` 临时放宽。
+- Body 上限：`POST` 请求体 ≤ 16 KiB，否则返回 `413 payload_too_large`。
+- Schema：
+  - `id`：`^[a-zA-Z0-9_-]{1,64}$`，同 `id` 重复 POST 即等同于更新。
+  - `type`：`info` / `warning` / `maintenance`
+  - `severity`：`info` / `warning` / `error`（决定前端 banner 配色）
+  - `title` / `body`：对象形式 `{ "zh": "...", "en": "..." }`，两语言至少一项非空，单语言 ≤ 2000 字符。**纯文本**，前端禁用 `v-html`，URL 不自动链接化。
+  - `starts_at`（可选）、`ends_at`（必填）、`scheduled_update_at`（可选）：全部 ISO8601 UTC，均与当前时间字符串比较，无需客户端解析时区。
+  - `dismissible`：默认 `true`；`false` 时前端不展示"不再提醒"按钮。
+- 成功响应：POST / DELETE / GET 均返回 `announcements_version`（与 health 同步），便于前端局部更新。
+- 持久化：`${data_dir}/announcements.json`，原子写（临时文件 rename）。
+- 有关部署与 token 分发策略，见 [docs/deployment.md#公告系统announcements](deployment.md#公告系统announcements)。
 
 ### 5.4 Bambu Studio 预设参数
 

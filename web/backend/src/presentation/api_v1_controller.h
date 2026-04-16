@@ -82,6 +82,11 @@ public:
                   drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::BuildColorDb, "/api/v1/calibration/colordb", drogon::Post,
                   drogon::Options);
+
+    ADD_METHOD_TO(ApiV1Controller::ListAnnouncements, "/api/v1/announcements", drogon::Get,
+                  drogon::Options);
+    ADD_METHOD_TO(ApiV1Controller::UpsertAnnouncement, "/api/v1/announcements", drogon::Post);
+    ADD_METHOD_TO(ApiV1Controller::DeleteAnnouncement, "/api/v1/announcements/{1}", drogon::Delete);
     METHOD_LIST_END
 
     using Callback = std::function<void(const drogon::HttpResponsePtr&)>;
@@ -135,6 +140,11 @@ public:
     void DownloadBoardMeta(const drogon::HttpRequestPtr& req, Callback&& cb, const std::string& id);
     void LocateBoard(const drogon::HttpRequestPtr& req, Callback&& cb);
     void BuildColorDb(const drogon::HttpRequestPtr& req, Callback&& cb);
+
+    void ListAnnouncements(const drogon::HttpRequestPtr& req, Callback&& cb);
+    void UpsertAnnouncement(const drogon::HttpRequestPtr& req, Callback&& cb);
+    void DeleteAnnouncement(const drogon::HttpRequestPtr& req, Callback&& cb,
+                            const std::string& id);
 
 private:
     ServerFacade& Facade() const;

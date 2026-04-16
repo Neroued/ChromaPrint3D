@@ -1,5 +1,6 @@
 #include "application/server_facade.h"
 #include "config/server_config.h"
+#include "presentation/announcement_auth_advice.h"
 #include "presentation/backend_runtime.h"
 #include "presentation/cors_advice.h"
 
@@ -17,6 +18,7 @@ int main(int argc, char** argv) {
     using chromaprint3d::backend::BuildUsage;
     using chromaprint3d::backend::InitBackendRuntime;
     using chromaprint3d::backend::ParseConfig;
+    using chromaprint3d::backend::RegisterAnnouncementAuthAdvice;
     using chromaprint3d::backend::RegisterCorsAdvice;
     using chromaprint3d::backend::ServerFacade;
 
@@ -44,6 +46,13 @@ int main(int argc, char** argv) {
         auto facade = std::make_shared<ServerFacade>(cfg);
         InitBackendRuntime(facade);
         RegisterCorsAdvice(cfg);
+        RegisterAnnouncementAuthAdvice(cfg);
+        if (cfg.announcement_token.empty()) {
+            spdlog::info("Announcement write routes disabled (no --announcement-token configured)");
+        } else {
+            spdlog::info("Announcement write routes enabled; allow_http={}",
+                         cfg.announcement_allow_http ? "true" : "false");
+        }
 
         auto upload_dir = std::filesystem::temp_directory_path() / "chromaprint3d_uploads";
         std::filesystem::create_directories(upload_dir);

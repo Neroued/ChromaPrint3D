@@ -236,6 +236,37 @@ export interface HealthResponse {
   active_tasks: number
   total_tasks: number
   memory?: HealthMemory
+  announcements_version?: string
+  active_announcement_count?: number
+}
+
+// ---- Announcements ----
+
+export type AnnouncementType = 'info' | 'warning' | 'maintenance'
+export type AnnouncementSeverity = 'info' | 'warning' | 'error'
+
+export interface AnnouncementText {
+  zh: string | null
+  en: string | null
+}
+
+export interface Announcement {
+  id: string
+  type: AnnouncementType
+  severity: AnnouncementSeverity
+  title: AnnouncementText
+  body: AnnouncementText
+  starts_at: string | null
+  ends_at: string
+  scheduled_update_at: string | null
+  dismissible: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AnnouncementsResponse {
+  announcements: Announcement[]
+  announcements_version: string
 }
 
 // ---- Matting ----
