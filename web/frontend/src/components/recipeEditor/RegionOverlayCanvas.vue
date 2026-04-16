@@ -113,8 +113,8 @@ function redraw() {
   ctx.beginPath()
   for (let i = 0; i < cachedEdgeCount; i++) {
     const base = i * 4
-    ctx.moveTo(edges[base], edges[base + 1])
-    ctx.lineTo(edges[base + 2], edges[base + 3])
+    ctx.moveTo(edges[base]!, edges[base + 1]!)
+    ctx.lineTo(edges[base + 2]!, edges[base + 3]!)
   }
   ctx.lineWidth = lineWidth
   ctx.strokeStyle = BORDER_COLOR
