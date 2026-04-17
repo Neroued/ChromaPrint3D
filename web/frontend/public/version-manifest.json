@@ -1,7 +1,7 @@
 {
-  "version": "1.3.2-rc.4",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.2-rc.4",
-  "changelog": "- 新增升级/维护通知：在页面顶部提前预告，不会打断正在进行的任务；可按版本一键隐藏",
-  "changelog_en": "- New upgrade and maintenance banner at the top of the page: announcements appear ahead of time without interrupting your work, and can be dismissed per revision",
-  "published_at": "2026-04-16"
+  "version": "1.3.2",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.2",
+  "changelog": "- 新增升级/维护通知横幅：提前预告、不打断任务、可按版本隐藏\n- 配方编辑器选中区域新增清晰描边，缩放时始终可见\n- 修复预览图坐标偏移，优化分辨率自适应\n- 提升内存使用效率与长时间运行下的服务稳定性\n- 修复参数面板开关偶发重复渲染的问题",
+  "changelog_en": "- New upgrade/maintenance banner: advance notice, non-disruptive, dismissible per revision\n- Added clear outlines for selected regions in recipe editor, visible at all zoom levels\n- Fixed preview coordinate offset and improved adaptive resolution\n- Improved memory efficiency and service stability under long-running workloads\n- Fixed occasional duplicate rendering when toggling parameter panel switches",
+  "published_at": "2026-04-17"
 }
