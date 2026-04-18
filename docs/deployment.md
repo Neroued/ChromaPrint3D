@@ -88,6 +88,11 @@ acme.sh --install-cert -d api.chromaprint3d.com \
 ```bash
 mkdir -p ~/chromaprint3d-deploy/nginx/conf.d
 cd ~/chromaprint3d-deploy
+
+# 3MF 结果目录 bind mount：容器内进程 uid=10001，宿主机侧需要预创建并赋权，
+# 否则 docker compose 会以 root 创建挂载点，容器内进程写入会报 Permission denied。
+mkdir -p ./data/tmp
+sudo chown 10001:10001 ./data/tmp
 ```
 
 ### 2.3 创建 docker-compose.yml
@@ -111,9 +116,14 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
+      # 仅上传暂存用（Drogon setUploadPath），单个请求上限 = --max-upload-mb
       - /tmp:noexec,nosuid,size=256m,uid=10001,gid=10001
-      # 任务结果 3MF 落盘目录（read_only 下需单独挂载可写 tmpfs）
-      - /app/data/tmp:noexec,nosuid,size=512m,uid=10001,gid=10001
+    volumes:
+      # 任务结果 3MF 落盘目录：改为宿主机磁盘 bind mount，避免单个大 3MF（可能达 GB 级）
+      # 把 tmpfs 和容器 mem_limit 撑爆。容器内仍是 /app/data/tmp，服务行为不变。
+      # 宿主机侧需先创建并赋权：
+      #   mkdir -p ./data/tmp && sudo chown 10001:10001 ./data/tmp
+      - ./data/tmp:/app/data/tmp
     environment:
       # 限制每个 OpenMP 并行区域的线程数，防止多个 worker 同时运行时超额订阅
       # 公式：OMP_NUM_THREADS ≈ 可用核心数 / max_tasks
@@ -148,6 +158,8 @@ services:
       - "900"
       - "--max-result-mb"
       - "256"      # 3MF 已落盘，但配方编辑器的 match state（10-30MB/task）仍计入预算
+      - "--max-spill-gb"
+      - "4"        # 磁盘上 3MF 结果目录预算（GB），超过时按 LRU 淘汰最老完成态任务的落盘文件
       # 可选：进一步收紧像素上限
       # - "--max-pixels"
       # - "12000000"
@@ -392,8 +404,10 @@ server {
 > - 如果调整了后端上传上限，请同步修改该配置中的全局与各上传路由 `client_max_body_size`。
 > - 后端 `--max-pixels`（默认 `16777216`）限制的是**解码后像素数**，与文件大小限制独立；仅放宽 Nginx 限制并不能避免后端 `413 image_too_large`。
 > - Web 部署若要“限制更紧”，请同时下调后端 `--max-upload-mb`/`--max-pixels` 与 Nginx `client_max_body_size`。
-> - `--max-result-mb` 追踪内存中的制品大小，包括 preview、mask、layer previews，以及**配方编辑器的 match state**（每任务约 10-30MB，取决于图像大小和 ColorDB 数量）。3MF 结果已自动落盘到 `data_dir/tmp/results/`，不计入内存预算。启用配方编辑器时建议 `--max-result-mb` 不低于 256MB。
-> - 失败或中断的 3MF 导出会主动回收未提交的临时文件；服务启动时也会清扫 `data_dir/tmp/results/` 与 fallback 结果目录中的历史残留，避免旧的半写入文件持续占满 `tmpfs`。
+> - `--max-result-mb` 追踪**内存中**的制品大小，包括 preview、mask、layer previews，以及**配方编辑器的 match state**（每任务约 10-30MB，取决于图像大小和 ColorDB 数量）。3MF 结果已自动落盘到 `data_dir/tmp/results/`，不计入该内存预算。启用配方编辑器时建议 `--max-result-mb` 不低于 256MB。
+> - `--max-spill-gb` 追踪**磁盘上**的 3MF 落盘文件总量（`data_dir/tmp/results/*_model.3mf`）。超过预算时按 `last_accessed_at` LRU 淘汰最老的完成态/失败态任务连同其落盘文件。与 `--max-result-mb` 正交，不会交叉驱逐；4GB 基线能覆盖 ~4 个 1GB 级 3MF 或数十个常规任务。
+> - 结果目录推荐使用宿主机磁盘 bind mount（见 2.3 节 `./data/tmp:/app/data/tmp`），而不是 tmpfs：单个 3MF 可能达 GB 级，tmpfs 既占内存又容易被撑爆，反而比磁盘慢。
+> - 失败或中断的 3MF 导出会主动回收未提交的临时文件（RAII 守卫覆盖 open/write/rename 所有失败路径）；服务启动时也会清扫 `data_dir/tmp/results/` 与 fallback 结果目录中的历史残留。
 > - 如需排查结果目录占用，可执行 `docker exec chromaprint3d du -sh /app/data/tmp/results` 查看总量，再用 `docker exec chromaprint3d ls -lhS /app/data/tmp/results | head -30` 定位最大文件。
 
 ### 2.5 配置防火墙
@@ -682,6 +696,7 @@ crontab -e
 | `OMP_NUM_THREADS` | CPU 核心 / max_tasks | 1 | 3 |
 | `--http-threads` | 2–8，通常 4 足够 | 4 | 4 |
 | `--max-result-mb` | 含 match state；配方编辑器每任务约 10-30MB | 256 | 256 |
+| `--max-spill-gb` | 磁盘上 3MF 落盘文件总量，LRU 淘汰 | 4 | 16 |
 | `--max-upload-mb` | 按可接受的最大图片大小 | 30 | 100 |
 | `--max-pixels` | 按内存余量，每像素峰值约 200B | 12M | 33M |
 | `--max-owner-tasks` | 单用户不应独占全部 worker | 4 | 8 |
@@ -1019,9 +1034,10 @@ docker compose pull && docker compose up -d
        volumes:
          # 公告持久化目录：映射到宿主，保证镜像重启 / 升级后公告不丢
          - ./data/announcements:/app/data/announcements
+         # 结果目录 bind mount（与主 compose 段 2.3 保持一致）
+         - ./data/tmp:/app/data/tmp
        tmpfs:
          - /tmp
-         - /app/data/tmp
        command:
          - /app/chromaprint3d_server
          - --data

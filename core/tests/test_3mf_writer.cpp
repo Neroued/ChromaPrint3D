@@ -17,6 +17,10 @@
 #include <system_error>
 #include <vector>
 
+#if !defined(_WIN32)
+#    include <unistd.h>
+#endif
+
 using namespace ChromaPrint3D;
 
 namespace {
@@ -378,24 +382,119 @@ TEST(ThreeMfWriter, WriteToFileMatchesWriteToBuffer) {
     EXPECT_EQ(buffer, file_bytes);
 }
 
-TEST(ThreeMfWriter, AtomicWriteRemovesTempFileOnFailure) {
+namespace {
+
+// Return true iff the directory holds any file whose name contains ".tmp-"
+// (the suffix used by WriteBufferToFileAtomically for staging files).
+bool HasTempSuffixResidue(const std::filesystem::path& dir) {
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec)) return false;
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        if (entry.path().filename().string().find(".tmp-") != std::string::npos) { return true; }
+    }
+    return false;
+}
+
+} // namespace
+
+TEST(ThreeMfWriter, AtomicWriteSuccessLeavesNoTempResidue) {
     const auto temp_dir   = CreateUniqueTempDir();
-    const auto final_path = temp_dir / "failed-output.3mf";
+    const auto final_path = temp_dir / "success-output.3mf";
 
-    std::vector<uint8_t> partial_data(7, 0x42);
-    try {
-        detail::WriteBufferToFileAtomically(final_path, partial_data);
-    } catch (...) { /* ignore errors - we just want to test the happy path exists */
+    std::vector<uint8_t> payload(512);
+    for (std::size_t i = 0; i < payload.size(); ++i) {
+        payload[i] = static_cast<uint8_t>(i & 0xFFU);
     }
 
-    if (std::filesystem::exists(final_path)) {
-        std::ifstream ifs(final_path, std::ios::binary | std::ios::ate);
-        EXPECT_EQ(static_cast<std::size_t>(ifs.tellg()), 7u);
-    }
+    ASSERT_NO_THROW(detail::WriteBufferToFileAtomically(final_path, payload));
+
+    ASSERT_TRUE(std::filesystem::exists(final_path));
+    EXPECT_EQ(std::filesystem::file_size(final_path), payload.size());
+    EXPECT_FALSE(HasTempSuffixResidue(temp_dir))
+        << "Atomic write left .tmp-* residue in " << temp_dir.string();
 
     std::error_code ec;
     std::filesystem::remove_all(temp_dir, ec);
 }
+
+TEST(ThreeMfWriter, AtomicWriteRenameFailureCleansTempFile) {
+    // Construct a situation where rename() must fail: the target path already
+    // names a non-empty directory. POSIX rename() refuses to replace such a
+    // directory; Windows behaves similarly. This exercises the RAII guard on
+    // the rename failure path.
+    const auto temp_dir   = CreateUniqueTempDir();
+    const auto final_path = temp_dir / "occupied-target";
+    std::filesystem::create_directory(final_path);
+    {
+        std::ofstream blocker(final_path / "blocker.bin", std::ios::binary);
+        blocker << "blocked";
+    }
+
+    std::vector<uint8_t> payload(128, 0xABU);
+
+    bool threw_io_error = false;
+    std::string io_message;
+    try {
+        detail::WriteBufferToFileAtomically(final_path, payload);
+    } catch (const ChromaPrint3D::IOError& e) {
+        threw_io_error = true;
+        io_message     = e.what();
+    } catch (const std::exception& e) { io_message = e.what(); }
+
+    EXPECT_TRUE(threw_io_error) << "expected IOError, got: " << io_message;
+    EXPECT_EQ(io_message.find(".tmp-"), std::string::npos)
+        << "error message must not expose .tmp-* implementation detail: " << io_message;
+    EXPECT_FALSE(HasTempSuffixResidue(temp_dir))
+        << "RAII guard must remove .tmp-* after rename failure (residue in " << temp_dir.string()
+        << ")";
+
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+}
+
+#if !defined(_WIN32)
+TEST(ThreeMfWriter, AtomicWriteOpenFailureCleansAndReportsSystemReason) {
+    // Running as root bypasses the read-only bit; skip in that case so the
+    // test is deterministic in dev shells without docker, CI etc.
+    if (geteuid() == 0) {
+        GTEST_SKIP() << "Running as root; cannot enforce read-only directory semantics";
+    }
+
+    const auto temp_dir = CreateUniqueTempDir();
+    const auto readonly_dir =
+        temp_dir / "ro_parent"; // make_temp will try to create .tmp-* under this parent
+    std::filesystem::create_directory(readonly_dir);
+    std::filesystem::permissions(readonly_dir, std::filesystem::perms::owner_read,
+                                 std::filesystem::perm_options::replace);
+
+    const auto final_path = readonly_dir / "wont-open.3mf";
+    std::vector<uint8_t> payload(32, 0xCDU);
+
+    bool threw_io_error = false;
+    std::string io_message;
+    try {
+        detail::WriteBufferToFileAtomically(final_path, payload);
+    } catch (const ChromaPrint3D::IOError& e) {
+        threw_io_error = true;
+        io_message     = e.what();
+    } catch (const std::exception& e) { io_message = e.what(); }
+
+    EXPECT_TRUE(threw_io_error) << "expected IOError on read-only parent, got: " << io_message;
+    EXPECT_EQ(io_message.find(".tmp-"), std::string::npos)
+        << "error message must not expose .tmp-* implementation detail: " << io_message;
+    EXPECT_EQ(io_message.find(readonly_dir.string()), std::string::npos)
+        << "error message must not leak the full internal path: " << io_message;
+    EXPECT_FALSE(HasTempSuffixResidue(readonly_dir))
+        << "RAII guard must remove .tmp-* after open failure (residue in " << readonly_dir.string()
+        << ")";
+
+    // Restore permissions so remove_all can clean up.
+    std::filesystem::permissions(readonly_dir, std::filesystem::perms::owner_all,
+                                 std::filesystem::perm_options::replace);
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+}
+#endif
 
 // ── Integration test via public Export3mfFromMeshes API ─────────────────────
 
