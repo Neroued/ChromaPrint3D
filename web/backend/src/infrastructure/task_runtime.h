@@ -138,7 +138,7 @@ class TaskRuntime {
 public:
     TaskRuntime(std::int64_t worker_count, std::int64_t max_queue, std::int64_t ttl_seconds,
                 std::int64_t max_tasks_per_owner, std::int64_t max_total_result_bytes,
-                const std::string& data_dir);
+                std::int64_t max_total_spill_bytes, const std::string& data_dir);
     ~TaskRuntime();
 
     TaskRuntime(const TaskRuntime&)            = delete;
@@ -220,6 +220,7 @@ private:
     struct TaskRecord {
         TaskSnapshot snapshot;
         std::size_t artifact_bytes = 0;
+        std::size_t spill_bytes    = 0; // aggregate of on-disk artifacts (3MF + SVG)
         SpillableArtifact spilled_3mf;
         SpillableArtifact spilled_svg;
     };
@@ -257,11 +258,14 @@ private:
     }
 
     std::size_t ComputeArtifactBytes(const TaskSnapshot& snapshot) const;
+    static std::size_t ComputeSpillBytes(const TaskRecord& rec);
     std::optional<nlohmann::json> GetRecipeEditorSummaryLocked(const TaskRecord& rec) const;
     void CleanupLoop();
     void CleanupExpiredLocked(const std::chrono::steady_clock::time_point& now);
     void EnforceResultBudgetLocked(const std::string* protected_task_id = nullptr);
+    void EnforceSpillBudgetLocked(const std::string* protected_task_id = nullptr);
     void RefreshArtifactBytesLocked(TaskRecord& rec);
+    void RefreshSpillBytesLocked(TaskRecord& rec);
     bool IsGenerationRunningLocked(const TaskRecord& rec) const;
     void TouchTaskLocked(TaskRecord& rec, const std::chrono::steady_clock::time_point& now);
     std::size_t ActiveTasksByOwnerLocked(const std::string& owner) const;
@@ -271,11 +275,13 @@ private:
     std::int64_t ttl_seconds_;
     std::int64_t max_tasks_per_owner_;
     std::int64_t max_total_result_bytes_;
+    std::int64_t max_total_spill_bytes_;
     std::filesystem::path temp_dir_;
 
     mutable std::mutex task_mtx_;
     std::unordered_map<std::string, TaskRecord> tasks_;
     std::size_t total_artifact_bytes_ = 0;
+    std::size_t total_spill_bytes_    = 0;
 
     mutable std::mutex queue_mtx_;
     std::condition_variable queue_cv_;

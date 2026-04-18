@@ -69,6 +69,8 @@ std::string BuildUsage(const char* exe_name) {
            "1-1024)\n"
         << "  --max-result-mb N           Max total in-memory result payload MB (default: 512, "
            "range: 16-8192)\n"
+        << "  --max-spill-gb N            Max total on-disk 3MF spill GB under data/tmp/results "
+           "(default: 4, range: 1-1024); LRU-evicts oldest completed/failed tasks when exceeded\n"
         << "  --max-pixels N              Max decoded pixels per image (default: 16777216, range: "
            "1048576-268435456)\n"
         << "  --max-session-colordbs N    Max uploaded ColorDB count per session (default: 10)\n"
@@ -106,6 +108,7 @@ ConfigParseResult ParseConfig(int argc, char** argv) {
         {"--session-ttl", &cfg.session_ttl_seconds},
         {"--max-owner-tasks", &cfg.max_tasks_per_owner},
         {"--max-result-mb", &cfg.max_task_result_mb},
+        {"--max-spill-gb", &cfg.max_spill_gb},
         {"--max-pixels", &cfg.max_pixels_per_image},
         {"--max-session-colordbs", &cfg.max_session_colordbs},
         {"--board-cache-ttl", &cfg.board_cache_ttl},
@@ -217,6 +220,7 @@ ConfigParseResult ParseConfig(int argc, char** argv) {
         return result;
     if (!ValidateI64Range("--max-result-mb", cfg.max_task_result_mb, 16, 8192, result))
         return result;
+    if (!ValidateI64Range("--max-spill-gb", cfg.max_spill_gb, 1, 1024, result)) return result;
     if (!ValidateI64Range("--max-pixels", cfg.max_pixels_per_image, 1024 * 1024, 268435456, result))
         return result;
     if (!ValidateI64Range("--max-session-colordbs", cfg.max_session_colordbs, 1, 256, result))

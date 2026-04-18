@@ -9,9 +9,11 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -811,6 +813,51 @@ void Export3mfFromMeshesToFile(const std::string& path, const std::vector<Mesh>&
 
 namespace detail {
 
+namespace {
+
+// Cross-platform best-effort translation of a saved errno into a short
+// human-readable reason. On Windows, std::ofstream failures generally do not
+// populate errno, so we return a generic message instead of an empty string.
+std::string SystemReason(int err) {
+    if (err == 0) return "unknown I/O error";
+    const char* msg = std::strerror(err);
+    if (msg == nullptr || *msg == '\0') return "unknown I/O error";
+    return msg;
+}
+
+// RAII scope guard that removes the .tmp-* staging file on destruction unless
+// Commit() is invoked after a successful rename. Without this guard, failures
+// mid-write (ENOSPC / EACCES / bad_alloc / any throw between open and rename)
+// would leave partially-written temp files behind; those files are invisible
+// to the task runtime's spill bookkeeping and can silently fill the disk.
+class TempFileGuard {
+public:
+    explicit TempFileGuard(std::filesystem::path path) : path_(std::move(path)) {}
+
+    ~TempFileGuard() {
+        if (committed_ || path_.empty()) return;
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
+        if (ec) {
+            spdlog::debug("TempFileGuard: failed to remove temp file {}: {}", path_.string(),
+                          ec.message());
+        }
+    }
+
+    TempFileGuard(const TempFileGuard&)            = delete;
+    TempFileGuard& operator=(const TempFileGuard&) = delete;
+    TempFileGuard(TempFileGuard&&)                 = delete;
+    TempFileGuard& operator=(TempFileGuard&&)      = delete;
+
+    void Commit() noexcept { committed_ = true; }
+
+private:
+    std::filesystem::path path_;
+    bool committed_ = false;
+};
+
+} // namespace
+
 void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
                                  const std::vector<uint8_t>& bytes) {
     if (final_path.empty()) { throw InputError("output path is empty"); }
@@ -820,8 +867,10 @@ void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         if (ec) {
-            throw IOError("Failed to create output directory " + dir.string() + ": " +
-                          ec.message());
+            spdlog::error(
+                "WriteBufferToFileAtomically: failed to create output directory: dir={}, ec={}",
+                dir.string(), ec.message());
+            throw IOError("Failed to prepare output directory: " + ec.message());
         }
     }
 
@@ -840,19 +889,47 @@ void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
             std::error_code ec2;
             if (!std::filesystem::exists(candidate, ec2) && !ec2) { return candidate; }
         }
-        throw IOError("Failed to allocate temporary output path for " + final_path.string());
+        spdlog::error("WriteBufferToFileAtomically: failed to allocate temp file after 16 "
+                      "attempts: dir={}, final={}",
+                      dir.string(), final_path.string());
+        throw IOError("Failed to allocate temporary output file");
     };
 
     auto temp_path = make_temp();
+    TempFileGuard guard(temp_path);
 
     {
+        errno = 0;
         std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
+        const int open_err = errno;
         if (!out.is_open()) {
-            throw IOError("Cannot open file for writing: " + temp_path.string());
+            const std::string reason = SystemReason(open_err);
+            spdlog::error("WriteBufferToFileAtomically: cannot open temp file: temp={}, final={}, "
+                          "errno={} ({})",
+                          temp_path.string(), final_path.string(), open_err, reason);
+            throw IOError("Failed to open output file: " + reason);
         }
+        errno = 0;
         out.write(reinterpret_cast<const char*>(bytes.data()),
                   static_cast<std::streamsize>(bytes.size()));
-        if (!out.good()) { throw IOError("Cannot write to " + temp_path.string()); }
+        const int write_err = errno;
+        if (!out.good()) {
+            const std::string reason = SystemReason(write_err);
+            spdlog::error("WriteBufferToFileAtomically: write failed: temp={}, final={}, bytes={}, "
+                          "errno={} ({})",
+                          temp_path.string(), final_path.string(), bytes.size(), write_err, reason);
+            throw IOError("Failed to write output file: " + reason);
+        }
+        errno = 0;
+        out.close();
+        const int close_err = errno;
+        if (out.fail()) {
+            const std::string reason = SystemReason(close_err);
+            spdlog::error("WriteBufferToFileAtomically: close failed: temp={}, final={}, errno={} "
+                          "({})",
+                          temp_path.string(), final_path.string(), close_err, reason);
+            throw IOError("Failed to flush output file: " + reason);
+        }
     }
 
     std::error_code ec;
@@ -860,16 +937,21 @@ void WriteBufferToFileAtomically(const std::filesystem::path& final_path,
     if (std::filesystem::exists(final_path, ec) && !ec) {
         std::filesystem::remove(final_path, ec);
         if (ec) {
-            std::filesystem::remove(temp_path, ec);
-            throw IOError("Failed to replace " + final_path.string() + ": " + ec.message());
+            spdlog::error("WriteBufferToFileAtomically: cannot remove pre-existing final file: "
+                          "final={}, ec={}",
+                          final_path.string(), ec.message());
+            throw IOError("Failed to replace existing output file: " + ec.message());
         }
     }
 #endif
     std::filesystem::rename(temp_path, final_path, ec);
     if (ec) {
-        std::filesystem::remove(temp_path, ec);
-        throw IOError("Failed to move temp file for " + final_path.string() + ": " + ec.message());
+        spdlog::error("WriteBufferToFileAtomically: rename failed: temp={}, final={}, ec={}",
+                      temp_path.string(), final_path.string(), ec.message());
+        throw IOError("Failed to commit output file: " + ec.message());
     }
+    guard.Commit();
+
     spdlog::debug("WriteBufferToFileAtomically: {} bytes to {}", bytes.size(), final_path.string());
 }
 

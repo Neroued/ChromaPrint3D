@@ -197,9 +197,11 @@ SpillableArtifact SpillSvgToFile(const std::filesystem::path& path, const std::s
 
 TaskRuntime::TaskRuntime(std::int64_t worker_count, std::int64_t max_queue,
                          std::int64_t ttl_seconds, std::int64_t max_tasks_per_owner,
-                         std::int64_t max_total_result_bytes, const std::string& data_dir)
+                         std::int64_t max_total_result_bytes, std::int64_t max_total_spill_bytes,
+                         const std::string& data_dir)
     : max_queue_(max_queue), ttl_seconds_(ttl_seconds), max_tasks_per_owner_(max_tasks_per_owner),
-      max_total_result_bytes_(max_total_result_bytes) {
+      max_total_result_bytes_(max_total_result_bytes),
+      max_total_spill_bytes_(max_total_spill_bytes) {
     auto primary  = std::filesystem::path(data_dir) / "tmp" / "results";
     auto fallback = std::filesystem::temp_directory_path() / "chromaprint3d_results";
 
@@ -933,8 +935,10 @@ bool TaskRuntime::ReplaceRecipe(const std::string& owner, const std::string& id,
         it->second.spilled_3mf    = SpillableArtifact{};
     }
     RefreshArtifactBytesLocked(it->second);
+    RefreshSpillBytesLocked(it->second);
     TouchTaskLocked(it->second, std::chrono::steady_clock::now());
     EnforceResultBudgetLocked(&id);
+    EnforceSpillBudgetLocked(&id);
 
     auto summary = GetRecipeEditorSummaryLocked(it->second);
     if (summary.has_value()) { out_summary = std::move(*summary); }
@@ -985,6 +989,7 @@ SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const st
         cp->stage                 = ChromaPrint3D::ConvertStage::BuildingModel;
         cp->progress              = 0.0f;
         RefreshArtifactBytesLocked(it->second);
+        RefreshSpillBytesLocked(it->second);
         TouchTaskLocked(it->second, now);
         queue_.push_back(QueueEntry{
             id,
@@ -1090,10 +1095,12 @@ SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const st
                         cp->generation.completed_at = now;
                         rec.spilled_3mf             = std::move(spilled_3mf);
                         this->RefreshArtifactBytesLocked(rec);
+                        this->RefreshSpillBytesLocked(rec);
                         this->TouchTaskLocked(rec, now);
                     });
                     UpdateTaskRecord(id, [&](TaskRecord& rec) {
                         this->EnforceResultBudgetLocked(&rec.snapshot.id);
+                        this->EnforceSpillBudgetLocked(&rec.snapshot.id);
                     });
                 } catch (const std::exception& e) {
                     spdlog::error("GenerateModel failed for task {}: {}", id, e.what());
@@ -1110,6 +1117,7 @@ SubmitResult TaskRuntime::SubmitGenerateModel(const std::string& owner, const st
                         cp->progress              = 0.0f;
                         rec.spilled_3mf           = SpillableArtifact{};
                         this->RefreshArtifactBytesLocked(rec);
+                        this->RefreshSpillBytesLocked(rec);
                         this->TouchTaskLocked(rec, now);
                     });
                 }
@@ -1180,6 +1188,7 @@ bool TaskRuntime::DeleteTask(const std::string& owner, const std::string& id, in
         }
         queue_.erase(queue_it);
         total_artifact_bytes_ -= std::min(total_artifact_bytes_, it->second.artifact_bytes);
+        total_spill_bytes_ -= std::min(total_spill_bytes_, it->second.spill_bytes);
         tasks_.erase(it);
         status_code = 200;
         return true;
@@ -1190,6 +1199,7 @@ bool TaskRuntime::DeleteTask(const std::string& owner, const std::string& id, in
         return false;
     }
     total_artifact_bytes_ -= std::min(total_artifact_bytes_, it->second.artifact_bytes);
+    total_spill_bytes_ -= std::min(total_spill_bytes_, it->second.spill_bytes);
     tasks_.erase(it);
     status_code = 200;
     return true;
@@ -1571,6 +1581,7 @@ void TaskRuntime::MarkCompleted(const std::string& id) {
     it->second.snapshot.completed_at     = now;
     it->second.snapshot.last_accessed_at = now;
     RefreshArtifactBytesLocked(it->second);
+    RefreshSpillBytesLocked(it->second);
     const double elapsed = ElapsedMs(it->second.snapshot.created_at, now);
 
     if (auto* vp = std::get_if<VectorizeTaskPayload>(&it->second.snapshot.payload)) {
@@ -1592,6 +1603,7 @@ void TaskRuntime::MarkCompleted(const std::string& id) {
             ChromaPrint3D::GetProcessRssBytes() / (1024 * 1024));
     }
     EnforceResultBudgetLocked(&id);
+    EnforceSpillBudgetLocked(&id);
 }
 
 std::size_t TaskRuntime::ComputeArtifactBytes(const TaskSnapshot& snapshot) const {
@@ -1779,24 +1791,51 @@ void TaskRuntime::CleanupLoop() {
 }
 
 void TaskRuntime::CleanupExpiredLocked(const std::chrono::steady_clock::time_point& now) {
+    std::size_t scanned               = 0;
+    std::size_t erased                = 0;
+    std::size_t gen_running           = 0;
+    std::size_t still_pending         = 0;
+    std::size_t still_running         = 0;
+    std::size_t completed_not_expired = 0;
     for (auto it = tasks_.begin(); it != tasks_.end();) {
+        ++scanned;
         const auto& t = it->second.snapshot;
         if (IsGenerationRunningLocked(it->second)) {
+            ++gen_running;
+            ++it;
+            continue;
+        }
+        if (t.status == RuntimeTaskStatus::Pending) {
+            ++still_pending;
+            ++it;
+            continue;
+        }
+        if (t.status == RuntimeTaskStatus::Running) {
+            ++still_running;
             ++it;
             continue;
         }
         if (t.status == RuntimeTaskStatus::Completed || t.status == RuntimeTaskStatus::Failed) {
-            auto elapsed =
+            const auto elapsed =
                 std::chrono::duration_cast<std::chrono::seconds>(now - t.completed_at).count();
             if (elapsed > ttl_seconds_) {
                 total_artifact_bytes_ -= std::min(total_artifact_bytes_, it->second.artifact_bytes);
+                total_spill_bytes_ -= std::min(total_spill_bytes_, it->second.spill_bytes);
                 it = tasks_.erase(it);
+                ++erased;
                 continue;
             }
+            ++completed_not_expired;
         }
         ++it;
     }
+    spdlog::debug("CleanupExpired: scanned={}, erased={}, gen_running={}, pending={}, running={}, "
+                  "completed_not_expired={}, ttl={}s, total_artifact_bytes={}, "
+                  "total_spill_bytes={}",
+                  scanned, erased, gen_running, still_pending, still_running, completed_not_expired,
+                  ttl_seconds_, total_artifact_bytes_, total_spill_bytes_);
     EnforceResultBudgetLocked();
+    EnforceSpillBudgetLocked();
 }
 
 void TaskRuntime::EnforceResultBudgetLocked(const std::string* protected_task_id) {
@@ -1820,6 +1859,37 @@ void TaskRuntime::EnforceResultBudgetLocked(const std::string* protected_task_id
                      OwnerTag(oldest->second.snapshot.owner), oldest->second.artifact_bytes,
                      total_artifact_bytes_, max_total_result_bytes_);
         total_artifact_bytes_ -= std::min(total_artifact_bytes_, oldest->second.artifact_bytes);
+        total_spill_bytes_ -= std::min(total_spill_bytes_, oldest->second.spill_bytes);
+        tasks_.erase(oldest);
+    }
+}
+
+void TaskRuntime::EnforceSpillBudgetLocked(const std::string* protected_task_id) {
+    if (max_total_spill_bytes_ <= 0) return;
+    while (static_cast<std::int64_t>(total_spill_bytes_) > max_total_spill_bytes_) {
+        auto oldest = tasks_.end();
+        for (auto it = tasks_.begin(); it != tasks_.end(); ++it) {
+            // Only completed/failed tasks with actual on-disk files are eligible.
+            // Pending/running tasks still need their spill file (not yet published);
+            // tasks without spill bytes belong to the in-memory result budget.
+            if (it->second.spill_bytes == 0) continue;
+            auto st = it->second.snapshot.status;
+            if (st != RuntimeTaskStatus::Completed && st != RuntimeTaskStatus::Failed) continue;
+            if (IsGenerationRunningLocked(it->second)) continue;
+            if (protected_task_id && it->first == *protected_task_id) continue;
+            if (oldest == tasks_.end() ||
+                it->second.snapshot.last_accessed_at < oldest->second.snapshot.last_accessed_at) {
+                oldest = it;
+            }
+        }
+        if (oldest == tasks_.end()) break;
+        spdlog::warn("EnforceSpillBudget: evicting task {}, kind={}, owner={}, spill_bytes={}, "
+                     "total_before={}, budget={}",
+                     oldest->first, TaskKindToString(oldest->second.snapshot.kind),
+                     OwnerTag(oldest->second.snapshot.owner), oldest->second.spill_bytes,
+                     total_spill_bytes_, max_total_spill_bytes_);
+        total_artifact_bytes_ -= std::min(total_artifact_bytes_, oldest->second.artifact_bytes);
+        total_spill_bytes_ -= std::min(total_spill_bytes_, oldest->second.spill_bytes);
         tasks_.erase(oldest);
     }
 }
@@ -1828,6 +1898,19 @@ void TaskRuntime::RefreshArtifactBytesLocked(TaskRecord& rec) {
     total_artifact_bytes_ -= std::min(total_artifact_bytes_, rec.artifact_bytes);
     rec.artifact_bytes = ComputeArtifactBytes(rec.snapshot);
     total_artifact_bytes_ += rec.artifact_bytes;
+}
+
+void TaskRuntime::RefreshSpillBytesLocked(TaskRecord& rec) {
+    total_spill_bytes_ -= std::min(total_spill_bytes_, rec.spill_bytes);
+    rec.spill_bytes = ComputeSpillBytes(rec);
+    total_spill_bytes_ += rec.spill_bytes;
+}
+
+std::size_t TaskRuntime::ComputeSpillBytes(const TaskRecord& rec) {
+    std::size_t bytes = 0;
+    if (rec.spilled_3mf.has_file()) bytes += rec.spilled_3mf.file_size();
+    if (rec.spilled_svg.has_file()) bytes += rec.spilled_svg.file_size();
+    return bytes;
 }
 
 bool TaskRuntime::IsGenerationRunningLocked(const TaskRecord& rec) const {

@@ -75,7 +75,7 @@ public:
     SharedTaskRuntimeHarness()
         : data_dir_(MakeUniqueTempDir()),
           runtime_(std::make_unique<TaskRuntime>(1, 16, 3600, 16, 256 * 1024 * 1024,
-                                                 data_dir_.string())),
+                                                 4LL * 1024 * 1024 * 1024, data_dir_.string())),
           db_(LoadTestColorDb()) {}
 
     TaskRuntime& runtime() { return *runtime_; }
@@ -193,6 +193,78 @@ TEST(TaskRuntimeTest, MatchOnlyGenerationFailurePreservesTaskStateAndAllowsRetry
     ASSERT_TRUE(download_result.ok) << download_result.message;
     EXPECT_EQ(download_result.status_code, 200);
     EXPECT_TRUE(downloaded_artifact.is_file_based() || !downloaded_artifact.bytes.empty());
+}
+
+TEST(TaskRuntimeTest, SpillBudgetEvictsOldestCompletedTaskAfterLruGraceInflation) {
+    // Use a dedicated runtime with a deliberately tiny spill budget so that
+    // *any* on-disk 3MF (which is at least a few KB even for an 8x8 image)
+    // breaches the threshold on completion. The newest task is protected by
+    // `EnforceSpillBudgetLocked(&id)`, so only the previously-completed one
+    // can be LRU-evicted.
+    const auto data_dir = MakeUniqueTempDir();
+    TaskRuntime runtime(/*worker_count=*/1,
+                        /*max_queue=*/16,
+                        /*ttl_seconds=*/3600,
+                        /*max_tasks_per_owner=*/16,
+                        /*max_total_result_bytes=*/256 * 1024 * 1024,
+                        /*max_total_spill_bytes=*/1024, data_dir.string());
+
+    auto db                 = LoadTestColorDb();
+    const std::string owner = "spill-budget-owner";
+
+    auto submit_full_convert = [&](const std::string& name) {
+        ConvertRasterRequest request;
+        request.image_buffer         = EncodeTestPng();
+        request.image_name           = name + ".png";
+        request.preloaded_dbs        = {db};
+        request.color_layers         = 5;
+        request.generate_preview     = true;
+        request.generate_source_mask = true;
+        request.model_enable         = true;
+        request.max_width            = 8;
+        request.max_height           = 8;
+        return runtime.SubmitConvertRaster(owner, std::move(request), name);
+    };
+
+    const auto first = submit_full_convert("first-task");
+    ASSERT_TRUE(first.ok) << first.message;
+    const auto first_completed = WaitForSnapshot(
+        runtime, owner, first.task_id,
+        [](const TaskSnapshot& snapshot) {
+            return snapshot.status == RuntimeTaskStatus::Completed ||
+                   snapshot.status == RuntimeTaskStatus::Failed;
+        },
+        30s);
+    ASSERT_EQ(first_completed.status, RuntimeTaskStatus::Completed);
+
+    // First completion alone cannot trigger eviction of itself (it is the
+    // task being protected), so it must still be reachable.
+    ASSERT_TRUE(runtime.FindTask(owner, first.task_id).has_value());
+
+    // Make absolutely sure `first` has an older last_accessed_at than the
+    // upcoming task so that LRU order is deterministic.
+    std::this_thread::sleep_for(20ms);
+
+    const auto second = submit_full_convert("second-task");
+    ASSERT_TRUE(second.ok) << second.message;
+    const auto second_completed = WaitForSnapshot(
+        runtime, owner, second.task_id,
+        [](const TaskSnapshot& snapshot) {
+            return snapshot.status == RuntimeTaskStatus::Completed ||
+                   snapshot.status == RuntimeTaskStatus::Failed;
+        },
+        30s);
+    ASSERT_EQ(second_completed.status, RuntimeTaskStatus::Completed);
+
+    // After the second completion, spill usage exceeds the 1 KB budget with
+    // `second` protected; the oldest (`first`) must have been evicted.
+    EXPECT_FALSE(runtime.FindTask(owner, first.task_id).has_value())
+        << "oldest completed task should have been evicted by spill-budget LRU";
+    EXPECT_TRUE(runtime.FindTask(owner, second.task_id).has_value())
+        << "newest completed task must be protected from self-eviction";
+
+    std::error_code ec;
+    std::filesystem::remove_all(data_dir, ec);
 }
 
 TEST(TaskRuntimeTest, FindTaskRefreshesLastAccessedWithoutMovingCompletedAt) {

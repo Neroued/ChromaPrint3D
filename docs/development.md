@@ -419,7 +419,8 @@ npm run dev
 - 队列上限：`--max-queue`
 - 单会话并发上限：`--max-owner-tasks`
 - 结果缓存 TTL：`--task-ttl`
-- 结果总内存预算：`--max-result-mb`
+- 结果总内存预算：`--max-result-mb`（内存中的 artifact：preview、mask、match state 等，**不含** 3MF 落盘文件）
+- 结果磁盘预算：`--max-spill-gb`（`data_dir/tmp/results/` 下 3MF 落盘文件总量，LRU 淘汰最老的完成态/失败态任务连同文件）
 
 对 `match_only` 转换任务还有一层独立的生成子状态：
 

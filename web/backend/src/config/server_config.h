@@ -24,8 +24,14 @@ struct ServerConfig {
     std::int64_t session_ttl_seconds = 3600;
     std::int64_t max_task_queue      = 256;
 
-    std::int64_t max_tasks_per_owner      = 32;
-    std::int64_t max_task_result_mb       = 512;
+    std::int64_t max_tasks_per_owner = 32;
+    std::int64_t max_task_result_mb  = 512;
+    // Disk budget for spilled 3MF results under `data_dir/tmp/results/`. When the
+    // aggregate spilled size exceeds this value, the runtime evicts the oldest
+    // completed/failed tasks (by `last_accessed_at`) along with their on-disk
+    // files. Separate from `max_task_result_mb`, which only tracks in-memory
+    // artifacts (preview, mask, recipe-editor match state, etc.).
+    std::int64_t max_spill_gb             = 4;
     std::int64_t max_pixels_per_image     = 4096LL * 4096LL;
     std::int64_t max_session_colordbs     = 10;
     std::int64_t board_cache_ttl          = 600;
