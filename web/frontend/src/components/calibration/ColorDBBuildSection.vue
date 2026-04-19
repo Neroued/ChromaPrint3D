@@ -16,6 +16,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../../composables/useBlobDownload'
 import { useColorDBBuildFlow } from '../../composables/useColorDBBuildFlow'
+import { trackEvent } from '../../services/analytics'
 import { getSessionColorDBDownloadPath } from '../../services/sessionColorDBService'
 import CalibrationLocatePreview from './CalibrationLocatePreview.vue'
 import ColorDBResultOverview from './ColorDBResultOverview.vue'
@@ -87,6 +88,7 @@ async function handleBuildAndNotify() {
 
 async function downloadBuiltDB() {
   if (!builtDB.value) return
+  trackEvent('colordb-download-json')
   await downloadByUrl(
     getSessionColorDBDownloadPath(builtDB.value.name),
     `${builtDB.value.name}.json`,

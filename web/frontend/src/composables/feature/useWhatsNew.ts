@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchManifestFromUrl } from './versionManifest'
 import type { VersionManifest } from './versionManifest'
 import { getStorageItem, setStorageItem } from '../../runtime/storage'
+import { trackEvent } from '../../services/analytics'
 
 const SEEN_KEY = 'chromaprint3d-whats-new-seen'
 const LOCAL_MANIFEST_PATH = `${import.meta.env.BASE_URL}version-manifest.json`
@@ -60,6 +61,7 @@ export function useWhatsNew() {
     const seen = await getStorageItem(SEEN_KEY)
     if (seen !== data.version) {
       visible.value = true
+      trackEvent('whats-new-open', { trigger: 'auto' })
     }
   }
 

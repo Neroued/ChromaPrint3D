@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NSpace, NText, NButton } from 'naive-ui'
 import type { Announcement, AnnouncementSeverity, AnnouncementType } from '../types'
 import { useAnnouncements } from '../composables/useAnnouncements'
+import { trackEvent } from '../services/analytics'
 
 const { t, locale } = useI18n()
 const announcements = useAnnouncements()
@@ -133,6 +134,7 @@ const items = computed<Item[]>(() =>
 )
 
 async function handleDismiss(id: string) {
+  trackEvent('announcement-dismiss', { id })
   await announcements.dismiss(id)
 }
 </script>

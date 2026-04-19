@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NSpace, NText } from 'naive-ui'
 import { useUpdateChecker } from '../composables/feature/useUpdateChecker'
+import { trackEvent } from '../services/analytics'
 
 const { t } = useI18n()
 const { latestVersion, changelog, downloadUrl, showBanner, dismiss } = useUpdateChecker()
@@ -15,11 +16,20 @@ const changelogLines = computed(() => {
     .map((l) => l.trim())
     .filter(Boolean)
 })
+
+function onDismissClick() {
+  trackEvent('update-banner-click', { action: 'dismiss' })
+  dismiss()
+}
+
+function onDownloadClick() {
+  trackEvent('update-banner-click', { action: 'download' })
+}
 </script>
 
 <template>
   <div v-if="showBanner" class="update-banner">
-    <NAlert type="info" closable @close="dismiss">
+    <NAlert type="info" closable @close="onDismissClick">
       <template #header>
         {{ t('app.update.newVersionAvailable', { version: latestVersion }) }}
       </template>
@@ -38,6 +48,7 @@ const changelogLines = computed(() => {
             rel="noopener noreferrer"
             type="info"
             size="small"
+            @click="onDownloadClick"
           >
             {{ t('app.update.download') }}
           </NButton>

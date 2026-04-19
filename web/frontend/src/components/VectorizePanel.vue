@@ -44,6 +44,13 @@ import {
   getVectorizeSvgPath,
   submitVectorize,
 } from '../services/vectorizeService'
+import {
+  trackEvent,
+  toDurationMs,
+  roundKb,
+  shortenError,
+  resolveErrorCode,
+} from '../services/analytics'
 
 const { t } = useI18n()
 
@@ -75,7 +82,7 @@ const upload = useRasterToolUpload({
 
 const {
   backendMaxUploadMb,
-  clearFile,
+  clearFile: clearFileRaw,
   file,
   fileList,
   handleUploadChange,
@@ -85,6 +92,13 @@ const {
   rasterImageAccept,
   rasterImageFormatsText,
 } = upload
+
+function clearFile() {
+  if (file.value) {
+    trackEvent('vectorize-clear-file')
+  }
+  clearFileRaw()
+}
 
 const submitParams = computed<VectorizeParams>(() =>
   normalizeVectorizeParams(params.value, defaultVectorizeParams),
@@ -106,8 +120,23 @@ const {
   () => submitVectorize(file.value!, submitParams.value),
   fetchVectorizeTaskStatus,
   {
-    onCompleted() {
+    onCompleted(s) {
+      trackEvent('vectorize-complete', {
+        duration_ms: toDurationMs(s.timing?.pipeline_ms ?? null),
+        width: s.width,
+        height: s.height,
+        num_shapes: s.num_shapes,
+        svg_size_kb: roundKb(s.svg_size),
+        resolved_num_colors: s.resolved_num_colors,
+      })
       fetchSvgBlob(taskId.value!)
+    },
+    onFailed(s) {
+      const err = s.error ?? 'unknown'
+      trackEvent('vectorize-fail', {
+        error: shortenError(err),
+        error_code: resolveErrorCode(err),
+      })
     },
   },
 )
@@ -119,6 +148,10 @@ const canExecute = computed(() => file.value !== null && !loading.value)
 
 async function handleVectorize() {
   if (!file.value) return
+  trackEvent('vectorize-start', {
+    input_size_kb: roundKb(file.value.size),
+    num_colors: submitParams.value.num_colors ?? 0,
+  })
   revokeBlobUrls()
   svgContent.value = null
   panZoomGroups.resetAll()
@@ -170,6 +203,9 @@ async function handleDownloadSvg() {
   if (!svgBlobUrl.value) return
   try {
     await downloadByObjectUrl(svgBlobUrl.value, `${fileBaseName.value}.svg`)
+    trackEvent('vectorize-download-svg', {
+      svg_size_kb: roundKb(taskStatus.value?.svg_size ?? null),
+    })
   } catch {
     // handled by useBlobDownload callback
   }
@@ -182,6 +218,7 @@ function handleUseSvgForConvert() {
   })
   appStore.setSelectedFile(resultFile)
   appStore.activeTab = 'convert'
+  trackEvent('vectorize-use-for-convert')
 }
 
 // ── Computed helpers ─────────────────────────────────────────────────────

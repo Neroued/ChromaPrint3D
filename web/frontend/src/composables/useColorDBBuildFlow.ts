@@ -2,6 +2,7 @@ import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { UploadFileInfo } from 'naive-ui'
 import { buildColorDB, locateCalibrationBoard } from '../api/calibration'
+import { resolveErrorCode, shortenError, toDurationMs, trackEvent } from '../services/analytics'
 import type { ColorDBBuildResult, CalibrationLocateResult } from '../types'
 import { isValidColorDBName } from './colordbName'
 
@@ -156,6 +157,8 @@ export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
     locateError.value = null
     buildError.value = null
 
+    trackEvent('colordb-locate-start')
+    const startTs = performance.now()
     try {
       if (!boardGeometry.value && metaJsonCache.value) {
         boardGeometry.value = parseMetaGeometry(metaJsonCache.value)
@@ -165,10 +168,17 @@ export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
       locateResult.value = result
       corners.value = result.corners.map((c) => [c[0], c[1]] as [number, number])
       phase.value = 'preview'
+      trackEvent('colordb-locate-complete', {
+        duration_ms: toDurationMs(performance.now() - startTs),
+      })
       return true
     } catch (error: unknown) {
       locateError.value = error instanceof Error ? error.message : String(error)
       phase.value = 'upload'
+      trackEvent('colordb-locate-fail', {
+        error: shortenError(error),
+        error_code: resolveErrorCode(error),
+      })
       return false
     }
   }
@@ -180,6 +190,8 @@ export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
     building.value = true
     builtDB.value = null
     buildError.value = null
+    trackEvent('colordb-build-start')
+    const startTs = performance.now()
     try {
       const result = await buildColorDB(
         calibImage.value,
@@ -189,6 +201,11 @@ export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
       )
       builtDB.value = result
       phase.value = 'result'
+      trackEvent('colordb-build-complete', {
+        num_channels: result.num_channels,
+        num_entries: result.num_entries,
+        duration_ms: toDurationMs(performance.now() - startTs),
+      })
       if (options.onBuilt) {
         await options.onBuilt(result)
       }
@@ -196,6 +213,10 @@ export function useColorDBBuildFlow(options: UseColorDBBuildFlowOptions = {}) {
     } catch (error: unknown) {
       buildError.value = error instanceof Error ? error.message : String(error)
       phase.value = 'preview'
+      trackEvent('colordb-build-fail', {
+        error: shortenError(error),
+        error_code: resolveErrorCode(error),
+      })
       return null
     } finally {
       building.value = false

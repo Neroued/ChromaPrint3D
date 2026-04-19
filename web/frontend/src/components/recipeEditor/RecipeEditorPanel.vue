@@ -33,6 +33,7 @@ import RegionOverlayCanvas from './RegionOverlayCanvas.vue'
 import ZoomableImageViewport from '../common/ZoomableImageViewport.vue'
 import { useBlobDownload } from '../../composables/useBlobDownload'
 import { getResultPath } from '../../services/resultService'
+import { trackEvent, toDurationMs, shortenError, resolveErrorCode } from '../../services/analytics'
 
 const props = defineProps<{
   taskId: string
@@ -332,7 +333,7 @@ async function handleCandidateSelect(candidate: RecipeCandidate) {
     }
 
     if (generateDone.value) editedAfterGenerate.value = true
-    window.umami?.track('recipe-replace', { regionCount: regionIds.length })
+    trackEvent('recipe-replace', { region_count: regionIds.length })
     message.success(t('recipeEditor.replaceSuccess'))
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
@@ -346,6 +347,7 @@ async function handleUndo() {
   if (undoStack.value.length === 0 || !summary.value) return
   const entry = undoStack.value.pop()!
   replacing.value = true
+  trackEvent('recipe-undo')
   try {
     const newSummary = await replaceRecipe(
       props.taskId,
@@ -444,6 +446,7 @@ async function handleGenerate() {
   generateDone.value = false
   editedAfterGenerate.value = false
   appStore.clearCompletedTask()
+  const startedAt = performance.now()
   try {
     await submitGenerateModel(props.taskId)
     const status = await waitForRecipeGeneration(props.taskId, {
@@ -452,11 +455,16 @@ async function handleGenerate() {
     })
     appStore.setCompletedTask(status)
     generateDone.value = true
-    window.umami?.track('generate-model-complete')
+    trackEvent('recipe-generate-complete', {
+      duration_ms: toDurationMs(performance.now() - startedAt),
+    })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     generateError.value = msg
-    window.umami?.track('generate-model-fail', { error: msg.slice(0, 120) })
+    trackEvent('recipe-generate-fail', {
+      error: shortenError(e),
+      error_code: resolveErrorCode(e),
+    })
   } finally {
     generating.value = false
   }
@@ -465,9 +473,11 @@ async function handleGenerate() {
 async function handleDownload3MF() {
   if (downloading3mf.value) return
   downloading3mf.value = true
+  const baseName = appStore.selectedFile?.name?.replace(/\.[^.]+$/, '') ?? 'result'
+  const filename = `${baseName}.3mf`
   try {
-    const baseName = appStore.selectedFile?.name?.replace(/\.[^.]+$/, '') ?? 'result'
-    await downloadByUrl(getResultPath(props.taskId), `${baseName}.3mf`)
+    await downloadByUrl(getResultPath(props.taskId), filename)
+    trackEvent('recipe-download-3mf', { filename })
   } catch {
     /* handled by runtime */
   } finally {
@@ -518,6 +528,10 @@ watch(
   },
   { immediate: true },
 )
+
+watch(globalMode, (enabled) => {
+  trackEvent('recipe-global-mode-toggle', { enabled })
+})
 
 onUnmounted(() => {
   stopKeepalive()

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { UploadFileInfo } from 'naive-ui'
 import { uploadColorDB } from '../api/session'
+import { trackEvent } from '../services/analytics'
 import type { ColorDBInfo } from '../types'
 
 export interface UploadResultItem {
@@ -75,6 +76,14 @@ export function useColorDBUploadFlow(options: UseColorDBUploadFlowOptions = {}) 
           ? (results[0]?.error ?? t('colordb.upload.messages.singleUploadFailed'))
           : t('colordb.upload.messages.allUploadFailed')
     }
+
+    const failCount = results.length - uploaded.length
+    trackEvent('colordb-upload', {
+      mode: files.length > 1 ? 'batch' : 'single',
+      count: files.length,
+      ok: uploaded.length,
+      fail: failCount,
+    })
 
     if (options.onBatchDone) {
       await options.onBatchDone(results)
