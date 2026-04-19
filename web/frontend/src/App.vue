@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import {
@@ -45,6 +45,7 @@ import { useAppLifecycle } from './composables/feature/useAppLifecycle'
 import { useUpdateChecker } from './composables/feature/useUpdateChecker'
 import { useWhatsNew } from './composables/feature/useWhatsNew'
 import { isElectronRuntime } from './runtime/platform'
+import { trackEvent, trackPageview, updateSessionProperties } from './services/analytics'
 import {
   getSiteIcpNumber,
   getSiteIcpUrl,
@@ -130,36 +131,75 @@ const SUB_TAB_VIRTUAL_URLS: Record<string, Record<string, string>> = {
   },
 }
 
-function trackVirtualPageview(url: string) {
-  window.umami?.track((props: Record<string, unknown>) => ({ ...props, url }))
+// Maps every virtual URL to the i18n key whose translation represents the
+// page title. Keeping the mapping explicit avoids accidentally reporting an
+// untranslated identifier if a sub-tab is ever renamed.
+const VIRTUAL_TITLE_KEY: Record<string, string> = {
+  '/convert': 'app.tabs.convert',
+  '/preprocess/vectorize': 'app.tabs.vectorize',
+  '/preprocess/matting': 'app.tabs.matting',
+  '/calibration-tools/calibration': 'app.tabs.calibration',
+  '/calibration-tools/calibration-8color': 'app.tabs.calibration8color',
+  '/calibration-tools/colordb-build': 'app.tabs.colordbBuild',
+  '/colordb-upload': 'app.tabs.colordbUpload',
 }
 
+const effectiveVirtualUrl = computed(() => {
+  const tab = activeTab.value
+  if (tab === 'preprocess') {
+    return (
+      SUB_TAB_VIRTUAL_URLS['preprocess']?.[activePreprocessTab.value] ?? TAB_VIRTUAL_URLS[tab] ?? ''
+    )
+  }
+  if (tab === 'calibration-tools') {
+    return (
+      SUB_TAB_VIRTUAL_URLS['calibration-tools']?.[activeCalibrationTab.value] ??
+      TAB_VIRTUAL_URLS[tab] ??
+      ''
+    )
+  }
+  return TAB_VIRTUAL_URLS[tab] ?? ''
+})
+
+const effectiveVirtualTitle = computed(() => {
+  const url = effectiveVirtualUrl.value
+  if (!url) return undefined
+  const key = VIRTUAL_TITLE_KEY[url]
+  return key ? t(key) : undefined
+})
+
+function reportCurrentPageview() {
+  const url = effectiveVirtualUrl.value
+  if (!url) return
+  trackPageview(url, effectiveVirtualTitle.value)
+}
+
+// Watch the derived URL so sub-tab switches also emit virtual pageviews.
+// `immediate: false` + an explicit `onMounted` call keeps boot to a single
+// pageview instead of the triple fire the old three-watcher setup produced.
+watch(effectiveVirtualUrl, (url, prev) => {
+  if (!url || url === prev) return
+  reportCurrentPageview()
+})
+
+onMounted(() => {
+  reportCurrentPageview()
+})
+
+// Keep Umami session properties in sync with runtime state. The first
+// identify is triggered on tracker load; these watchers refresh it whenever
+// the server version resolves or the user toggles the locale.
 watch(
-  activeTab,
-  (tab) => {
-    const url = TAB_VIRTUAL_URLS[tab]
-    if (url) trackVirtualPageview(url)
+  serverVersion,
+  (v) => {
+    if (v) updateSessionProperties({ version: v })
   },
   { immediate: true },
 )
 
-watch(
-  activePreprocessTab,
-  (sub) => {
-    const url = SUB_TAB_VIRTUAL_URLS['preprocess']?.[sub]
-    if (url) trackVirtualPageview(url)
-  },
-  { immediate: true },
-)
-
-watch(
-  activeCalibrationTab,
-  (sub) => {
-    const url = SUB_TAB_VIRTUAL_URLS['calibration-tools']?.[sub]
-    if (url) trackVirtualPageview(url)
-  },
-  { immediate: true },
-)
+watch(locale, (l) => {
+  updateSessionProperties({ locale: l })
+})
 
 useAppLifecycle()
 
@@ -186,7 +226,31 @@ function goToConvert() {
 }
 
 function toggleLocale() {
-  appStore.setLocale(locale.value === 'zh-CN' ? 'en' : 'zh-CN')
+  const from = locale.value
+  const to = from === 'zh-CN' ? 'en' : 'zh-CN'
+  trackEvent('locale-toggle', { from, to })
+  appStore.setLocale(to)
+}
+
+function onShowWhatsNewManual() {
+  trackEvent('whats-new-open', { trigger: 'manual' })
+  showWhatsNew()
+}
+
+function onTutorialClick() {
+  trackEvent('tutorial-click')
+}
+
+function onGithubRepoClick() {
+  trackEvent('github-click', { target: 'repo' })
+}
+
+function onGithubIssuesClick() {
+  trackEvent('github-click', { target: 'issues' })
+}
+
+function onMakerWorldClick() {
+  trackEvent('makerworld-click')
 }
 </script>
 
@@ -207,7 +271,7 @@ function toggleLocale() {
                 v-if="serverVersion"
                 depth="3"
                 class="app-shell__version app-shell__version--clickable"
-                @click="showWhatsNew"
+                @click="onShowWhatsNewManual"
               >
                 v{{ serverVersion }}
               </NText>
@@ -236,6 +300,7 @@ function toggleLocale() {
                 target="_blank"
                 size="small"
                 quaternary
+                @click="onTutorialClick"
               >
                 {{ t('common.videoTutorial') }}
               </NButton>
@@ -262,6 +327,7 @@ function toggleLocale() {
                     href="https://github.com/neroued/ChromaPrint3D"
                     target="_blank"
                     rel="noopener noreferrer"
+                    @click="onGithubRepoClick"
                     >{{ t('app.announcement.starLink') }}</a
                   >{{ t('app.announcement.starSuffix') }}
                   <span class="app-shell__announce-sep">&middot;</span>
@@ -270,13 +336,17 @@ function toggleLocale() {
                     href="https://github.com/neroued/ChromaPrint3D/issues"
                     target="_blank"
                     rel="noopener noreferrer"
+                    @click="onGithubIssuesClick"
                     >{{ t('app.announcement.issueLink') }}</a
                   >
                   <span class="app-shell__announce-sep">&middot;</span>
                   {{ t('app.announcement.makerWorldHint') }}
-                  <a :href="makerWorldUrl" target="_blank" rel="noopener noreferrer">{{
-                    t('app.announcement.makerWorldLink')
-                  }}</a
+                  <a
+                    :href="makerWorldUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    @click="onMakerWorldClick"
+                    >{{ t('app.announcement.makerWorldLink') }}</a
                   >{{ t('app.announcement.makerWorldSuffix') }}
                 </span>
               </div>
@@ -461,6 +531,7 @@ function toggleLocale() {
               target="_blank"
               rel="noopener noreferrer"
               class="app-shell__footer-link"
+              @click="onGithubRepoClick"
             >
               <NText depth="3" class="app-shell__meta-text">GitHub</NText>
             </a>

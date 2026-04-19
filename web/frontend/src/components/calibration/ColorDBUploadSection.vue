@@ -21,6 +21,7 @@ import { useI18n } from 'vue-i18n'
 import { useColorDBUploadFlow } from '../../composables/useColorDBUploadFlow'
 import { fetchSessionColorDBs, deleteSessionColorDB } from '../../api/session'
 import { roundTo } from '../../runtime/number'
+import { trackEvent } from '../../services/analytics'
 import type { ColorDBInfo } from '../../types'
 
 const { t } = useI18n()
@@ -88,18 +89,23 @@ async function loadSessionDbs() {
 
 async function handleDelete(name: string) {
   deletingName.value = name
+  let ok = 0
+  let fail = 0
   try {
     await deleteSessionColorDB(name)
+    ok = 1
     message.success(t('colordb.upload.messages.deleted', { name }))
     emit('colordb-updated')
     await loadSessionDbs()
   } catch (err: unknown) {
+    fail = 1
     message.error(
       t('colordb.upload.messages.deleteFailed', {
         error: err instanceof Error ? err.message : String(err),
       }),
     )
   } finally {
+    trackEvent('colordb-delete', { mode: 'single', ok, fail })
     deletingName.value = null
   }
 }
@@ -118,6 +124,7 @@ async function handleBatchDelete() {
       fail++
     }
   }
+  trackEvent('colordb-delete', { mode: 'batch', ok, fail })
   if (ok > 0) emit('colordb-updated')
   if (fail === 0) {
     message.success(t('colordb.upload.messages.batchDeleted', { count: ok }))

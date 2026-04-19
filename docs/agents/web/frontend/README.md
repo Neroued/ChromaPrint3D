@@ -29,6 +29,7 @@
 | 调整多标签健康上报/leader 选举 | `src/composables/feature/useLeaderLease.ts` + `src/composables/feature/useAppLifecycle.ts` |
 | 调整 Browser/Electron 行为差异 | `src/runtime/*.ts` + `src/electron.d.ts` |
 | 调整公告 banner 展示 / dismiss 行为 | `src/components/AnnouncementBanner.vue` + `src/composables/useAnnouncements.ts` + `src/api/announcements.ts` + `src/locales/{zh-CN,en}.ts` |
+| 新增 / 修改 Umami 埋点事件 | `src/services/analytics.ts`（集中注册 `EVENT_NAMES` / `EventPayloadMap`）+ 调用点；不要直接写 `window.umami?.track(...)`。事件清单同步到 [docs/deployment.md](../../../deployment.md) §8.4 |
 
 ## 分层边界（强约束）
 

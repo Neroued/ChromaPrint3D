@@ -2,6 +2,7 @@ import { computed, ref, type ComputedRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toErrorMessage } from '../runtime/error'
 import { isElectronRuntime } from '../runtime/platform'
+import { resolveErrorCode, shortenError, toDurationMs, trackEvent } from '../services/analytics'
 
 const CONNECTIVITY_CACHE_TTL_MS = 60_000
 
@@ -111,6 +112,7 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
     const checkConnectivity = window.electron?.models?.checkConnectivity
     if (!checkConnectivity) return null
     modelConnectivityLoading.value = true
+    const startTs = performance.now()
     try {
       const report = await checkConnectivity()
       modelConnectivity.value = report
@@ -119,6 +121,11 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
       } else if (modelError.value?.includes(t('matting.connectivity.checkLabel'))) {
         modelError.value = null
       }
+      trackEvent('matting-connectivity-check', {
+        available_sources: report.availableSources,
+        total_sources: report.totalSources,
+        duration_ms: toDurationMs(performance.now() - startTs),
+      })
       return report
     } catch (error: unknown) {
       modelError.value = toErrorMessage(error, t('matting.connectivity.checkFailed'))
@@ -145,6 +152,9 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
     }
   }
 
+  let downloadStartTs: number | null = null
+  let downloadInitialTotalCount = 0
+
   function bindModelProgressListener() {
     if (!isElectron) return
     const modelsApi = window.electron?.models
@@ -157,8 +167,20 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
         downloadSessionBaseBytes.value = payload.downloadedBytes
         downloadSessionTotalBytes.value = Math.max(0, payload.totalBytes - payload.downloadedBytes)
       }
+      if (payload.type === 'completed' && downloadStartTs !== null) {
+        trackEvent('matting-model-download-complete', {
+          duration_ms: toDurationMs(performance.now() - downloadStartTs),
+          total_count: downloadInitialTotalCount,
+        })
+        downloadStartTs = null
+      }
       if (payload.type === 'error') {
         modelError.value = payload.message
+        trackEvent('matting-model-download-fail', {
+          error: shortenError(payload.message),
+          error_code: resolveErrorCode(payload.message),
+        })
+        downloadStartTs = null
       }
       if (
         payload.type === 'completed' ||
@@ -178,6 +200,14 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
     modelProgress.value = null
     downloadSessionBaseBytes.value = 0
     downloadSessionTotalBytes.value = requiredDownloadBytes.value
+    const pendingCount = pendingModelCount.value
+    const totalCount = modelStatus.value?.totalModels ?? 0
+    downloadStartTs = performance.now()
+    downloadInitialTotalCount = totalCount
+    trackEvent('matting-model-download-start', {
+      pending_count: pendingCount,
+      total_count: totalCount,
+    })
     try {
       const connectivity = await checkModelConnectivity()
       if (!connectivity || connectivity.availableSources <= 0) {
@@ -187,6 +217,17 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
       modelStatus.value = await startDownload()
     } catch (error: unknown) {
       modelError.value = toErrorMessage(error, t('matting.model.downloadFailed'))
+      // Pre-download or synchronous failures never reach the progress listener,
+      // so we emit the fail event here to guarantee every "start" has a paired
+      // terminal event. The progress listener only fires if the IPC task was
+      // actually scheduled by the main process.
+      if (downloadStartTs !== null) {
+        trackEvent('matting-model-download-fail', {
+          error: shortenError(error),
+          error_code: resolveErrorCode(error),
+        })
+        downloadStartTs = null
+      }
     } finally {
       modelActionLoading.value = false
       await refreshModelStatus()
@@ -196,6 +237,8 @@ export function useElectronMattingModels(hasOnlyOpenCvMethod: ComputedRef<boolea
   async function handleCancelModelDownload() {
     const cancelDownload = window.electron?.models?.cancelDownload
     if (!cancelDownload) return
+    trackEvent('matting-model-download-cancel')
+    downloadStartTs = null
     try {
       await cancelDownload()
     } catch (error: unknown) {

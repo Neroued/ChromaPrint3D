@@ -16,6 +16,7 @@ import {
 } from '../domain/upload/imageUploadValidation'
 import { getUploadMaxMb, getUploadMaxPixels } from '../runtime/env'
 import { useI18n } from 'vue-i18n'
+import { trackEvent } from '../services/analytics'
 
 const { t } = useI18n()
 
@@ -76,7 +77,7 @@ async function handleChange(options: { fileList: UploadFileInfo[] }) {
     uploadError.value = null
     appStore.setSelectedFile(rawFile)
     const type: InputType = isSvgFile(rawFile) ? 'vector' : 'raster'
-    window.umami?.track('image-select', { type })
+    trackEvent('image-select', { input_type: type })
   }
 }
 

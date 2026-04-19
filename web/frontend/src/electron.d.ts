@@ -122,12 +122,10 @@ declare global {
 
   interface Window {
     electron?: ElectronRendererApi
-    umami?: {
-      track(): void
-      track(event: string, data?: Record<string, unknown>): void
-      track(callback: () => { name: string; data?: Record<string, unknown> }): void
-      track(callback: (props: Record<string, unknown>) => Record<string, unknown>): void
-    }
+    // Intentionally omitted: `window.umami` is an implementation detail of
+    // `src/services/analytics.ts`. All call sites must route through
+    // `trackEvent` / `trackPageview` so event names and payload shapes stay
+    // type-checked and testable.
   }
 
   interface ImportMetaEnv {

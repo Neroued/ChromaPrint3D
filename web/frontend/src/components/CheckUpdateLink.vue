@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { NText, useMessage } from 'naive-ui'
 import { useUpdateChecker } from '../composables/feature/useUpdateChecker'
+import { trackEvent } from '../services/analytics'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -9,6 +10,12 @@ const { checking, checkForUpdate, hasUpdate, lastCheckFailed } = useUpdateChecke
 
 async function handleClick() {
   const found = await checkForUpdate()
+  const result: 'has-update' | 'no-update' | 'fail' = found
+    ? 'has-update'
+    : lastCheckFailed.value
+      ? 'fail'
+      : 'no-update'
+  trackEvent('check-update-click', { result })
   if (!found && !hasUpdate.value) {
     if (lastCheckFailed.value) {
       message.warning(t('app.update.checkFailed'))

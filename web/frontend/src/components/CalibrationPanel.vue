@@ -18,6 +18,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useBlobDownload } from '../composables/useBlobDownload'
 import { generateBoard, getBoardMetaPath, getBoardModelPath } from '../services/calibrationService'
+import { resolveErrorCode, shortenError, toDurationMs, trackEvent } from '../services/analytics'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
 
 type EditablePaletteChannel = PaletteChannel & {
@@ -99,6 +100,14 @@ async function handleGenerate() {
     }
   }
 
+  const channelCount = palette.value.length
+  trackEvent('calibration-generate-start', {
+    board_index: 1,
+    channel_count: channelCount,
+    nozzle_size: nozzleSize.value,
+    face_orientation: faceOrientation.value,
+  })
+  const startTs = performance.now()
   generating.value = true
   boardId.value = null
   try {
@@ -109,12 +118,25 @@ async function handleGenerate() {
     })
     boardId.value = response.board_id
     message.success(t('calibration.generateSuccess'))
+    trackEvent('calibration-generate-complete', {
+      board_index: 1,
+      channel_count: channelCount,
+      nozzle_size: nozzleSize.value,
+      face_orientation: faceOrientation.value,
+      duration_ms: toDurationMs(performance.now() - startTs),
+    })
   } catch (error: unknown) {
     message.error(
       t('calibration.generateFailed', {
         error: error instanceof Error ? error.message : String(error),
       }),
     )
+    trackEvent('calibration-generate-fail', {
+      board_index: 1,
+      channel_count: channelCount,
+      error: shortenError(error),
+      error_code: resolveErrorCode(error),
+    })
   } finally {
     generating.value = false
   }
@@ -123,6 +145,10 @@ async function handleGenerate() {
 async function download3mf() {
   if (!boardId.value) return
   const ch = palette.value.length
+  trackEvent('calibration-download-3mf', {
+    board_index: 1,
+    channel_count: ch,
+  })
   await downloadByUrl(
     getBoardModelPath(boardId.value),
     `calibration-board-${ch}ch-${boardId.value.slice(0, 8)}.3mf`,
@@ -132,6 +158,10 @@ async function download3mf() {
 async function downloadMeta() {
   if (!boardId.value) return
   const ch = palette.value.length
+  trackEvent('calibration-download-meta', {
+    board_index: 1,
+    channel_count: ch,
+  })
   await downloadByUrl(
     getBoardMetaPath(boardId.value),
     `calibration-board-${ch}ch-${boardId.value.slice(0, 8)}-meta.json`,

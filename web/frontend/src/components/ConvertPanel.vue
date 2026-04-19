@@ -15,6 +15,13 @@ import { mapTaskError } from '../domain/error/taskErrorMapping'
 import { useAppStore } from '../stores/app'
 import ProgressActionGroup from './common/ProgressActionGroup.vue'
 import type { TaskStatus } from '../types'
+import {
+  trackEvent,
+  toDurationMs,
+  roundKb,
+  shortenError,
+  resolveErrorCode,
+} from '../services/analytics'
 
 const appStore = useAppStore()
 const { selectedFile, params, inputType, completedTask } = storeToRefs(appStore)
@@ -61,20 +68,23 @@ const {
 } = useAsyncTask<TaskStatus>(submitCurrentTask, fetchConvertTaskStatus, {
   onCompleted(s) {
     appStore.setCompletedTask(s)
-    window.umami?.track('convert-complete', {
-      inputType: inputType.value,
-      has3mf: Boolean(s.result?.has_3mf),
-      elapsed_s: s.elapsed_ms != null ? Math.round(s.elapsed_ms / 1000) : -1,
+    trackEvent('convert-complete', {
+      input_type: inputType.value,
+      has_3mf: Boolean(s.result?.has_3mf),
+      duration_ms: toDurationMs(s.elapsed_ms),
       width: s.result?.input_width ?? 0,
       height: s.result?.input_height ?? 0,
       avg_de: s.result?.stats?.avg_db_de ?? -1,
+      colordb_count: params.value.db_names?.length ?? 0,
     })
   },
   onFailed(s) {
     appStore.markTaskFailed()
-    window.umami?.track('convert-fail', {
-      inputType: inputType.value,
-      error: (s.error ?? 'unknown').slice(0, 120),
+    const err = s.error ?? 'unknown'
+    trackEvent('convert-fail', {
+      input_type: inputType.value,
+      error: shortenError(err),
+      error_code: resolveErrorCode(err),
     })
   },
 })
@@ -149,10 +159,12 @@ const download3mfFilename = computed(() => {
 
 async function handleConvert() {
   if (!selectedFile.value) return
-  window.umami?.track('convert-start', {
-    inputType: inputType.value,
+  trackEvent('convert-start', {
+    input_type: inputType.value,
     color_layers: params.value.color_layers ?? 0,
     model_enable: Boolean(params.value.model_enable),
+    input_size_kb: roundKb(selectedFile.value.size),
+    colordb_count: params.value.db_names?.length ?? 0,
   })
   appStore.markTaskStarted()
   await submitTask()
@@ -173,20 +185,22 @@ const {
   onCompleted(s) {
     appStore.setCompletedTask(s)
     appStore.setRecipeEditorTaskId(s.id)
-    window.umami?.track('match-preview-complete', {
-      inputType: inputType.value,
-      elapsed_s: s.elapsed_ms != null ? Math.round(s.elapsed_ms / 1000) : -1,
+    trackEvent('match-preview-complete', {
+      input_type: inputType.value,
+      duration_ms: toDurationMs(s.elapsed_ms),
       width: s.result?.input_width ?? 0,
       height: s.result?.input_height ?? 0,
       avg_de: s.result?.stats?.avg_db_de ?? -1,
     })
-    window.umami?.track('recipe-editor-open')
+    trackEvent('recipe-open')
   },
   onFailed(s) {
     appStore.markTaskFailed()
-    window.umami?.track('match-preview-fail', {
-      inputType: inputType.value,
-      error: (s.error ?? 'unknown').slice(0, 120),
+    const err = s.error ?? 'unknown'
+    trackEvent('match-preview-fail', {
+      input_type: inputType.value,
+      error: shortenError(err),
+      error_code: resolveErrorCode(err),
     })
   },
 })
@@ -216,10 +230,12 @@ const canMatchPreview = computed(() => {
 
 async function handleMatchPreview() {
   if (!selectedFile.value) return
-  window.umami?.track('match-preview-start', {
-    inputType: inputType.value,
+  trackEvent('match-preview-start', {
+    input_type: inputType.value,
     color_layers: params.value.color_layers ?? 0,
     model_enable: Boolean(params.value.model_enable),
+    input_size_kb: roundKb(selectedFile.value.size),
+    colordb_count: params.value.db_names?.length ?? 0,
   })
   appStore.markTaskStarted()
   await submitMatch()
@@ -231,7 +247,7 @@ async function handleDownload3MF() {
   const filename = download3mfFilename.value
   try {
     await downloadByUrl(getResultPath(completedTaskId.value), filename)
-    window.umami?.track('download-3mf', { filename })
+    trackEvent('convert-download-3mf', { filename })
   } catch {
     // error is already handled by runtime abstraction caller when needed
   } finally {

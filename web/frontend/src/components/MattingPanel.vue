@@ -46,6 +46,13 @@ import {
   postprocessMatting,
   submitMatting,
 } from '../services/mattingService'
+import {
+  resolveErrorCode,
+  roundKb,
+  shortenError,
+  toDurationMs,
+  trackEvent,
+} from '../services/analytics'
 
 const { t } = useI18n()
 
@@ -349,6 +356,11 @@ const {
   fetchMattingTaskStatus,
   {
     onCompleted(status) {
+      trackEvent('matting-complete', {
+        method: status.method,
+        duration_ms: toDurationMs(status.timing?.pipeline_ms ?? null),
+        has_alpha: status.has_alpha,
+      })
       fetchForegroundBlob(taskId.value!)
       if (status.has_alpha) {
         fetchAlphaBlob(taskId.value!)
@@ -357,6 +369,14 @@ const {
         clearBackendResults()
         schedulePostprocess()
       }
+    },
+    onFailed(status) {
+      const err = status.error ?? 'unknown'
+      trackEvent('matting-fail', {
+        method: status.method || selectedMethod.value || 'unknown',
+        error: shortenError(err),
+        error_code: resolveErrorCode(err),
+      })
     },
   },
 )
@@ -370,6 +390,10 @@ const canExecute = computed(
 
 async function handleMatting() {
   if (!file.value || !selectedMethod.value) return
+  trackEvent('matting-start', {
+    method: selectedMethod.value,
+    input_size_kb: roundKb(file.value.size),
+  })
   revokeBlobUrls()
   panZoomGroups.resetAll()
   await submitTask()
@@ -432,6 +456,7 @@ async function runPostprocess() {
   const id = taskId.value
   if (!id || !isCompleted.value) return
   postprocessing.value = true
+  const startTs = performance.now()
   try {
     const result = await postprocessMatting(id, {
       threshold: threshold.value,
@@ -480,6 +505,9 @@ async function runPostprocess() {
       revokeUrl(outlineBlobUrl.value)
       outlineBlobUrl.value = null
     }
+    trackEvent('matting-postprocess-done', {
+      duration_ms: toDurationMs(performance.now() - startTs),
+    })
   } catch (e: unknown) {
     if (taskId.value !== id) return
     error.value = e instanceof Error ? e.message : t('matting.postprocessFailed')
@@ -645,6 +673,7 @@ function handleDownloadMask() {
   const url = processedFgBlobUrl.value
     ? getMattingProcessedMaskPath(taskId.value)
     : getMattingMaskPath(taskId.value)
+  trackEvent('matting-download-mask')
   downloadBlob(url, `${fileBaseName.value}_mask.png`)
 }
 
@@ -653,6 +682,7 @@ async function handleDownloadForeground() {
   if (!url) return
   try {
     await downloadByObjectUrl(url, `${fileBaseName.value}_foreground.png`)
+    trackEvent('matting-download-foreground')
   } catch {
     // handled by useBlobDownload callback
   }
@@ -666,6 +696,7 @@ function handleUseForegroundForConvert() {
   })
   appStore.setSelectedFile(resultFile)
   appStore.activeTab = 'convert'
+  trackEvent('matting-use-for-convert')
 }
 
 // ── Computed helpers ─────────────────────────────────────────────────────

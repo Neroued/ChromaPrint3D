@@ -93,6 +93,7 @@
 | CLI 参数或默认值变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/agents/apps/README.md](docs/agents/apps/README.md)、[docs/agents/tasks/extend_cli_flag.md](docs/agents/tasks/extend_cli_flag.md) |
 | 构建/部署流程变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/deployment.md](docs/deployment.md)、[docs/agents/tasks/sync_docs_after_behavior_change.md](docs/agents/tasks/sync_docs_after_behavior_change.md) |
 | 用户可见前端行为变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/agents/web/frontend/README.md](docs/agents/web/frontend/README.md) |
+| Umami 事件名 / 字段 schema 变化 | [web/frontend/src/services/analytics.ts](web/frontend/src/services/analytics.ts)（`EVENT_NAMES` / `EventPayloadMap`）、[docs/deployment.md](docs/deployment.md) §8.4 |
 | 模块入口或职责边界变化 | [docs/agents/README.md](docs/agents/README.md) 与对应模块索引 |
 
 ## PR 检查要求

@@ -922,29 +922,142 @@ VITE_UMAMI_WEBSITE_ID=<预览版 website-id>
 
 ### 8.4 自定义事件清单
 
-前端通过 `window.umami.track()` 上报以下自定义事件，用于用户旅程分析和性能监控。
+> **重要**：所有埋点调用都必须通过 `web/frontend/src/services/analytics.ts` 提供的 `trackEvent` / `trackPageview` / `updateSessionProperties` API，禁止直接写 `window.umami?.track(...)`。事件名与字段结构在 `EVENT_NAMES` 与 `EventPayloadMap` 中集中维护，编辑器会对拼写、字段形状做编译期检查。新增或修改事件时请同步本节表格。
+>
+> **运行时隔离**：Electron 桌面端会跳过 Umami 脚本注入并丢弃所有 `trackEvent` 调用，因此表中所有事件仅在浏览器端（chromaprint3d.com / chromaprint3d-preview.chromaprint3d.com）上报。
 
-**用户旅程漏斗**：`image-select` → `convert-start` → `convert-complete` → `download-3mf`
+#### 会话身份
 
-**配方编辑漏斗**：`match-preview-start` → `match-preview-complete` / `recipe-editor-open` → `recipe-replace` → `generate-model-complete` → `download-3mf`
+前端在首次访问时通过 `crypto.randomUUID()` 生成匿名 ID，保存于 `localStorage['chromaprint3d-analytics-id']`，之后每次脚本加载完成会调用 `umami.identify(id, props)` 注入以下会话属性：
+
+| 字段 | 说明 |
+|---|---|
+| `runtime` | `browser` / `electron`（Electron 不会触达） |
+| `channel` | `stable`（`X.Y.Z`）/ `preview`（`X.Y.Z-rc.N`）/ `unknown` |
+| `version` | 构建时写入的 `__APP_VERSION__` |
+| `locale` | 当前 i18n locale，切换语言时会刷新 |
+
+#### 虚拟 pageview
+
+前端会对顶层 Tab 与子 Tab 切换上报**虚拟 pageview**，URL 形如 `/convert`、`/preprocess/vectorize`、`/calibration/4color`；每条 pageview 都会带上对应的 i18n 标题，便于在 Umami 后台区分各功能页面的访问量。初次挂载仅上报一次，避免重复计数。
+
+#### 用户旅程漏斗
+
+- **图生 3MF**：`image-select` → `convert-start` → `convert-complete` → `convert-download-3mf`
+- **配方编辑**：`match-preview-start` → `match-preview-complete` → `recipe-open` → `recipe-replace` → `recipe-generate-complete` → `recipe-download-3mf`
+- **矢量化**：`vectorize-start` → `vectorize-complete` → `vectorize-download-svg` 或 `vectorize-use-for-convert`
+- **抠图**：`matting-start` → `matting-complete` → `matting-postprocess-done` → `matting-download-foreground` 或 `matting-use-for-convert`
+- **校准板**：`calibration-generate-start` → `calibration-generate-complete` → `calibration-download-3mf`
+- **ColorDB 构建**：`colordb-locate-start` → `colordb-locate-complete` → `colordb-build-start` → `colordb-build-complete` → `colordb-download-json`
+
+#### 转换（Convert）
 
 | 事件名 | 触发点 | 关键字段 |
-|--------|--------|----------|
-| image-select | 选择文件 | type |
-| convert-start | 点击转换 | inputType, color_layers, model_enable |
-| convert-complete | 转换成功 | inputType, has3mf, elapsed_s, width, height, avg_de |
-| convert-fail | 转换失败 | inputType, error |
-| match-preview-start | 点击配方预览 | inputType, color_layers, model_enable |
-| match-preview-complete | 预览完成 | inputType, elapsed_s, width, height, avg_de |
-| match-preview-fail | 预览失败 | inputType, error |
-| recipe-editor-open | 进入编辑器 | （无） |
-| recipe-replace | 替换配方 | regionCount |
-| generate-model-complete | 模型生成完成 | （无） |
-| generate-model-fail | 模型生成失败 | error |
-| download-3mf | 下载成功 | filename |
-| memory-status | 每 5 分钟 / leader | rss_mb, heap_mb, artifact_pct, usage_pct, allocator |
+|---|---|---|
+| `image-select` | 选中输入文件 | `input_type`（raster/vector） |
+| `convert-start` | 点击转换 | `input_type`, `color_layers`, `model_enable`, `input_size_kb`, `colordb_count` |
+| `convert-complete` | 转换成功 | `input_type`, `has_3mf`, `duration_ms`, `width`, `height`, `avg_de`, `colordb_count` |
+| `convert-fail` | 转换失败 | `input_type`, `error`, `error_code` |
+| `match-preview-start` | 点击配方预览 | `input_type`, `color_layers`, `model_enable`, `input_size_kb`, `colordb_count` |
+| `match-preview-complete` | 预览完成 | `input_type`, `duration_ms`, `width`, `height`, `avg_de` |
+| `match-preview-fail` | 预览失败 | `input_type`, `error`, `error_code` |
+| `convert-download-3mf` | 下载成功 | `filename` |
 
-此外，前端会对主 Tab 和子 Tab 切换发送**虚拟 pageview**（如 `/convert`、`/preprocess/vectorize`），使 Umami 后台能区分各功能页面的访问量。
+#### 配方编辑器（Recipe）
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `recipe-open` | 进入编辑器（match-preview 完成后） | — |
+| `recipe-replace` | 替换配方 | `region_count` |
+| `recipe-undo` | 撤销 | — |
+| `recipe-global-mode-toggle` | 切换全局模式 | `enabled` |
+| `recipe-generate-complete` | 模型生成完成 | `duration_ms` |
+| `recipe-generate-fail` | 模型生成失败 | `error`, `error_code` |
+| `recipe-download-3mf` | 从编辑器下载 3MF | `filename` |
+
+#### 矢量化（Vectorize）
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `vectorize-start` | 点击矢量化 | `input_size_kb`, `num_colors` |
+| `vectorize-complete` | 矢量化成功 | `duration_ms`, `width`, `height`, `num_shapes`, `svg_size_kb`, `resolved_num_colors` |
+| `vectorize-fail` | 矢量化失败 | `error`, `error_code` |
+| `vectorize-download-svg` | 下载 SVG | `svg_size_kb` |
+| `vectorize-use-for-convert` | 将结果送入转换 | — |
+| `vectorize-clear-file` | 清除已选图片 | — |
+
+#### 抠图（Matting）
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `matting-start` | 点击开始抠图 | `method`, `input_size_kb` |
+| `matting-complete` | 抠图完成 | `method`, `duration_ms`, `has_alpha` |
+| `matting-fail` | 抠图失败 | `method`, `error`, `error_code` |
+| `matting-postprocess-done` | 后处理完成一次 | `duration_ms` |
+| `matting-download-mask` | 下载 mask | — |
+| `matting-download-foreground` | 下载前景图 | — |
+| `matting-use-for-convert` | 将前景送入转换 | — |
+| `matting-model-download-start` | 触发模型下载（仅 Electron，一般不可见） | `pending_count`, `total_count` |
+| `matting-model-download-complete` | 模型下载完成（仅 Electron） | `duration_ms`, `total_count` |
+| `matting-model-download-fail` | 模型下载失败（仅 Electron） | `error`, `error_code` |
+| `matting-model-download-cancel` | 取消模型下载（仅 Electron） | — |
+| `matting-connectivity-check` | 模型源连通性探测（仅 Electron） | `available_sources`, `total_sources`, `duration_ms` |
+
+> 表中带「仅 Electron」标注的事件因 Electron 运行时不加载 Umami 脚本而实际不会上报；保留这些埋点调用是为了与桌面端代码路径一致，也方便未来开启 Electron 遥测时零改动启用。
+
+#### 校准板（Calibration）
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `calibration-generate-start` | 点击生成 | `board_index`, `channel_count`, `nozzle_size`, `face_orientation` |
+| `calibration-generate-complete` | 生成成功 | `board_index`, `channel_count`, `nozzle_size`, `face_orientation`, `duration_ms` |
+| `calibration-generate-fail` | 生成失败 | `board_index`, `channel_count`, `error`, `error_code` |
+| `calibration-download-3mf` | 下载校准板 3MF | `board_index`, `channel_count` |
+| `calibration-download-meta` | 下载校准板 meta | `board_index`, `channel_count` |
+
+> 4 色流程的 `board_index` 固定为 1；8 色流程的 `board_index` 为 1 或 2，对应第一 / 第二块板。
+
+#### ColorDB
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `colordb-locate-start` | 点击识别 | — |
+| `colordb-locate-complete` | 识别成功 | `duration_ms` |
+| `colordb-locate-fail` | 识别失败 | `error`, `error_code` |
+| `colordb-build-start` | 点击构建 | — |
+| `colordb-build-complete` | 构建成功 | `num_channels`, `num_entries`, `duration_ms` |
+| `colordb-build-fail` | 构建失败 | `error`, `error_code` |
+| `colordb-download-json` | 下载构建结果 | — |
+| `colordb-upload` | 上传 ColorDB（单/多文件） | `mode`（single/batch）, `count`, `ok`, `fail` |
+| `colordb-delete` | 删除 ColorDB（单/批量） | `mode`, `ok`, `fail` |
+
+#### UI 交互
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `locale-toggle` | 切换语言 | `from`, `to` |
+| `theme-toggle` | 切换主题 | `theme`（dark/light） |
+| `tutorial-click` | 打开视频教程 | — |
+| `github-click` | 点击 GitHub 链接 | `target`（repo/issues） |
+| `makerworld-click` | 点击 MakerWorld 链接 | — |
+| `whats-new-open` | 打开「What's New」弹窗 | `trigger`（auto/manual） |
+| `announcement-dismiss` | 关闭公告 banner | `id` |
+| `update-banner-click` | 点击更新 banner 按钮 | `action`（download/dismiss） |
+| `check-update-click` | 手动检查更新 | `result`（has-update/no-update/fail） |
+
+#### 生命周期遥测
+
+| 事件名 | 触发点 | 关键字段 |
+|---|---|---|
+| `memory-status` | 每 5 分钟 / leader tab | `rss_mb`, `heap_mb`, `artifact_pct`, `usage_pct`, `allocator` |
+
+#### 字段与事件规范
+
+- **事件名**：全部使用 `{module}-{action}[-{qualifier}]` 的 kebab-case 小写形式；字段名统一 `snake_case`。
+- **耗时**：统一使用 `duration_ms`（整数毫秒，未知记为 `-1`）。
+- **错误**：失败事件同时带 `error`（已截断到 120 字符）与低基数的 `error_code`（如 `http_404` / `cancelled` / `timeout` / `parse_error` / `unknown`），便于按 code 聚合。
+- **下载**：所有下载事件遵循 `{module}-download-{format}` 命名（例如 `convert-download-3mf`、`recipe-download-3mf`、`vectorize-download-svg`、`colordb-download-json`）。
+- **一次性迁移**：2026-04 的字段重命名（`inputType`→`input_type`、`regionCount`→`region_count`、`has3mf`→`has_3mf`、`elapsed_s`→`duration_ms`、`recipe-editor-open`→`recipe-open`、`generate-model-*`→`recipe-generate-*`、`download-3mf`→`{module}-download-3mf`）会在 Umami 仪表盘中形成历史断点；新仪表盘请基于上表的新名称创建。
 
 ### 8.5 多标签 `memory-status` 去重
 

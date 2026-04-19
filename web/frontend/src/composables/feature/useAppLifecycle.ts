@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, watch } from 'vue'
 import { useAppStore } from '../../stores/app'
 import type { HealthMemory } from '../../types'
+import { trackEvent } from '../../services/analytics'
 import { useLeaderLease } from './useLeaderLease'
 
 let themeSwitchCleanupTimer: ReturnType<typeof setTimeout> | null = null
@@ -31,8 +32,8 @@ const MB = 1048576
 let memoryReportTimer: ReturnType<typeof setInterval> | null = null
 
 function reportMemoryToUmami(memory: HealthMemory, isLeader: boolean) {
-  if (!isLeader || !window.umami) return
-  window.umami.track('memory-status', {
+  if (!isLeader) return
+  trackEvent('memory-status', {
     rss_mb: Math.round(memory.rss_bytes / MB),
     heap_mb: Math.round(memory.heap_resident_bytes / MB),
     artifact_pct:
@@ -93,6 +94,7 @@ export function useAppLifecycle() {
     () => appStore.isDark,
     (dark) => {
       void syncTheme(dark, appStore)
+      trackEvent('theme-toggle', { theme: dark ? 'dark' : 'light' })
     },
   )
 }
