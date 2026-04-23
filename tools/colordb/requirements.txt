@@ -1,0 +1,2 @@
+msgpack>=1.0
+pytest>=7

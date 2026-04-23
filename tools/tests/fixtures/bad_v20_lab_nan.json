@@ -1,0 +1,1 @@
+{"schema_version":1,"name":"mini","palette":[{"channel_class":"White","display_name":"W","material":"m"}],"defaults":{"color_layers":3,"layer_height_mm":0.08,"line_width_mm":0.42,"base_layers":0,"base_channel_idx":0},"sections":[{"type":"measured","entries":[{"lab":[NaN,0.0,0.0],"recipe":[0,0,0]}]}]}

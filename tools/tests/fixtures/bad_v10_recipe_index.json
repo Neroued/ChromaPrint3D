@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "name": "mini",
+  "palette": [
+    {
+      "channel_class": "White",
+      "display_name": "White",
+      "material": "PLA Basic"
+    },
+    {
+      "channel_class": "Red",
+      "display_name": "Red",
+      "material": "PLA Basic",
+      "hex_color": "#ff0000"
+    }
+  ],
+  "defaults": {
+    "color_layers": 3,
+    "layer_height_mm": 0.08,
+    "line_width_mm": 0.42,
+    "base_layers": 10,
+    "base_channel_idx": 0
+  },
+  "sections": [
+    {
+      "type": "measured",
+      "entries": [
+        {
+          "lab": [
+            50.0,
+            0.0,
+            0.0
+          ],
+          "recipe": [
+            0,
+            0,
+            5
+          ]
+        },
+        {
+          "lab": [
+            40.0,
+            10.0,
+            0.0
+          ],
+          "recipe": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "name": "CMYW_5L_008",
+  "vendor": "BambuLab",
+  "material_type": "PLA Basic",
+
+  "palette": [
+    {
+      "channel_class": "White",
+      "display_name": "White",
+      "display_name_localized": {"zh-CN": "白色", "ja-JP": "白"},
+      "material": "PLA Basic",
+      "hex_color": "#ffffff"
+    },
+    {
+      "channel_class": "Cyan",
+      "display_name": "Cyan",
+      "display_name_localized": {"zh-CN": "青", "ja-JP": "シアン"},
+      "material": "PLA Basic",
+      "hex_color": "#0086d6"
+    },
+    {
+      "channel_class": "Magenta",
+      "display_name": "Magenta",
+      "display_name_localized": {"zh-CN": "品红"},
+      "material": "PLA Basic",
+      "hex_color": "#ec008c"
+    },
+    {
+      "channel_class": "Yellow",
+      "display_name": "Yellow",
+      "display_name_localized": {"zh-CN": "黄", "de-DE": "Gelb"},
+      "material": "PLA Basic",
+      "hex_color": "#f4ee2a"
+    }
+  ],
+
+  "defaults": {
+    "color_layers": 5,
+    "layer_height_mm": 0.08,
+    "line_width_mm": 0.42,
+    "base_layers": 10,
+    "base_channel_idx": 0
+  },
+
+  "meta": {
+    "created_at": "2026-04-13T10:30:00Z",
+    "generator": "build_colordb v4.0",
+    "source_files": ["calibration_page1.png", "calibration_page2.png"]
+  },
+
+  "sections": [
+    {
+      "type": "measured",
+      "entries": [
+        {"lab": [93.87, -1.51, 1.32],   "recipe": [0, 0, 0, 0, 0]},
+        {"lab": [86.15, -10.22, -6.18], "recipe": [0, 0, 0, 0, 1]},
+        {"lab": [78.43, -5.67, 12.89],  "recipe": [0, 0, 0, 1, 3]},
+        {"lab": [45.21, 52.33, -8.76],  "recipe": [0, 2, 2, 2, 2]}
+      ]
+    },
+    {
+      "type": "measured",
+      "color_layers": 3,
+      "layer_height_mm": 0.12,
+      "base_layers": 7,
+      "entries": [
+        {"lab": [94.12, -1.23, 0.98],   "recipe": [0, 0, 0]},
+        {"lab": [82.56, -12.34, -7.89], "recipe": [0, 0, 1]}
+      ]
+    },
+    {
+      "type": "predicted",
+      "threshold": 5.0,
+      "margin": 0.7,
+      "entries": [
+        {"lab": [72.34, 18.56, -22.11], "recipe": [1, 2, 0, 3, 1]},
+        {"lab": [61.89, 35.12, 5.44],   "recipe": [2, 2, 3, 0, 1]},
+        {"lab": [55.02, -20.78, 40.33], "recipe": [0, 3, 3, 1, 255]}
+      ]
+    }
+  ]
+}
