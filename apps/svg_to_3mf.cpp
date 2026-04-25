@@ -63,7 +63,8 @@ void PrintUsage(const char* exe) {
         "  --double-sided 0|1  Generate mirrored color layers on both sides (default 0)\n"
         "  --tess-tol X        Bezier tessellation tolerance in mm (default 0.03)\n"
         "  --gradient-px-mm X  Gradient rasterization resolution in mm/px (0=auto)\n"
-        "  --data-dir PATH     Data dir holding presets/ and preset_bases/ (default: data)\n"
+        "  --data-dir PATH     Data dir holding presets/ and preset_bases/\n"
+        "                      (default: none — emits standard 3MF without preset embedding)\n"
         "  --machine NAME      Target Bambu Lab machine name (default: catalog default)\n"
         "  --log-level LEVEL   trace/debug/info/warn/error/off (default: info)\n",
         exe);

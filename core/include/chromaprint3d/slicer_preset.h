@@ -85,8 +85,15 @@ struct SlicerPreset {
     /// \p config supplies per-material defaults (FilamentConfig is loaded by the caller).
     /// \p double_sided forces FaceDown layout when true.
     ///
-    /// Throws ChromaPrint3D::InputError when the machine is not registered or
-    /// when no matching base file exists for (nozzle, layer height).
+    /// **Does not throw** when the machine cannot be resolved; instead logs a
+    /// `spdlog::warn` and returns a preset with `machine_resolved() == false`.
+    /// Callers are expected to gate Bambu-enhanced 3MF export on
+    /// `machine_resolved()` and fall back to the standard 3MF path otherwise
+    /// (this is what the pipeline / backend / apps already do).
+    ///
+    /// If an unresolved preset is nevertheless passed to `BuildProjectSettings`
+    /// or any `Export3mf*(..., preset, ...)` overload that embeds Bambu metadata,
+    /// those downstream functions will throw `IOError` as a defensive net.
     static SlicerPreset FromProfile(const BambuPresetCatalog& catalog, const PrintProfile& profile,
                                     std::string_view target_machine = {},
                                     const FilamentConfig* config    = nullptr,

@@ -282,9 +282,9 @@ Mesh MakeBoxMesh() {
 /// Build a SlicerPreset for any registered machine with N user filament slots.
 /// Used by the multi-machine variant / N-slot expansion test groups.
 SlicerPreset MakeTestPresetForMachine(const BambuPresetCatalog& catalog,
-                                       const std::string& machine_name, NozzleSize nozzle,
-                                       std::size_t N,
-                                       FaceOrientation face = FaceOrientation::FaceUp) {
+                                      const std::string& machine_name, NozzleSize nozzle,
+                                      std::size_t N,
+                                      FaceOrientation face = FaceOrientation::FaceUp) {
     PrintProfile profile;
     profile.layer_height_mm  = 0.08f;
     profile.nozzle_size      = nozzle;
@@ -439,6 +439,40 @@ TEST(SlicerPreset, ModelSettingsXmlContainsObjectsAndExtruders) {
     EXPECT_NE(model_settings.find("Green - PLA"), std::string::npos);
     EXPECT_NE(model_settings.find("extruder\" value=\"1\""), std::string::npos);
     EXPECT_NE(model_settings.find("extruder\" value=\"2\""), std::string::npos);
+}
+
+TEST(SlicerPreset, ModelSettingsXmlEscapesUserControlledStrings) {
+    // Regression: user-controlled mesh names containing XML-special characters
+    // must be escaped before being interpolated as attribute values, otherwise
+    // BBS / 3rd-party 3MF parsers see malformed XML.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
+
+    std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
+    std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
+    // Inject the five XML-mandatory characters via the user-controlled name
+    // path. Slot 1: '&', '"', '<', '>'. Slot 2: '\''.
+    std::vector<std::string> names = {std::string("Red&\"<X>"), std::string("Green'PLA")};
+    std::vector<int> slots         = {1, 2};
+
+    std::vector<uint8_t> buffer = Export3mfFromMeshes(meshes, palette, names, slots, preset);
+    ASSERT_FALSE(buffer.empty());
+    std::vector<ZipEntry> entries = ParseZipEntries(buffer);
+    const std::string xml = EntryAsString(FindEntry(entries, "Metadata/model_settings.config"));
+    ASSERT_FALSE(xml.empty());
+
+    // Escaped sequences MUST appear.
+    EXPECT_NE(xml.find("Red&amp;&quot;&lt;X&gt;"), std::string::npos)
+        << "expected escaped slot-1 name in XML; raw output:\n"
+        << xml;
+    EXPECT_NE(xml.find("Green&apos;PLA"), std::string::npos)
+        << "expected escaped slot-2 name in XML; raw output:\n"
+        << xml;
+    // Raw user input MUST NOT appear inside attribute values.
+    EXPECT_EQ(xml.find("Red&\""), std::string::npos);
+    EXPECT_EQ(xml.find("<X>"), std::string::npos);
+    EXPECT_EQ(xml.find("Green'PLA"), std::string::npos);
 }
 
 TEST(SlicerPreset, ExplicitSlotsMappingSurvivesDroppedMesh) {
@@ -986,10 +1020,8 @@ TEST(NSlotExpand, FilamentWithVariantH2dN8) {
     EXPECT_EQ(j["filament_max_volumetric_speed"][0], "25");
     EXPECT_EQ(j["filament_max_volumetric_speed"][1], "40");
     // Slot 2 (indices 2..3) repeats the same K_per_extruder=2 slice.
-    EXPECT_EQ(j["filament_max_volumetric_speed"][2],
-              j["filament_max_volumetric_speed"][0]);
-    EXPECT_EQ(j["filament_max_volumetric_speed"][3],
-              j["filament_max_volumetric_speed"][1]);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][2], j["filament_max_volumetric_speed"][0]);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][3], j["filament_max_volumetric_speed"][1]);
     // Slot 8 (indices 14..15) is the tail.
     EXPECT_EQ(j["filament_max_volumetric_speed"][14], "25");
     EXPECT_EQ(j["filament_max_volumetric_speed"][15], "40");
@@ -1024,10 +1056,8 @@ TEST(NSlotExpand, FilamentWithVariantX2dN8) {
     EXPECT_EQ(j["filament_max_volumetric_speed"][0], "21");
     EXPECT_EQ(j["filament_max_volumetric_speed"][1], "40");
     // Slot 2 (indices 2..3) repeats the same K_per_extruder=2 slice.
-    EXPECT_EQ(j["filament_max_volumetric_speed"][2],
-              j["filament_max_volumetric_speed"][0]);
-    EXPECT_EQ(j["filament_max_volumetric_speed"][3],
-              j["filament_max_volumetric_speed"][1]);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][2], j["filament_max_volumetric_speed"][0]);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][3], j["filament_max_volumetric_speed"][1]);
 }
 
 TEST(NSlotExpand, PrintWithVariantKeepsKProcess) {
@@ -1048,10 +1078,12 @@ TEST(NSlotExpand, ThreeKeySetsAreDisjoint) {
     const auto& a = PrintWithVariantKeys();
     const auto& b = FilamentWithVariantKeys();
     for (const auto& k : a) {
-        EXPECT_EQ(b.count(k), 0u) << "Key `" << k << "` is in both Print and Filament with-variant sets";
+        EXPECT_EQ(b.count(k), 0u) << "Key `" << k
+                                  << "` is in both Print and Filament with-variant sets";
     }
     for (const auto& k : b) {
-        EXPECT_EQ(a.count(k), 0u) << "Key `" << k << "` is in both Filament and Print with-variant sets";
+        EXPECT_EQ(a.count(k), 0u) << "Key `" << k
+                                  << "` is in both Filament and Print with-variant sets";
     }
 }
 
@@ -1205,8 +1237,8 @@ TEST(PatchValueAlignment, SparseInfillSpeedH2cDdHf100) {
     auto j      = ExportAndExtractProjectSettings(preset);
     ASSERT_TRUE(j["sparse_infill_speed"].is_array());
     EXPECT_EQ(j["sparse_infill_speed"].size(), 4u); // K_process=4 for H2C
-    EXPECT_EQ(j["sparse_infill_speed"][0], "50"); // DD Std
-    EXPECT_EQ(j["sparse_infill_speed"][1], "100"); // DD HF (H2C value)
+    EXPECT_EQ(j["sparse_infill_speed"][0], "50");   // DD Std
+    EXPECT_EQ(j["sparse_infill_speed"][1], "100");  // DD HF (H2C value)
 }
 
 TEST(PatchValueAlignment, BottomColorPenetrationLayers1) {
@@ -1349,7 +1381,7 @@ TEST(Patches, UnknownFieldFiltered) {
     // protection against future strict-mode regressions.
     auto patches = std::make_shared<ChromaPrintPatches>(*preset.machine.patches);
     patches->process_common["chromaprint3d_unknown_test_field"] = "\"sentinel\"";
-    preset.machine.patches = patches;
+    preset.machine.patches                                      = patches;
     auto j = ExportAndExtractProjectSettings(preset);
     EXPECT_TRUE(j.contains("chromaprint3d_unknown_test_field"));
     EXPECT_EQ(j["chromaprint3d_unknown_test_field"], "sentinel");
@@ -1374,13 +1406,12 @@ TEST(CompatiblePrinters, P2sN02ElementFormatStrict) {
 TEST(PrinterModel, P2sMetadataPlate) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
-    auto preset                  = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S",
-                                            NozzleSize::N04, 3);
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
     std::vector<Mesh> meshes(3, MakeBoxMesh());
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}, {"Blue", "PLA"}};
-    auto buf = Export3mfFromMeshes(meshes, palette, -1, 0, preset);
-    auto entries = ParseZipEntries(buf);
-    auto* ent    = FindEntry(entries, "Metadata/model_settings.config");
+    auto buf                     = Export3mfFromMeshes(meshes, palette, -1, 0, preset);
+    auto entries                 = ParseZipEntries(buf);
+    auto* ent                    = FindEntry(entries, "Metadata/model_settings.config");
     ASSERT_NE(ent, nullptr);
     auto xml = EntryAsString(ent);
     // BuildModelSettings emits printer_model_id metadata when printer_model is set.
@@ -1437,7 +1468,7 @@ TEST(FlushMatrixGeneration, P2sN3MatrixSizeAndDiagonalZero) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
-    auto j = ExportAndExtractProjectSettings(preset);
+    auto j      = ExportAndExtractProjectSettings(preset);
 
     // P2S = 1 physical nozzle → 3*3*1 = 9 entries.
     ASSERT_TRUE(j.contains("flush_volumes_matrix"));
@@ -1448,7 +1479,7 @@ TEST(FlushMatrixGeneration, P2sN3MatrixSizeAndDiagonalZero) {
 
     // Diagonal entries = 0 (same-color switch).
     const auto& matrix = j["flush_volumes_matrix"];
-    constexpr int N = 3;
+    constexpr int N    = 3;
     for (std::size_t n = 0; n < nozzle_count; ++n) {
         for (int i = 0; i < N; ++i) {
             std::size_t idx = n * N * N + i * N + i;
@@ -1466,8 +1497,8 @@ struct MachineFacts {
     std::size_t filament_count;     // = N (preset.filaments.size())
     std::size_t expected_matrix_sz; // = N * N * nozzle_count
 };
-MachineFacts ExtractMachineFacts(const nlohmann::json& project_settings,
-                                  std::size_t N) {
+
+MachineFacts ExtractMachineFacts(const nlohmann::json& project_settings, std::size_t N) {
     const std::size_t nozzle_count = project_settings["flush_multiplier"].size();
     return {nozzle_count, N, N * N * nozzle_count};
 }
@@ -1477,8 +1508,8 @@ TEST(FlushMatrixGeneration, H2cN5MatrixShapeFromFacts) {
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     constexpr std::size_t N = 5;
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
-    auto j = ExportAndExtractProjectSettings(preset);
-    auto facts = ExtractMachineFacts(j, N);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    auto facts  = ExtractMachineFacts(j, N);
 
     EXPECT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
 
@@ -1487,8 +1518,7 @@ TEST(FlushMatrixGeneration, H2cN5MatrixShapeFromFacts) {
     for (std::size_t n = 0; n < facts.nozzle_count; ++n) {
         for (std::size_t i = 0; i < N; ++i) {
             std::size_t idx = n * N * N + i * N + i;
-            EXPECT_EQ(matrix[idx].get<std::string>(), "0")
-                << "nozzle=" << n << " i=" << i;
+            EXPECT_EQ(matrix[idx].get<std::string>(), "0") << "nozzle=" << n << " i=" << i;
         }
     }
 }
@@ -1499,20 +1529,16 @@ TEST(FlushMatrixGeneration, FlushVolumesVectorAndMultiplier) {
     constexpr std::size_t N = 5;
     // H2C exercises nozzle_count > 1 in the multiplier.
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
-    auto j = ExportAndExtractProjectSettings(preset);
-    auto facts = ExtractMachineFacts(j, N);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    auto facts  = ExtractMachineFacts(j, N);
 
     ASSERT_TRUE(j["flush_volumes_vector"].is_array());
     EXPECT_EQ(j["flush_volumes_vector"].size(), 2u * N); // 2 × N (push/pull)
-    for (const auto& v : j["flush_volumes_vector"]) {
-        EXPECT_EQ(v.get<std::string>(), "140");
-    }
+    for (const auto& v : j["flush_volumes_vector"]) { EXPECT_EQ(v.get<std::string>(), "140"); }
 
     ASSERT_TRUE(j["flush_multiplier"].is_array());
     EXPECT_EQ(j["flush_multiplier"].size(), facts.nozzle_count);
-    for (const auto& v : j["flush_multiplier"]) {
-        EXPECT_EQ(v.get<std::string>(), "1");
-    }
+    for (const auto& v : j["flush_multiplier"]) { EXPECT_EQ(v.get<std::string>(), "1"); }
 }
 
 TEST(FlushMatrixGeneration, H2cN8MatrixShapeFromFacts) {
@@ -1520,8 +1546,8 @@ TEST(FlushMatrixGeneration, H2cN8MatrixShapeFromFacts) {
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     constexpr std::size_t N = 8; // typical heavy multi-color project
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
-    auto j = ExportAndExtractProjectSettings(preset);
-    auto facts = ExtractMachineFacts(j, N);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    auto facts  = ExtractMachineFacts(j, N);
     EXPECT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
 }
 
@@ -1529,13 +1555,13 @@ TEST(FlushMatrixGeneration, SideChannelDefaults) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
-    auto j = ExportAndExtractProjectSettings(preset);
+    auto j      = ExportAndExtractProjectSettings(preset);
 
     // Mirrors varesa baseline.
-    EXPECT_EQ(j.value("flush_into_objects",   ""), "0");
-    EXPECT_EQ(j.value("flush_into_infill",    ""), "0");
-    EXPECT_EQ(j.value("flush_into_support",   ""), "1");
-    EXPECT_EQ(j.value("prime_volume_mode",    ""), "Default");
+    EXPECT_EQ(j.value("flush_into_objects", ""), "0");
+    EXPECT_EQ(j.value("flush_into_infill", ""), "0");
+    EXPECT_EQ(j.value("flush_into_support", ""), "1");
+    EXPECT_EQ(j.value("prime_volume_mode", ""), "Default");
     EXPECT_EQ(j.value("role_base_wipe_speed", ""), "1");
 }
 
@@ -1543,19 +1569,17 @@ TEST(FlushMatrixGeneration, UserOverrideTakesPriority) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     constexpr std::size_t N = 2;
-    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, N);
+    auto preset   = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, N);
     auto baseline = ExportAndExtractProjectSettings(preset);
     auto facts    = ExtractMachineFacts(baseline, N);
     // Manually supply a flat override array sized to whatever the catalog
     // says this machine produces.
     std::vector<int> override_matrix(facts.expected_matrix_sz, 999);
     for (std::size_t n = 0; n < facts.nozzle_count; ++n) {
-        for (std::size_t i = 0; i < N; ++i) {
-            override_matrix[n * N * N + i * N + i] = 0;
-        }
+        for (std::size_t i = 0; i < N; ++i) { override_matrix[n * N * N + i * N + i] = 0; }
     }
     preset.flush_volumes_matrix = override_matrix;
-    auto j = ExportAndExtractProjectSettings(preset);
+    auto j                      = ExportAndExtractProjectSettings(preset);
 
     ASSERT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
     // First off-diagonal entry should reflect the user override (999), not
@@ -1586,8 +1610,7 @@ TEST(FlushMatrixGeneration, NotAll280Sentinel) {
     // BBS fallback would yield 280 on every off-diagonal entry (24 of 32);
     // our generator should produce far fewer (typically zero) such entries
     // because the HSV formula and dataset return different values per pair.
-    EXPECT_LT(count_280, 5)
-        << "matrix has too many 280 entries — looks like BBS fallback";
+    EXPECT_LT(count_280, 5) << "matrix has too many 280 entries — looks like BBS fallback";
 }
 
 // Replaces the dataset-specific test that was deleted with the
@@ -1600,10 +1623,10 @@ TEST(FlushMatrixGeneration, BlackWhitePairUsesHsvFormula) {
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, 2);
     preset.filaments[0].colour = "#000000";
     preset.filaments[1].colour = "#FFFFFF";
-    auto j = ExportAndExtractProjectSettings(preset);
+    auto j                     = ExportAndExtractProjectSettings(preset);
     // Layout for N=2, nozzle 0: [0]=black→black=0, [1]=black→white, ...
     // HSV formula: ~560 mm³ + min_flush_volume (= nozzle_volume[0] = 130).
     int v = std::stoi(j["flush_volumes_matrix"][1].get<std::string>());
-    EXPECT_GE(v, 560);   // floor: HSV formula alone
-    EXPECT_LE(v, 900);   // clamp: kMaxFlushVolume
+    EXPECT_GE(v, 560); // floor: HSV formula alone
+    EXPECT_LE(v, 900); // clamp: kMaxFlushVolume
 }

@@ -23,9 +23,9 @@ const char* NozzleSizeStr(NozzleSize n) { return n == NozzleSize::N02 ? "0.2" : 
 bool IsValidSlug(const std::string& s) {
     if (s.empty()) return false;
     for (char c : s) {
-        const auto u = static_cast<unsigned char>(c);
-        const bool is_lower = (u >= 'a' && u <= 'z');
-        const bool is_digit = (u >= '0' && u <= '9');
+        const auto u             = static_cast<unsigned char>(c);
+        const bool is_lower      = (u >= 'a' && u <= 'z');
+        const bool is_digit      = (u >= '0' && u <= '9');
         const bool is_underscore = (c == '_');
         if (!is_lower && !is_digit && !is_underscore) return false;
     }
@@ -228,8 +228,8 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
 
     spdlog::info("BambuPresetCatalog loaded: {} machines, default = {}, cached {} base "
                  "printer_model entries ({} misses)",
-                 cat.machines_.size(), cat.default_machine_,
-                 cat.base_printer_model_cache_.size(), cache_misses);
+                 cat.machines_.size(), cat.default_machine_, cat.base_printer_model_cache_.size(),
+                 cache_misses);
     return cat;
 }
 
@@ -263,11 +263,11 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
 
     char lh_buf[16];
     std::snprintf(lh_buf, sizeof(lh_buf), "%.2fmm", static_cast<double>(layer_height_mm));
-    const std::string lh_str    = lh_buf;
+    const std::string lh_str     = lh_buf;
     const std::string nozzle_tag = nozzle == NozzleSize::N02 ? "n02" : "n04";
-    const std::string stem      = rec.slug + "_" + lh_str + "_" + nozzle_tag;
-    const std::string fname     = stem + ".json";
-    auto base_path              = data_dir_ / "preset_bases" / fname;
+    const std::string stem       = rec.slug + "_" + lh_str + "_" + nozzle_tag;
+    const std::string fname      = stem + ".json";
+    auto base_path               = data_dir_ / "preset_bases" / fname;
     if (!std::filesystem::exists(base_path)) {
         spdlog::warn(
             "BambuPresetCatalog::Resolve: preset base file missing for `{}` n{} lh{} -> {}", name,
@@ -301,9 +301,7 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
 
     // printer_model: pull from the cache populated at LoadFromDir time.
     auto cit = base_printer_model_cache_.find(stem);
-    if (cit != base_printer_model_cache_.end()) {
-        spec.printer_model = cit->second;
-    }
+    if (cit != base_printer_model_cache_.end()) { spec.printer_model = cit->second; }
     // (cache miss is non-fatal; spec.printer_model stays empty and downstream
     //  metadata writers omit the printer_model_id plate annotation.)
 
@@ -311,5 +309,31 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
 }
 
 std::vector<std::string> BambuPresetCatalog::ListMachines() const { return machine_names_; }
+
+std::optional<MachineSummary>
+BambuPresetCatalog::GetMachineSummary(std::string_view machine_name) const {
+    auto it = machines_.find(std::string(machine_name));
+    if (it == machines_.end()) return std::nullopt;
+    const MachineRecord& rec = it->second;
+
+    MachineSummary summary;
+    summary.machine_name      = it->first;
+    summary.extruder_topology = rec.extruder_topology;
+    summary.nozzles           = rec.nozzles;
+
+    // Best-effort printer_model lookup: the cache key is `<slug>_<lh>mm_<nozzle>`,
+    // and we don't know which layer-height/nozzle the catalog actually shipped a
+    // base file for, so accept the first stem starting with `<slug>_`. Order is
+    // unordered_map iteration order; consistency is fine since all base files
+    // for a given slug carry the same printer_model (sanity-checked at load).
+    const std::string slug_prefix = rec.slug + "_";
+    for (const auto& [stem, model] : base_printer_model_cache_) {
+        if (stem.compare(0, slug_prefix.size(), slug_prefix) == 0) {
+            summary.printer_model = model;
+            break;
+        }
+    }
+    return summary;
+}
 
 } // namespace ChromaPrint3D

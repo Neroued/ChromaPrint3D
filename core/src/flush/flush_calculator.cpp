@@ -78,9 +78,7 @@ float CalcTriangle3rdEdge(float a, float b, float deg_ab) {
     return std::sqrt(a * a + b * b - 2.0f * a * b * std::cos(DegToRad(deg_ab)));
 }
 
-float Luminance(float r, float g, float b) {
-    return 0.30f * r + 0.59f * g + 0.11f * b;
-}
+float Luminance(float r, float g, float b) { return 0.30f * r + 0.59f * g + 0.11f * b; }
 
 // HSV-based formula: BambuStudio `calc_flush_vol_rgb`, gamma-encoded inputs.
 // Returns flush volume in mm³ (no min/max clamp here; caller adds the
@@ -94,20 +92,20 @@ float CalcFlushVolRgb(const RgbU8& src, const RgbU8& dst) {
     const float dst_b_f = dst.b / 255.0f;
 
     float h_from = 0, s_from = 0, v_from = 0;
-    float h_to   = 0, s_to   = 0, v_to   = 0;
+    float h_to = 0, s_to = 0, v_to = 0;
     RgbToHsv(src_r_f, src_g_f, src_b_f, h_from, s_from, v_from);
     RgbToHsv(dst_r_f, dst_g_f, dst_b_f, h_to, s_to, v_to);
     float hs_dist = DeltaHsBbs(h_from, s_from, v_from, h_to, s_to, v_to);
 
     const float from_lumi = Luminance(src_r_f, src_g_f, src_b_f);
     const float to_lumi   = Luminance(dst_r_f, dst_g_f, dst_b_f);
-    float lumi_flush = 0.0f;
+    float lumi_flush      = 0.0f;
     if (to_lumi >= from_lumi) {
         lumi_flush = std::pow(to_lumi - from_lumi, 0.7f) * 560.0f;
     } else {
-        lumi_flush               = (from_lumi - to_lumi) * 80.0f;
-        const float inter_hsv_v  = 0.67f * v_to + 0.33f * v_from;
-        hs_dist                  = std::min(inter_hsv_v, hs_dist);
+        lumi_flush              = (from_lumi - to_lumi) * 80.0f;
+        const float inter_hsv_v = 0.67f * v_to + 0.33f * v_from;
+        hs_dist                 = std::min(inter_hsv_v, hs_dist);
     }
     const float hs_flush = 230.0f * hs_dist;
 

@@ -196,16 +196,16 @@ ServiceResult ServerFacade::ListMachines() const {
     json machines = json::array();
     if (!catalog_.empty()) {
         for (const auto& name : catalog_.ListMachines()) {
-            // Resolve a representative spec (n=0.4) to expose topology + nozzles.
-            // Fall back to n=0.2 if 0.4 is missing.
-            std::optional<ChromaPrint3D::MachineSpec> spec =
-                catalog_.Resolve(name, ChromaPrint3D::NozzleSize::N04, 0.08f);
-            if (!spec) spec = catalog_.Resolve(name, ChromaPrint3D::NozzleSize::N02, 0.08f);
-            json m = {{"name", name}};
-            if (spec) {
-                m["extruder_topology"] = spec->extruder_topology;
-                m["nozzles"]           = spec->nozzles;
-                m["printer_model"]     = spec->printer_model;
+            // GetMachineSummary is layer-height-agnostic: topology / nozzles
+            // come from machines.json directly, printer_model is best-effort
+            // from any cached base file. This avoids the previous reliance on
+            // a hardcoded 0.08mm + n04/n02 base file being present.
+            std::optional<ChromaPrint3D::MachineSummary> summary = catalog_.GetMachineSummary(name);
+            json m                                               = {{"name", name}};
+            if (summary) {
+                m["extruder_topology"] = summary->extruder_topology;
+                m["nozzles"]           = summary->nozzles;
+                m["printer_model"]     = summary->printer_model;
             } else {
                 m["extruder_topology"] = "single";
                 m["nozzles"]           = json::array();

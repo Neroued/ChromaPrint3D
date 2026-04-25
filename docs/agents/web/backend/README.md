@@ -66,6 +66,7 @@
 新增端点：
 
 - `GET /api/v1/machines` — 返回 `{default_machine, machines[]}`，每条 `MachineInfo` 含 `name`、`extruder_topology`（`single`/`dual`）、`nozzles[]`、`printer_model`。前端用于驱动机型下拉选择。
+  - 服务端实现 `ServerFacade::ListMachines()` 通过 `BambuPresetCatalog::GetMachineSummary()` 读取（与 layer-height 解耦），不要求所有机型都有 0.08mm base file，对未来追加非 0.08mm 机型保持可枚举。
 
 详见 [docs/agents/tasks/extend_machine_support.md](../../tasks/extend_machine_support.md)。
 

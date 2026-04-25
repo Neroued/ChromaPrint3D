@@ -27,8 +27,7 @@ std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_per
 /// (K_per_extruder = len(extruder_variant_list[0].split(','))), NOT
 /// print_extruder_variant (which has K_process = sum_over_extruders length).
 std::vector<std::string>
-BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants,
-                              std::size_t N);
+BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants, std::size_t N);
 
 /// Describes a single exported mesh part and its filament slot assignment.
 struct ExportedObject {

@@ -32,6 +32,39 @@ nlohmann::json LoadPresetJson(const std::string& path) {
     }
 }
 
+// Escape user-controlled strings for use as XML attribute values inside the
+// `Metadata/model_settings.config` XML emitter. Only the five XML-mandatory
+// characters are touched; ASCII / UTF-8 bytes pass through unchanged. Strings
+// without any of these characters incur an O(n) copy but are otherwise byte-
+// identical, so existing callers see no observable behaviour change.
+std::string XmlAttrEscape(std::string_view in) {
+    std::string out;
+    out.reserve(in.size());
+    for (char c : in) {
+        switch (c) {
+        case '&':
+            out += "&amp;";
+            break;
+        case '<':
+            out += "&lt;";
+            break;
+        case '>':
+            out += "&gt;";
+            break;
+        case '"':
+            out += "&quot;";
+            break;
+        case '\'':
+            out += "&apos;";
+            break;
+        default:
+            out += c;
+            break;
+        }
+    }
+    return out;
+}
+
 std::tuple<int, int, int> ParseHexRGB(const std::string& hex) {
     if (hex.size() >= 7 && hex[0] == '#') {
         unsigned long val = std::strtoul(hex.c_str() + 1, nullptr, 16);
@@ -85,8 +118,7 @@ void PatchFilamentArrays(nlohmann::json& j, const std::vector<FilamentSlot>& fil
         }
         for (std::size_t i = 0; i < N; ++i) {
             const auto value = extractor(filaments[i]);
-            for (std::size_t k = 0; k < K_per_extruder; ++k)
-                arr[i * K_per_extruder + k] = value;
+            for (std::size_t k = 0; k < K_per_extruder; ++k) arr[i * K_per_extruder + k] = value;
         }
     };
 
@@ -492,8 +524,7 @@ std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_per
 }
 
 std::vector<std::string>
-BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants,
-                              std::size_t N) {
+BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants, std::size_t N) {
     std::vector<std::string> out;
     out.reserve(extruder0_variants.size() * N);
     for (std::size_t i = 0; i < N; ++i) {
@@ -659,12 +690,11 @@ void ExpandFilamentWithVariantToN(nlohmann::json& final_dict, std::size_t N,
         const std::size_t target = N * K_per_extruder;
         if (it.value().size() == target) continue;
         if (it.value().size() != K_per_extruder) {
-            throw FormatError(
-                "ExpandFilamentWithVariantToN: field `" + it.key() + "` length " +
-                std::to_string(it.value().size()) + " != K_per_extruder " +
-                std::to_string(K_per_extruder) +
-                " (expected base_dict to be pre-aligned by "
-                "scripts/build_preset_bases.py step 3.5; check base file integrity)");
+            throw FormatError("ExpandFilamentWithVariantToN: field `" + it.key() + "` length " +
+                              std::to_string(it.value().size()) + " != K_per_extruder " +
+                              std::to_string(K_per_extruder) +
+                              " (expected base_dict to be pre-aligned by "
+                              "scripts/build_preset_bases.py step 3.5; check base file integrity)");
         }
         nlohmann::json arr = nlohmann::json::array();
         for (std::size_t i = 0; i < N; ++i) {
@@ -676,8 +706,7 @@ void ExpandFilamentWithVariantToN(nlohmann::json& final_dict, std::size_t N,
 
 /// Parse extruder_variant_list[0] (CSV) -> extruder 0's variants.
 /// Returns empty vector if the field is missing/malformed (caller throws).
-std::vector<std::string>
-ParseExtruder0Variants(const nlohmann::json& extruder_variant_list) {
+std::vector<std::string> ParseExtruder0Variants(const nlohmann::json& extruder_variant_list) {
     std::vector<std::string> out;
     if (!extruder_variant_list.is_array() || extruder_variant_list.empty()) return out;
     if (!extruder_variant_list.front().is_string()) return out;
@@ -715,11 +744,11 @@ void InjectMandatoryVariantMetaFields(nlohmann::json& final_dict, const nlohmann
     }
 
     final_dict["filament_extruder_variant"] = BuildFilamentExtruderVariant(extruder0_variants, N);
-    final_dict["filament_self_index"] = BuildFilamentSelfIndex(N, extruder0_variants.size());
+    final_dict["filament_self_index"]       = BuildFilamentSelfIndex(N, extruder0_variants.size());
 }
 
 void InjectInheritsGroup(nlohmann::json& final_dict, std::size_t N,
-                          const std::string& process_template) {
+                         const std::string& process_template) {
     // BambuStudio expects N+2 entries: print, printer, then N filaments.
     // [0] = process inherits chain head (= machine.process_template);
     // [1..N+1] = empty (printer + N filaments are project-embedded).
@@ -739,8 +768,7 @@ void InjectInheritsGroup(nlohmann::json& final_dict, std::size_t N,
 std::string MakePrintSettingsId(const SlicerPreset& preset) {
     char buf[160];
     std::snprintf(buf, sizeof(buf), "ChromaPrint3D %.2fmm @%s %smm nozzle %s",
-                  static_cast<double>(preset.layer_height_mm),
-                  preset.machine.machine_name.c_str(),
+                  static_cast<double>(preset.layer_height_mm), preset.machine.machine_name.c_str(),
                   preset.nozzle == NozzleSize::N02 ? "0.2" : "0.4",
                   FaceOrientationTag(preset.face));
     return std::string(buf);
@@ -773,10 +801,12 @@ std::string FaceLabelForPatch(FaceOrientation f) {
 
 int ParseIntStr(const nlohmann::json& v, int fallback = 0) {
     if (v.is_string()) {
-        try { return std::stoi(v.get<std::string>()); } catch (...) { return fallback; }
+        try {
+            return std::stoi(v.get<std::string>());
+        } catch (...) { return fallback; }
     }
     if (v.is_number_integer()) return v.get<int>();
-    if (v.is_number_float())   return static_cast<int>(v.get<double>());
+    if (v.is_number_float()) return static_cast<int>(v.get<double>());
     return fallback;
 }
 
@@ -784,15 +814,21 @@ int ParseIntStr(const nlohmann::json& v, int fallback = 0) {
 // subtract a retraction-when-cut term, but that adds complexity for a 30mm³
 // effect we don't need byte-level parity for).
 int GetMinFlushVolume(const nlohmann::json& base_dict, std::size_t nozzle_id) {
-    if (!base_dict.contains("nozzle_volume") || !base_dict["nozzle_volume"].is_array())
-        return 0;
+    if (!base_dict.contains("nozzle_volume") || !base_dict["nozzle_volume"].is_array()) return 0;
     const auto& nv_arr = base_dict["nozzle_volume"];
     if (nozzle_id >= nv_arr.size()) return 0;
     return ParseIntStr(nv_arr[nozzle_id], 0);
 }
 
+// Source-of-truth for the matrix is `preset.filaments[i].colour` (NOT
+// `final_dict["filament_colour"]`). The downstream `PatchFilamentArrays`
+// writes the same `preset.filaments[i].colour` values into final_dict, which
+// is why the matrix and palette stay consistent. Anyone changing the order of
+// these calls — or introducing a transformation between matrix generation and
+// palette write-out — must keep both reads on the same `preset.filaments`
+// pointer to avoid matrix/palette divergence.
 void InjectFlushVolumes(nlohmann::json& final_dict, const nlohmann::json& base_dict,
-                         const SlicerPreset& preset) {
+                        const SlicerPreset& preset) {
     if (preset.filaments.empty()) return;
     const std::size_t N = preset.filaments.size();
 
@@ -811,9 +847,9 @@ void InjectFlushVolumes(nlohmann::json& final_dict, const nlohmann::json& base_d
         FlushVolumeCalculator calc(min_vol, kMaxFlushVolume);
         for (std::size_t i = 0; i < N; ++i) {
             for (std::size_t j = 0; j < N; ++j) {
-                int v = (i == j) ? 0
-                                  : calc.Calc(preset.filaments[i].colour,
-                                              preset.filaments[j].colour);
+                int v = (i == j)
+                            ? 0
+                            : calc.Calc(preset.filaments[i].colour, preset.filaments[j].colour);
                 matrix.push_back(std::to_string(v));
             }
         }
@@ -836,10 +872,10 @@ void InjectFlushVolumes(nlohmann::json& final_dict, const nlohmann::json& base_d
     auto set_if_absent = [&](const char* key, const char* value) {
         if (!final_dict.contains(key)) final_dict[key] = value;
     };
-    set_if_absent("flush_into_objects",   "0");
-    set_if_absent("flush_into_infill",    "0");
-    set_if_absent("flush_into_support",   "1");
-    set_if_absent("prime_volume_mode",    "Default");
+    set_if_absent("flush_into_objects", "0");
+    set_if_absent("flush_into_infill", "0");
+    set_if_absent("flush_into_support", "1");
+    set_if_absent("prime_volume_mode", "Default");
     set_if_absent("role_base_wipe_speed", "1");
 }
 
@@ -1076,16 +1112,17 @@ std::string BuildModelSettings(const ExportedGroup& group, const SlicerPreset& p
     xml << "<config>\n";
 
     if (group.assembly_object_id > 0) {
+        const std::string assembly_name_esc = XmlAttrEscape(group.assembly_name);
         xml << "  <object id=\"" << group.assembly_object_id << "\">\n";
-        xml << "    <metadata key=\"name\" value=\"" << group.assembly_name << "\"/>\n";
+        xml << "    <metadata key=\"name\" value=\"" << assembly_name_esc << "\"/>\n";
         xml << "    <metadata key=\"extruder\" value=\"1\"/>\n";
         xml << "    <metadata face_count=\"" << group.total_face_count << "\"/>\n";
         for (const auto& obj : group.objects) {
             xml << "    <part id=\"" << obj.part_id << "\" subtype=\"normal_part\">\n";
-            xml << "      <metadata key=\"name\" value=\"" << obj.name << "\"/>\n";
+            xml << "      <metadata key=\"name\" value=\"" << XmlAttrEscape(obj.name) << "\"/>\n";
             xml << "      <metadata key=\"matrix\" "
                    "value=\"1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1\"/>\n";
-            xml << "      <metadata key=\"source_file\" value=\"" << group.assembly_name
+            xml << "      <metadata key=\"source_file\" value=\"" << assembly_name_esc
                 << ".3mf\"/>\n";
             xml << "      <metadata key=\"source_object_id\" value=\"0\"/>\n";
             xml << "      <metadata key=\"source_volume_id\" value=\"0\"/>\n";
@@ -1125,7 +1162,7 @@ std::string BuildModelSettings(const ExportedGroup& group, const SlicerPreset& p
     } else {
         for (const auto& obj : group.objects) {
             xml << "  <object id=\"" << obj.part_id << "\">\n";
-            xml << "    <metadata key=\"name\" value=\"" << obj.name << "\"/>\n";
+            xml << "    <metadata key=\"name\" value=\"" << XmlAttrEscape(obj.name) << "\"/>\n";
             xml << "    <metadata key=\"extruder\" value=\"" << obj.filament_slot << "\"/>\n";
             xml << "    <metadata face_count=\"" << obj.face_count << "\"/>\n";
             xml << "  </object>\n";

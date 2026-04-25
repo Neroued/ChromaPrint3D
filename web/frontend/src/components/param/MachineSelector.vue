@@ -26,7 +26,7 @@
 
 <script setup lang="ts">
 import { NFormItem, NSelect, NTooltip } from 'naive-ui'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../../stores/app'
 import type { NozzleSize } from '../../types'
@@ -85,6 +85,18 @@ const selectedValue = computed(() => {
   }
   return filteredMachines.value[0]?.name ?? ''
 })
+
+/// Keep the parent's `modelValue` in sync with the displayed `selectedValue`:
+/// covers (a) initial mount when no value was provided, (b) nozzle change that
+/// filters out the current machine, and (c) catalog arrival after onMounted.
+/// Also dedupes so manual `onChange` paths stay idempotent.
+watch(
+  selectedValue,
+  (next) => {
+    if (next !== (props.modelValue ?? '')) emit('update:modelValue', next)
+  },
+  { immediate: true },
+)
 
 function onChange(value: string) {
   emit('update:modelValue', value)

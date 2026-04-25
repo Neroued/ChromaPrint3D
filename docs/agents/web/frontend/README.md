@@ -51,8 +51,11 @@
 ## 多机型预设（机型下拉）
 
 - `src/components/param/MachineSelector.vue` — 通用机型下拉组件；按 nozzle 过滤 catalog 列表。
+  - 内部用 `watch(selectedValue, ..., { immediate: true })` 主动同步父组件 `modelValue`：
+    切换 nozzle 导致当前机型被过滤掉时会自动 emit fallback 值，避免 UI 显示与提交字段不一致。
 - `src/api/machines.ts` — `GET /api/v1/machines` 客户端。
 - `src/stores/app.ts` — `ensureMachines()` + `machines` / `defaultMachine` 状态；首次挂载时拉取。
+  - 失败（网络瞬断或后端无 catalog）后会清空缓存 promise，下次调用可重试。
 - catalog 为空（后端缺数据目录）时下拉自动隐藏，对应字段保持 `undefined` 即可。
 - 类型：`src/types.ts` 中 `MachineInfo` / `MachineCatalogResponse` / `target_machine` 字段。
 

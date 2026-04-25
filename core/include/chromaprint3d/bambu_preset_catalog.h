@@ -49,6 +49,19 @@ struct MachineSpec {
     std::shared_ptr<const ChromaPrintPatches> patches;
 };
 
+/// Lightweight per-machine summary for catalog browsing: topology, exposed
+/// nozzles, and (best-effort) printer_model. Independent of layer height —
+/// suitable for UI listings that need to enumerate machines without forcing a
+/// specific (nozzle, layer_height) tuple to be present.
+struct MachineSummary {
+    std::string machine_name;
+    std::string extruder_topology;
+    std::vector<std::string> nozzles;
+    /// Best-effort: read from the first available `<slug>_*` base file's
+    /// printer_model cache entry. May be empty when no base file was loaded.
+    std::string printer_model;
+};
+
 /// Patch overlay loaded from `data/presets/chromaprint_patches.json`.
 struct ChromaPrintPatches {
     using Section     = std::unordered_map<std::string, std::string>;
@@ -85,10 +98,21 @@ public:
     /// Names of all registered machines (insertion order).
     std::vector<std::string> ListMachines() const;
 
+    /// Returns a layer-height-independent summary (topology, nozzles, best-
+    /// effort printer_model) for \p machine_name. Returns std::nullopt if the
+    /// machine is not registered. Unlike `Resolve`, this never depends on a
+    /// specific (nozzle, layer_height) base file being present, so it stays
+    /// usable for UI catalog enumeration even when only some layer-heights
+    /// are shipped.
+    std::optional<MachineSummary> GetMachineSummary(std::string_view machine_name) const;
+
     /// `default_machine` from machines.json.
     const std::string& DefaultMachine() const { return default_machine_; }
 
-    /// Read-only access to the patch overlay (always non-null after LoadFromDir).
+    /// Read-only access to the patch overlay. Always non-null: a default-
+    /// constructed catalog (e.g. the one returned by ServerFacade's
+    /// `LoadCatalogOrEmpty` fallback path) holds an empty `ChromaPrintPatches`,
+    /// so dereferencing `Patches()` is always safe.
     const ChromaPrintPatches& Patches() const { return *patches_; }
 
     /// Whether this catalog has been initialised (LoadFromDir was called).
@@ -96,7 +120,7 @@ public:
 
 private:
     struct MachineRecord {
-        std::string slug;                                     // from machines.json
+        std::string slug; // from machines.json
         std::string extruder_topology;
         std::vector<std::string> nozzles;
         std::map<std::string, std::string> process_template;  // nozzle -> template
@@ -107,7 +131,12 @@ private:
     std::filesystem::path data_dir_;
     std::vector<std::string> machine_names_; // registration order
     std::map<std::string, MachineRecord> machines_;
-    std::shared_ptr<const ChromaPrintPatches> patches_;
+    /// Always non-null. Default-initialised to an empty patches instance so a
+    /// default-constructed catalog (the LoadFromDir failure fallback) does not
+    /// expose a null shared_ptr to `Patches()` callers. `LoadFromDir` overwrites
+    /// it with the parsed overlay before returning.
+    std::shared_ptr<const ChromaPrintPatches> patches_{
+        std::make_shared<const ChromaPrintPatches>()};
     std::string default_machine_;
 
     /// Cache of `printer_model` keyed by base filename stem `<slug>_<lh>mm_<nozzle>`

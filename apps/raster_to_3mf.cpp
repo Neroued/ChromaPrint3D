@@ -80,7 +80,8 @@ void PrintUsage(const char* exe) {
         "  --double-sided 0|1  Generate mirrored color layers on both sides (default 0)\n"
         "  --preview PATH      Save preview image (default: <out>_preview.png)\n"
         "  --source-mask PATH  Save source mask image (default: <out>_source_mask.png)\n"
-        "  --data-dir PATH     Data dir holding presets/ and preset_bases/ (default: data)\n"
+        "  --data-dir PATH     Data dir holding presets/ and preset_bases/\n"
+        "                      (default: none — emits standard 3MF without preset embedding)\n"
         "  --machine NAME      Target Bambu Lab machine name (default: catalog default)\n"
         "  --log-level LEVEL   Log level: trace/debug/info/warn/error/off (default: info)\n",
         exe);

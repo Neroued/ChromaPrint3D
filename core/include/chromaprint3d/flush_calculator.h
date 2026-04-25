@@ -32,8 +32,14 @@ public:
 
     /// Compute the flush volume (mm³) for switching from \p src_hex to \p dst_hex.
     /// Hex strings must be `#RRGGBB` (case-insensitive); on parse failure both
-    /// channels are treated as white. Returns the integer volume clamped to
-    /// `[0, max_flush_volume]`.
+    /// channels are treated as white.
+    ///
+    /// Returns an integer volume in `[60 + min_flush_volume, max_flush_volume]`:
+    ///   - lower bound is from BambuStudio's HSV-formula floor (max(volume, 60))
+    ///     plus the caller-supplied baseline `min_flush_volume`;
+    ///   - upper clamp is `max_flush_volume`.
+    /// Negative `min_flush_volume` is unsupported; the floor is still 60 in that
+    /// case but no explicit lower clamp is applied.
     int Calc(std::string_view src_hex, std::string_view dst_hex) const;
 
 private:

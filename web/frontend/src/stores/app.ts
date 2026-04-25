@@ -144,6 +144,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   /// Idempotent loader: subsequent calls return the same in-flight promise.
+  /// On rejection (e.g. transient network error or backend without catalog) we
+  /// reset the cached promise so the next caller can retry — otherwise a single
+  /// blip would permanently leave the UI without a machine list.
   function ensureMachines(): Promise<void> {
     if (machinesPromise) return machinesPromise
     machinesPromise = fetchMachines()
@@ -155,6 +158,8 @@ export const useAppStore = defineStore('app', () => {
         // Backend without catalog: leave arrays empty so UI hides the dropdown.
         machines.value = []
         defaultMachine.value = ''
+        // Allow retry on next call (subsequent mount, manual refresh, etc.).
+        machinesPromise = null
       })
     return machinesPromise
   }
