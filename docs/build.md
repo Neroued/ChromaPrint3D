@@ -90,7 +90,7 @@ cmake --build build -j$(nproc)
 | `gen_calibration_board` | 生成校准板 3MF 与元数据 |
 | `build_colordb` | 从校准板照片构建 ColorDB |
 | `raster_to_3mf` | 图像转多色 3MF |
-| `gen_stage` | 生成建模阶梯色板 |
+| `gen_stage` | 生成建模阶梯色板（0.08 mm 切片层高，默认 face-up，`--face-down` 切换为观赏面朝下） |
 | `gen_representative_board` | 从配方文件生成代表性校准板 |
 | `svg_to_3mf` | SVG 转 3MF |
 | `gen_test_preset_3mf` | 生成测试预设 3MF |

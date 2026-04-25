@@ -1,3 +1,4 @@
+#include "chromaprint3d/common.h"
 #include "chromaprint3d/logging.h"
 #include "chromaprint3d/voxel.h"
 #include "chromaprint3d/mesh.h"
@@ -6,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
@@ -23,12 +25,14 @@ struct StageConfig {
     int margin_mm = 0;
 
     float pixel_mm        = 1.0f;
-    float layer_height_mm = 0.04f;
-    float base_mm         = 1.0f;
+    float layer_height_mm = 0.08f;
+    int base_layers       = 15;
 
     int max_step_layers = 25;
 
     std::vector<int> step_layers;
+
+    FaceOrientation face = FaceOrientation::FaceUp;
 
     StageConfig() {
         margin_mm = gap_mm;
@@ -38,7 +42,9 @@ struct StageConfig {
     }
 };
 
-void PrintUsage(const char* exe) { std::printf("Usage: %s [--out stage.3mf]\n", exe); }
+void PrintUsage(const char* exe) {
+    std::printf("Usage: %s [--out stage.3mf] [--face-down] [--log-level LEVEL]\n", exe);
+}
 
 size_t GridIndex(int x, int y, int z, int width, int height, int layers) {
     return (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) *
@@ -46,7 +52,7 @@ size_t GridIndex(int x, int y, int z, int width, int height, int layers) {
            static_cast<size_t>(z);
 }
 
-void FillBox(VoxelGrid& grid, int x0, int y0, int x1, int y1, int z0, int z1) {
+void SetBox(VoxelGrid& grid, int x0, int y0, int x1, int y1, int z0, int z1, uint8_t value) {
     if (grid.width <= 0 || grid.height <= 0 || grid.num_layers <= 0) { return; }
     const int width  = grid.width;
     const int height = grid.height;
@@ -68,9 +74,13 @@ void FillBox(VoxelGrid& grid, int x0, int y0, int x1, int y1, int z0, int z1) {
     for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
             const size_t base = GridIndex(x, y, 0, width, height, layers);
-            for (int z = z0; z < z1; ++z) { grid.ooc[base + static_cast<size_t>(z)] = 1; }
+            for (int z = z0; z < z1; ++z) { grid.ooc[base + static_cast<size_t>(z)] = value; }
         }
     }
+}
+
+inline void FillBox(VoxelGrid& grid, int x0, int y0, int x1, int y1, int z0, int z1) {
+    SetBox(grid, x0, y0, x1, y1, z0, z1, static_cast<uint8_t>(1));
 }
 
 ModelIR BuildStageModel(const StageConfig& cfg) {
@@ -81,6 +91,7 @@ ModelIR BuildStageModel(const StageConfig& cfg) {
         throw std::runtime_error("pixel_mm and layer_height_mm must be positive");
     }
     if (cfg.max_step_layers <= 0) { throw std::runtime_error("max_step_layers is invalid"); }
+    if (cfg.base_layers <= 0) { throw std::runtime_error("base_layers is invalid"); }
 
     const int block_px  = static_cast<int>(std::lround(cfg.block_mm / cfg.pixel_mm));
     const int gap_px    = static_cast<int>(std::lround(cfg.gap_mm / cfg.pixel_mm));
@@ -93,9 +104,7 @@ ModelIR BuildStageModel(const StageConfig& cfg) {
     const int height = cfg.grid_rows * block_px + (cfg.grid_rows - 1) * gap_px + 2 * margin_px;
     if (width <= 0 || height <= 0) { throw std::runtime_error("Model size is invalid"); }
 
-    const int base_layers = static_cast<int>(std::lround(cfg.base_mm / cfg.layer_height_mm));
-    if (base_layers <= 0) { throw std::runtime_error("base_layers is invalid"); }
-
+    const int base_layers  = cfg.base_layers;
     const int total_layers = base_layers + cfg.max_step_layers;
     if (total_layers <= 0) { throw std::runtime_error("total_layers is invalid"); }
 
@@ -132,7 +141,11 @@ ModelIR BuildStageModel(const StageConfig& cfg) {
     VoxelGrid& base_grid = model.voxel_grids[0];
     VoxelGrid& step_grid = model.voxel_grids[1];
 
-    FillBox(base_grid, 0, 0, width, height, 0, base_layers);
+    if (cfg.face == FaceOrientation::FaceDown) {
+        FillBox(base_grid, 0, 0, width, height, 0, total_layers);
+    } else {
+        FillBox(base_grid, 0, 0, width, height, 0, base_layers);
+    }
 
     for (size_t i = 0; i < cfg.step_layers.size(); ++i) {
         const int step_layers = std::min(cfg.step_layers[i], cfg.max_step_layers);
@@ -145,7 +158,13 @@ ModelIR BuildStageModel(const StageConfig& cfg) {
         const int y0 = margin_px + row * (block_px + gap_px);
         const int x1 = x0 + block_px;
         const int y1 = y0 + block_px;
-        FillBox(step_grid, x0, y0, x1, y1, base_layers, base_layers + step_layers);
+
+        if (cfg.face == FaceOrientation::FaceDown) {
+            SetBox(base_grid, x0, y0, x1, y1, 0, step_layers, static_cast<uint8_t>(0));
+            FillBox(step_grid, x0, y0, x1, y1, 0, step_layers);
+        } else {
+            FillBox(step_grid, x0, y0, x1, y1, base_layers, base_layers + step_layers);
+        }
     }
 
     return model;
@@ -168,6 +187,10 @@ int main(int argc, char** argv) {
             log_level = argv[++i];
             continue;
         }
+        if (arg == "--face-down") {
+            cfg.face = FaceOrientation::FaceDown;
+            continue;
+        }
         if (arg == "--help" || arg == "-h") {
             PrintUsage(argv[0]);
             return 0;
@@ -180,6 +203,10 @@ int main(int argc, char** argv) {
     InitLogging(ParseLogLevel(log_level));
 
     try {
+        spdlog::info(
+            "Building stage model: face={} layer_height_mm={} base_layers={} total_layers={}",
+            FaceOrientationTag(cfg.face), cfg.layer_height_mm, cfg.base_layers,
+            cfg.base_layers + cfg.max_step_layers);
         ModelIR model = BuildStageModel(cfg);
 
         BuildMeshConfig mesh_cfg;

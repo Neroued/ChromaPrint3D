@@ -104,12 +104,18 @@ flowchart TD
 
 ### 6) `gen_stage`
 
-用途：生成固定阶梯校准模型。  
+用途：生成固定阶梯校准模型（6×3 色块，`step_layers = [0..16, 25]`）。
+默认几何参数：`layer_height_mm = 0.08`、`base_layers = 15`（1.20 mm）、`max_step_layers = 25`（最大 color 2.00 mm），总高 **3.20 mm**。**仅适配 0.08 mm 切片层高**，所有色块 / 底板界面都落在 0.08 mm 切片边界上。
+
 示例：
 
 ```bash
-./build/bin/gen_stage --out stage.3mf
+./build/bin/gen_stage --out stage_faceup.3mf              # 观赏面朝上（默认）
+./build/bin/gen_stage --out stage_facedown.3mf --face-down # 观赏面朝下（贴建板）
 ```
+
+- `--face-down`：将色层放到模型底部（贴建板那一侧），上方与周边用底板材料填满，整体仍为实心长方体；翻面后底面即为观赏面
+- 未加 `--face-down` 时沿用 face-up 结构（底板 + 上方色柱）
 
 ### 7) `gen_test_preset_3mf`
 
