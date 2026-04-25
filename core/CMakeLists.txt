@@ -65,6 +65,7 @@ target_sources(chromaprint3d PRIVATE
     src/geo/export_3mf.cpp
     src/geo/bambu_metadata.cpp
     src/geo/bambu_preset_catalog.cpp
+    src/flush/flush_calculator.cpp
     src/vecgeo/vector_mesh_builder.cpp
     src/vecgeo/triangulate.cpp
     src/pipeline/pipeline.cpp

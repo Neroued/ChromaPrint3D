@@ -1,6 +1,7 @@
 #include "bambu_metadata.h"
 
 #include "chromaprint3d/error.h"
+#include "chromaprint3d/flush_calculator.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -749,6 +750,99 @@ std::string FaceLabelForPatch(FaceOrientation f) {
     return f == FaceOrientation::FaceUp ? "FaceUp" : "FaceDown";
 }
 
+// ── Flush-volume metadata generation ────────────────────────────────────────
+//
+// BambuStudio fallback (when `flush_volumes_matrix` is missing from
+// project_settings.config) yields a degenerate `8×8 = 280` matrix that causes
+// color bleed-through in real prints. We mirror BBS's "Re-calculate" output
+// by computing the matrix from palette colors using the same algorithm
+// (FlushVolumeCalculator: dataset lookup with HSV-formula fallback).
+//
+// Design notes:
+//
+// - flush_volumes_matrix layout = N² × physical_nozzle_count, contiguous per
+//   nozzle (matches `varesa_foreground.3mf` and BBS `WipeTowerDialog.cpp`).
+// - flush_volumes_vector = 2 × N filled with "140" (BBS default; resize-only
+//   path needs this so the user can later edit the per-filament push/pull).
+// - flush_multiplier = physical_nozzle_count × "1".
+// - dataset_id per nozzle is read from base file's `nozzle_flush_dataset[idx]`
+//   (BBS reads the same way in `WipeTowerDialog::CalcFlushingVolumes`).
+// - min_flush_volume per nozzle is `nozzle_volume[idx]` only; BBS's full
+//   formula adds a retraction-when-cut term that is 0 in default base configs
+//   (`filament_long_retractions_when_cut = nil` everywhere we ship).
+
+int ParseIntStr(const nlohmann::json& v, int fallback = 0) {
+    if (v.is_string()) {
+        try { return std::stoi(v.get<std::string>()); } catch (...) { return fallback; }
+    }
+    if (v.is_number_integer()) return v.get<int>();
+    if (v.is_number_float())   return static_cast<int>(v.get<double>());
+    return fallback;
+}
+
+// Per-nozzle `min_flush_volume` = `nozzle_volume[nozzle_id]` (BBS would also
+// subtract a retraction-when-cut term, but that adds complexity for a 30mm³
+// effect we don't need byte-level parity for).
+int GetMinFlushVolume(const nlohmann::json& base_dict, std::size_t nozzle_id) {
+    if (!base_dict.contains("nozzle_volume") || !base_dict["nozzle_volume"].is_array())
+        return 0;
+    const auto& nv_arr = base_dict["nozzle_volume"];
+    if (nozzle_id >= nv_arr.size()) return 0;
+    return ParseIntStr(nv_arr[nozzle_id], 0);
+}
+
+void InjectFlushVolumes(nlohmann::json& final_dict, const nlohmann::json& base_dict,
+                         const SlicerPreset& preset) {
+    if (preset.filaments.empty()) return;
+    const std::size_t N = preset.filaments.size();
+
+    // Physical nozzle count comes from `nozzle_diameter` (mirrors BBS
+    // `full_config.option<...>("nozzle_diameter")->values.size()`).
+    std::size_t nozzle_count = 1;
+    if (base_dict.contains("nozzle_diameter") && base_dict["nozzle_diameter"].is_array()) {
+        nozzle_count = base_dict["nozzle_diameter"].size();
+    }
+    if (nozzle_count == 0) nozzle_count = 1;
+
+    nlohmann::json matrix = nlohmann::json::array();
+    matrix.get_ptr<nlohmann::json::array_t*>()->reserve(N * N * nozzle_count);
+    for (std::size_t nid = 0; nid < nozzle_count; ++nid) {
+        const int min_vol = GetMinFlushVolume(base_dict, nid);
+        FlushVolumeCalculator calc(min_vol, kMaxFlushVolume);
+        for (std::size_t i = 0; i < N; ++i) {
+            for (std::size_t j = 0; j < N; ++j) {
+                int v = (i == j) ? 0
+                                  : calc.Calc(preset.filaments[i].colour,
+                                              preset.filaments[j].colour);
+                matrix.push_back(std::to_string(v));
+            }
+        }
+    }
+    final_dict["flush_volumes_matrix"] = matrix;
+
+    // 2×N push/pull baseline; BBS default (140 each) cancels out in `vector[i]+
+    // vector[j]` resize-only fallback to 280, but here BBS will trust the
+    // matrix we computed.
+    nlohmann::json vec = nlohmann::json::array();
+    for (std::size_t i = 0; i < 2 * N; ++i) vec.push_back("140");
+    final_dict["flush_volumes_vector"] = vec;
+
+    nlohmann::json mult = nlohmann::json::array();
+    for (std::size_t i = 0; i < nozzle_count; ++i) mult.push_back("1");
+    final_dict["flush_multiplier"] = mult;
+
+    // Side-channel project-config defaults (matches `varesa_foreground.3mf`).
+    // Only set when missing — base files / user overrides take precedence.
+    auto set_if_absent = [&](const char* key, const char* value) {
+        if (!final_dict.contains(key)) final_dict[key] = value;
+    };
+    set_if_absent("flush_into_objects",   "0");
+    set_if_absent("flush_into_infill",    "0");
+    set_if_absent("flush_into_support",   "1");
+    set_if_absent("prime_volume_mode",    "Default");
+    set_if_absent("role_base_wipe_speed", "1");
+}
+
 } // namespace
 
 std::string BuildProjectSettings(const SlicerPreset& preset) {
@@ -819,7 +913,10 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     // variants (NOT print_extruder_variant), repeated N times.
     InjectMandatoryVariantMetaFields(final_dict, base_dict, extruder0_variants, N);
 
-    // Apply user-level overrides (palette colors, settings_id, etc.).
+    // Generate flush_volumes_matrix from palette colors using the HSV-based
+    // formula. Runs BEFORE PatchFlushMatrix so a user-supplied override (set
+    // in SlicerPreset.flush_volumes_matrix) takes priority.
+    InjectFlushVolumes(final_dict, base_dict, preset);
     PatchFlushMatrix(final_dict, preset.flush_volumes_matrix);
     PatchFilamentArrays(final_dict, preset.filaments, K_per_extruder);
 

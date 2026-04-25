@@ -1424,3 +1424,186 @@ TEST(ExpandFilament, MismatchedLengthThrows) {
 
     std::filesystem::remove(tmp_path);
 }
+
+// ===========================================================================
+// Group: FlushMatrixGeneration
+//
+// Verifies that BuildProjectSettings emits a fully-populated
+// `flush_volumes_matrix` (and supporting fields) so BambuStudio does NOT
+// fall back to the degenerate `8×8=280` default that causes color bleed.
+// ===========================================================================
+
+TEST(FlushMatrixGeneration, P2sN3MatrixSizeAndDiagonalZero) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j = ExportAndExtractProjectSettings(preset);
+
+    // P2S = 1 physical nozzle → 3*3*1 = 9 entries.
+    ASSERT_TRUE(j.contains("flush_volumes_matrix"));
+    ASSERT_TRUE(j["flush_volumes_matrix"].is_array());
+    const std::size_t nozzle_count = j["flush_multiplier"].size();
+    EXPECT_EQ(nozzle_count, 1u);
+    EXPECT_EQ(j["flush_volumes_matrix"].size(), 3u * 3u * nozzle_count);
+
+    // Diagonal entries = 0 (same-color switch).
+    const auto& matrix = j["flush_volumes_matrix"];
+    constexpr int N = 3;
+    for (std::size_t n = 0; n < nozzle_count; ++n) {
+        for (int i = 0; i < N; ++i) {
+            std::size_t idx = n * N * N + i * N + i;
+            EXPECT_EQ(matrix[idx].get<std::string>(), "0")
+                << "diagonal at nozzle=" << n << " filament=" << i;
+        }
+    }
+}
+
+// Helper: derive "machine facts" from the exported project_settings.config
+// rather than hardcoding nozzle counts in tests. This keeps tests valid as
+// catalog/base files evolve.
+struct MachineFacts {
+    std::size_t nozzle_count;       // = flush_multiplier.size()
+    std::size_t filament_count;     // = N (preset.filaments.size())
+    std::size_t expected_matrix_sz; // = N * N * nozzle_count
+};
+MachineFacts ExtractMachineFacts(const nlohmann::json& project_settings,
+                                  std::size_t N) {
+    const std::size_t nozzle_count = project_settings["flush_multiplier"].size();
+    return {nozzle_count, N, N * N * nozzle_count};
+}
+
+TEST(FlushMatrixGeneration, H2cN5MatrixShapeFromFacts) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 5;
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
+    auto j = ExportAndExtractProjectSettings(preset);
+    auto facts = ExtractMachineFacts(j, N);
+
+    EXPECT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
+
+    // Diagonal entries on each nozzle slab must be zero.
+    const auto& matrix = j["flush_volumes_matrix"];
+    for (std::size_t n = 0; n < facts.nozzle_count; ++n) {
+        for (std::size_t i = 0; i < N; ++i) {
+            std::size_t idx = n * N * N + i * N + i;
+            EXPECT_EQ(matrix[idx].get<std::string>(), "0")
+                << "nozzle=" << n << " i=" << i;
+        }
+    }
+}
+
+TEST(FlushMatrixGeneration, FlushVolumesVectorAndMultiplier) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 5;
+    // H2C exercises nozzle_count > 1 in the multiplier.
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
+    auto j = ExportAndExtractProjectSettings(preset);
+    auto facts = ExtractMachineFacts(j, N);
+
+    ASSERT_TRUE(j["flush_volumes_vector"].is_array());
+    EXPECT_EQ(j["flush_volumes_vector"].size(), 2u * N); // 2 × N (push/pull)
+    for (const auto& v : j["flush_volumes_vector"]) {
+        EXPECT_EQ(v.get<std::string>(), "140");
+    }
+
+    ASSERT_TRUE(j["flush_multiplier"].is_array());
+    EXPECT_EQ(j["flush_multiplier"].size(), facts.nozzle_count);
+    for (const auto& v : j["flush_multiplier"]) {
+        EXPECT_EQ(v.get<std::string>(), "1");
+    }
+}
+
+TEST(FlushMatrixGeneration, H2cN8MatrixShapeFromFacts) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 8; // typical heavy multi-color project
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
+    auto j = ExportAndExtractProjectSettings(preset);
+    auto facts = ExtractMachineFacts(j, N);
+    EXPECT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
+}
+
+TEST(FlushMatrixGeneration, SideChannelDefaults) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j = ExportAndExtractProjectSettings(preset);
+
+    // Mirrors varesa baseline.
+    EXPECT_EQ(j.value("flush_into_objects",   ""), "0");
+    EXPECT_EQ(j.value("flush_into_infill",    ""), "0");
+    EXPECT_EQ(j.value("flush_into_support",   ""), "1");
+    EXPECT_EQ(j.value("prime_volume_mode",    ""), "Default");
+    EXPECT_EQ(j.value("role_base_wipe_speed", ""), "1");
+}
+
+TEST(FlushMatrixGeneration, UserOverrideTakesPriority) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 2;
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, N);
+    auto baseline = ExportAndExtractProjectSettings(preset);
+    auto facts    = ExtractMachineFacts(baseline, N);
+    // Manually supply a flat override array sized to whatever the catalog
+    // says this machine produces.
+    std::vector<int> override_matrix(facts.expected_matrix_sz, 999);
+    for (std::size_t n = 0; n < facts.nozzle_count; ++n) {
+        for (std::size_t i = 0; i < N; ++i) {
+            override_matrix[n * N * N + i * N + i] = 0;
+        }
+    }
+    preset.flush_volumes_matrix = override_matrix;
+    auto j = ExportAndExtractProjectSettings(preset);
+
+    ASSERT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
+    // First off-diagonal entry should reflect the user override (999), not
+    // the HSV-formula auto-computed value.
+    const std::size_t off_diag_idx = 1; // (i=0, j=1) in nozzle 0
+    EXPECT_EQ(j["flush_volumes_matrix"][off_diag_idx].get<std::string>(), "999")
+        << "user-supplied override must win over auto-generated values";
+}
+
+TEST(FlushMatrixGeneration, NotAll280Sentinel) {
+    // Regression for the bug fixed by this change: previously the matrix
+    // was empty on export → BBS filled it with the 280-fallback (luminance
+    // formula yields different non-280 values for any non-trivial palette).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, 4);
+    // Override colors to a high-contrast quad.
+    const char* colors[] = {"#000000", "#FFFFFF", "#C12E1F", "#0086D6"};
+    for (size_t i = 0; i < preset.filaments.size() && i < 4; ++i) {
+        preset.filaments[i].colour = colors[i];
+    }
+    auto j = ExportAndExtractProjectSettings(preset);
+
+    int count_280 = 0;
+    for (const auto& v : j["flush_volumes_matrix"]) {
+        if (v.get<std::string>() == "280") ++count_280;
+    }
+    // BBS fallback would yield 280 on every off-diagonal entry (24 of 32);
+    // our generator should produce far fewer (typically zero) such entries
+    // because the HSV formula and dataset return different values per pair.
+    EXPECT_LT(count_280, 5)
+        << "matrix has too many 280 entries — looks like BBS fallback";
+}
+
+// Replaces the dataset-specific test that was deleted with the
+// FlushVolPredictor removal: now we just verify the matrix entry for a
+// high-contrast pair lands somewhere in the expected ballpark of the HSV
+// formula (≈ 560 mm³ for black→white before any min-flush addition).
+TEST(FlushMatrixGeneration, BlackWhitePairUsesHsvFormula) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, 2);
+    preset.filaments[0].colour = "#000000";
+    preset.filaments[1].colour = "#FFFFFF";
+    auto j = ExportAndExtractProjectSettings(preset);
+    // Layout for N=2, nozzle 0: [0]=black→black=0, [1]=black→white, ...
+    // HSV formula: ~560 mm³ + min_flush_volume (= nozzle_volume[0] = 130).
+    int v = std::stoi(j["flush_volumes_matrix"][1].get<std::string>());
+    EXPECT_GE(v, 560);   // floor: HSV formula alone
+    EXPECT_LE(v, 900);   // clamp: kMaxFlushVolume
+}

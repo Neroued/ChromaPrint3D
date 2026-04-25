@@ -14,6 +14,7 @@
   - 几何与导出：`geo/`、`vecgeo/`
   - 转换编排：`pipeline/`
   - 校准：`calib/`
+  - 冲刷体积计算：`flush/`
 
 ## 常见改动落点
 
@@ -27,6 +28,7 @@
 | 修改体素/网格生成 | `core/src/geo/geo.cpp`、`core/src/vecgeo/vector_mesh_builder.cpp` |
 | 修改 3MF 导出 | `core/src/geo/export_3mf.cpp` |
 | 修改 Bambu 预设与耗材元数据 | `core/src/geo/bambu_metadata.cpp` |
+| 修改冲刷体积矩阵生成（多色切换冲刷量） | `core/src/flush/flush_calculator.cpp`、`core/include/chromaprint3d/flush_calculator.h`、`core/src/geo/bambu_metadata.cpp::InjectFlushVolumes` |
 | 修改 SVG 几何提取与遮挡裁剪 | `core/src/imgproc/vector_proc.cpp`、`core/src/imgproc/occlusion.cpp`、`core/src/imgproc/gradient.cpp` |
 | 修改端到端转换编排 | `core/src/pipeline/pipeline.cpp`、`core/src/pipeline/vector_pipeline.cpp` |
 | 修改前向色彩模型（Beer-Lambert 预测） | `core/src/model/forward_color_model.cpp`、`core/include/chromaprint3d/forward_color_model.h` |
