@@ -102,7 +102,8 @@ using Vec3i = Vec3<int32_t>;
 /// `neroued_3mf::IndexTriangle` layout for zero-copy 3MF export.
 using Vec3u = Vec3<uint32_t>;
 
-static_assert(sizeof(Vec3u) == 12, "Vec3u must be 12 bytes for layout compatibility with IndexTriangle");
+static_assert(sizeof(Vec3u) == 12,
+              "Vec3u must be 12 bytes for layout compatibility with IndexTriangle");
 
 /// 3-component float vector.
 struct Vec3f {

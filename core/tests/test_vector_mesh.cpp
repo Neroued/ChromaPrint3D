@@ -104,9 +104,8 @@ MeshTopologyMetrics AnalyzeMesh(const Mesh& mesh) {
 
     const uint32_t max_idx = static_cast<uint32_t>(mesh.vertices.size());
     for (const Vec3u& tri : mesh.indices) {
-        if (tri.x >= max_idx || tri.y >= max_idx || tri.z >= max_idx ||
-            tri.x == tri.y || tri.y == tri.z || tri.x == tri.z ||
-            IsDegenerateByArea(mesh, tri)) {
+        if (tri.x >= max_idx || tri.y >= max_idx || tri.z >= max_idx || tri.x == tri.y ||
+            tri.y == tri.z || tri.x == tri.z || IsDegenerateByArea(mesh, tri)) {
             ++m.degenerate_triangles;
             continue;
         }

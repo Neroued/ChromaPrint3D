@@ -334,13 +334,13 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
                     x3[v] += h;
 
                     const Vec3u v0{CheckedU32Coord(x0[0]), CheckedU32Coord(x0[1]),
-                                    CheckedU32Coord(x0[2])};
+                                   CheckedU32Coord(x0[2])};
                     const Vec3u v1{CheckedU32Coord(x1[0]), CheckedU32Coord(x1[1]),
-                                    CheckedU32Coord(x1[2])};
+                                   CheckedU32Coord(x1[2])};
                     const Vec3u v2{CheckedU32Coord(x2[0]), CheckedU32Coord(x2[1]),
-                                    CheckedU32Coord(x2[2])};
+                                   CheckedU32Coord(x2[2])};
                     const Vec3u v3{CheckedU32Coord(x3[0]), CheckedU32Coord(x3[1]),
-                                    CheckedU32Coord(x3[2])};
+                                   CheckedU32Coord(x3[2])};
                     if (c > 0) {
                         add_quad(v0, v1, v3, v2);
                     } else {

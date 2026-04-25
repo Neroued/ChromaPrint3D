@@ -179,8 +179,7 @@ TriangulatedRegion TriangulateMergedPaths(const Clipper2Lib::Paths64& paths) {
             const auto& v1 = result.vertices[base + i1];
             const auto& v2 = result.vertices[base + i2];
             if (IsDegenerateTriangle2D(v0, v1, v2)) continue;
-            result.triangles.emplace_back(CheckedU32Index(base + i0),
-                                          CheckedU32Index(base + i1),
+            result.triangles.emplace_back(CheckedU32Index(base + i0), CheckedU32Index(base + i1),
                                           CheckedU32Index(base + i2));
         }
     }

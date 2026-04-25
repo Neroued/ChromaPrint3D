@@ -230,8 +230,8 @@ void ExtrudeSlab(const detail::TriangulatedRegion& region, float z_bot, float z_
             const size_t n = ring.size();
             for (size_t i = 0; i < n; ++i) {
                 size_t j = (i + 1) % n;
-                float dx   = ring[static_cast<size_t>(j)].x - ring[static_cast<size_t>(i)].x;
-                float dy   = ring[static_cast<size_t>(j)].y - ring[static_cast<size_t>(i)].y;
+                float dx = ring[static_cast<size_t>(j)].x - ring[static_cast<size_t>(i)].x;
+                float dy = ring[static_cast<size_t>(j)].y - ring[static_cast<size_t>(i)].y;
                 if (dx * dx + dy * dy < kMinEdgeLenSq) continue;
 
                 uint32_t ti = CheckedU32Index(base + offset + i);

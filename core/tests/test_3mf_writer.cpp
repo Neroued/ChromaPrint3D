@@ -186,7 +186,7 @@ Mesh MakeHighTriCountMesh(int num_triangles) {
     mesh.vertices.reserve(static_cast<std::size_t>(num_triangles) * 3);
     mesh.indices.reserve(static_cast<std::size_t>(num_triangles));
     for (int i = 0; i < num_triangles; ++i) {
-        float x  = static_cast<float>(i) * 2.0f;
+        float x       = static_cast<float>(i) * 2.0f;
         uint32_t base = static_cast<uint32_t>(mesh.vertices.size());
         mesh.vertices.push_back({x, 0.0f, 0.0f});
         mesh.vertices.push_back({x + 1.0f, 0.0f, 0.0f});
@@ -210,10 +210,7 @@ TEST(ThreeMfWriter, WritesRequiredOpcParts) {
     n3mf_mesh.vertices.reserve(box.vertices.size());
     for (const auto& v : box.vertices) { n3mf_mesh.vertices.push_back({v.x, v.y, v.z}); }
     n3mf_mesh.triangles.reserve(box.indices.size());
-    for (const auto& idx : box.indices) {
-        n3mf_mesh.triangles.push_back({idx.x, idx.y,
-                                       idx.z});
-    }
+    for (const auto& idx : box.indices) { n3mf_mesh.triangles.push_back({idx.x, idx.y, idx.z}); }
 
     uint32_t oid = builder.AddMeshObject("Object A", std::move(n3mf_mesh));
     builder.AddBuildItem(oid);
@@ -233,10 +230,7 @@ TEST(ThreeMfWriter, DefaultPackageKeepsMinimalOpcLayout) {
     Mesh box = MakeBoxMesh();
     neroued_3mf::Mesh n3mf_mesh;
     for (const auto& v : box.vertices) { n3mf_mesh.vertices.push_back({v.x, v.y, v.z}); }
-    for (const auto& idx : box.indices) {
-        n3mf_mesh.triangles.push_back({idx.x, idx.y,
-                                       idx.z});
-    }
+    for (const auto& idx : box.indices) { n3mf_mesh.triangles.push_back({idx.x, idx.y, idx.z}); }
     uint32_t oid = builder.AddMeshObject("Object A", std::move(n3mf_mesh));
     builder.AddBuildItem(oid);
 
@@ -254,10 +248,7 @@ TEST(ThreeMfWriter, MergesDynamicOpcContributionIntoPackage) {
     Mesh box = MakeBoxMesh();
     neroued_3mf::Mesh n3mf_mesh;
     for (const auto& v : box.vertices) { n3mf_mesh.vertices.push_back({v.x, v.y, v.z}); }
-    for (const auto& idx : box.indices) {
-        n3mf_mesh.triangles.push_back({idx.x, idx.y,
-                                       idx.z});
-    }
+    for (const auto& idx : box.indices) { n3mf_mesh.triangles.push_back({idx.x, idx.y, idx.z}); }
     uint32_t oid = builder.AddMeshObject("Object A", std::move(n3mf_mesh));
     builder.AddBuildItem(oid);
 
@@ -298,10 +289,7 @@ TEST(ThreeMfWriter, SerializesUnitAndMetadata) {
     Mesh box = MakeBoxMesh();
     neroued_3mf::Mesh n3mf_mesh;
     for (const auto& v : box.vertices) { n3mf_mesh.vertices.push_back({v.x, v.y, v.z}); }
-    for (const auto& idx : box.indices) {
-        n3mf_mesh.triangles.push_back({idx.x, idx.y,
-                                       idx.z});
-    }
+    for (const auto& idx : box.indices) { n3mf_mesh.triangles.push_back({idx.x, idx.y, idx.z}); }
     uint32_t oid = builder.AddMeshObject("Object A", std::move(n3mf_mesh));
     builder.AddBuildItem(oid);
 
@@ -323,10 +311,7 @@ TEST(ThreeMfWriter, SerializesBuildItemTransform) {
     Mesh box = MakeBoxMesh();
     neroued_3mf::Mesh n3mf_mesh;
     for (const auto& v : box.vertices) { n3mf_mesh.vertices.push_back({v.x, v.y, v.z}); }
-    for (const auto& idx : box.indices) {
-        n3mf_mesh.triangles.push_back({idx.x, idx.y,
-                                       idx.z});
-    }
+    for (const auto& idx : box.indices) { n3mf_mesh.triangles.push_back({idx.x, idx.y, idx.z}); }
     uint32_t oid = builder.AddMeshObject("Object A", std::move(n3mf_mesh));
 
     neroued_3mf::Transform t = neroued_3mf::Transform::Translation(10.0f, 20.0f, 30.0f);
@@ -351,10 +336,7 @@ TEST(ThreeMfWriter, WriteToFileMatchesWriteToBuffer) {
     Mesh box = MakeDenseMesh(10, 2);
     neroued_3mf::Mesh n3mf_mesh;
     for (const auto& v : box.vertices) { n3mf_mesh.vertices.push_back({v.x, v.y, v.z}); }
-    for (const auto& idx : box.indices) {
-        n3mf_mesh.triangles.push_back({idx.x, idx.y,
-                                       idx.z});
-    }
+    for (const auto& idx : box.indices) { n3mf_mesh.triangles.push_back({idx.x, idx.y, idx.z}); }
     uint32_t oid = builder.AddMeshObject("FileTest", std::move(n3mf_mesh));
     builder.AddBuildItem(oid);
 

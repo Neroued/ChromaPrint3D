@@ -228,9 +228,9 @@ neroued_3mf::Document BuildStandardDocument(const std::vector<InputObject>& obje
 
     // BuildInputObjects already filters empty meshes; the views here are non-empty.
     for (std::size_t i = 0; i < objects.size(); ++i) {
-        auto view    = detail::MakeMeshView(*objects[i].mesh);
-        uint32_t oid = builder.AddMeshObject(objects[i].name, view, bmg_id,
-                                             static_cast<uint32_t>(i));
+        auto view = detail::MakeMeshView(*objects[i].mesh);
+        uint32_t oid =
+            builder.AddMeshObject(objects[i].name, view, bmg_id, static_cast<uint32_t>(i));
         builder.AddBuildItem(oid);
     }
 
