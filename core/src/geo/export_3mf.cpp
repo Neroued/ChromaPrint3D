@@ -226,13 +226,9 @@ neroued_3mf::Document BuildStandardDocument(const std::vector<InputObject>& obje
     }
     uint32_t bmg_id = builder.AddBaseMaterialGroup(std::move(materials));
 
+    // BuildInputObjects already filters empty meshes; the views here are non-empty.
     for (std::size_t i = 0; i < objects.size(); ++i) {
-        auto view = detail::MakeMeshView(*objects[i].mesh);
-        if (view.triangles.empty()) {
-            spdlog::warn("BuildStandardDocument: object '{}' dropped (empty mesh)",
-                         objects[i].name);
-            continue;
-        }
+        auto view    = detail::MakeMeshView(*objects[i].mesh);
         uint32_t oid = builder.AddMeshObject(objects[i].name, view, bmg_id,
                                              static_cast<uint32_t>(i));
         builder.AddBuildItem(oid);
@@ -284,14 +280,10 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
 
     std::vector<uint32_t> object_ids;
     int part_id = 1;
+    // BuildInputObjects already filters empty meshes; the views here are non-empty.
     for (std::size_t i = 0; i < objects.size(); ++i) {
-        auto view      = detail::MakeMeshView(*objects[i].mesh);
-        int face_count = static_cast<int>(view.triangles.size());
-        if (view.triangles.empty()) {
-            spdlog::warn("BuildBambuDocument: object '{}' dropped (empty mesh)",
-                         objects[i].name);
-            continue;
-        }
+        auto view            = detail::MakeMeshView(*objects[i].mesh);
+        const int face_count = static_cast<int>(view.triangles.size());
 
         uint32_t oid = builder.AddMeshObject(objects[i].name, view);
         builder.AddBuildItem(oid);

@@ -138,7 +138,7 @@ core/
 
 **头文件：** `vec3.h`、`color.h`
 
-- `Vec3i`：整型三分量向量（用于体素坐标、网格索引）
+- `Vec3<T>`：整型三分量向量模板，提供 `Vec3i = Vec3<int32_t>`（体素坐标、有符号偏移）与 `Vec3u = Vec3<uint32_t>`（网格三角面索引，与 `neroued_3mf::IndexTriangle` 布局兼容，3MF 导出走零拷贝路径）
 - `Vec3f`：浮点三分量向量（支持归一化、距离、插值、钳位等操作）
 - `Rgb`：线性 sRGB 颜色（各分量 [0, 1]），支持与 Lab 互转、gamma 编解码
 - `Lab`：CIE L\*a\*b\* 颜色，提供 `DeltaE76` 色差计算

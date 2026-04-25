@@ -1,7 +1,9 @@
 #pragma once
 
 /// \file vec3.h
-/// \brief 3-component integer and float vector types.
+/// \brief 3-component vector types: generic `Vec3<T>` (with `Vec3i`/`Vec3u`
+/// aliases) for integer coordinates / mesh indices, and a dedicated `Vec3f`
+/// for floating-point geometry.
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +11,8 @@
 
 namespace ChromaPrint3D {
 
+/// 3-component generic vector. Used with integer instantiations for voxel
+/// coordinates and mesh indices; see the `Vec3i`/`Vec3u` aliases below.
 template <typename T>
 struct Vec3 {
     T x = 0; ///< X component.
@@ -81,6 +85,9 @@ struct Vec3 {
     /// Computes the squared length of the vector.
     /// \return Squared length (x² + y² + z²)
     T LengthSquared() const { return Dot(*this); }
+
+    /// Componentwise equality (auto-generated `!=` via C++20).
+    bool operator==(const Vec3&) const = default;
 };
 
 template <typename S, typename T>
@@ -88,7 +95,11 @@ inline Vec3<T> operator*(S s, const Vec3<T>& v) {
     return v * static_cast<T>(s);
 }
 
+/// Signed 32-bit integer vector. Used for voxel coordinates and signed offsets.
 using Vec3i = Vec3<int32_t>;
+
+/// Unsigned 32-bit integer vector. Used for mesh triangle indices; matches
+/// `neroued_3mf::IndexTriangle` layout for zero-copy 3MF export.
 using Vec3u = Vec3<uint32_t>;
 
 static_assert(sizeof(Vec3u) == 12, "Vec3u must be 12 bytes for layout compatibility with IndexTriangle");

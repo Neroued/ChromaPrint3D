@@ -221,12 +221,6 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         }
     };
 
-    struct Vec3uEq {
-        bool operator()(const Vec3u& a, const Vec3u& b) const {
-            return a.x == b.x && a.y == b.y && a.z == b.z;
-        }
-    };
-
     const std::size_t estimated_surface =
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 2 +
         static_cast<std::size_t>(width) * static_cast<std::size_t>(layers) * 2 +
@@ -234,7 +228,7 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     mesh.vertices.reserve(estimated_surface);
     mesh.indices.reserve(estimated_surface * 2);
 
-    std::unordered_map<Vec3u, uint32_t, Vec3uHash, Vec3uEq> vertex_map;
+    std::unordered_map<Vec3u, uint32_t, Vec3uHash> vertex_map;
     vertex_map.reserve(estimated_surface);
 
     const float px = cfg.pixel_mm;
