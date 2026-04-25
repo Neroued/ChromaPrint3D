@@ -48,6 +48,14 @@
   - `src/domain/upload/imageUploadValidation.ts`
   - `src/runtime/env.ts`
 
+## 多机型预设（机型下拉）
+
+- `src/components/param/MachineSelector.vue` — 通用机型下拉组件；按 nozzle 过滤 catalog 列表。
+- `src/api/machines.ts` — `GET /api/v1/machines` 客户端。
+- `src/stores/app.ts` — `ensureMachines()` + `machines` / `defaultMachine` 状态；首次挂载时拉取。
+- catalog 为空（后端缺数据目录）时下拉自动隐藏，对应字段保持 `undefined` 即可。
+- 类型：`src/types.ts` 中 `MachineInfo` / `MachineCatalogResponse` / `target_machine` 字段。
+
 ## 公告系统（只读端）
 
 - 前端只消费公告，不写入；写入由 `scripts/announce.sh` + 后端完成。

@@ -1,3 +1,4 @@
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/logging.h"
 #include "chromaprint3d/pipeline.h"
 
@@ -6,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -46,6 +48,9 @@ struct Options {
     int base_layers       = -1;
     bool double_sided     = false;
 
+    std::string data_dir;       ///< For BambuPresetCatalog (contains presets/ + preset_bases/).
+    std::string target_machine; ///< Machine name; empty -> catalog default.
+
     std::string log_level = "info";
 };
 
@@ -75,6 +80,8 @@ void PrintUsage(const char* exe) {
         "  --double-sided 0|1  Generate mirrored color layers on both sides (default 0)\n"
         "  --preview PATH      Save preview image (default: <out>_preview.png)\n"
         "  --source-mask PATH  Save source mask image (default: <out>_source_mask.png)\n"
+        "  --data-dir PATH     Data dir holding presets/ and preset_bases/ (default: data)\n"
+        "  --machine NAME      Target Bambu Lab machine name (default: catalog default)\n"
         "  --log-level LEVEL   Log level: trace/debug/info/warn/error/off (default: info)\n",
         exe);
 }
@@ -342,6 +349,14 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             opt.log_level = argv[++i];
             continue;
         }
+        if (arg == "--data-dir" && i + 1 < argc) {
+            opt.data_dir = argv[++i];
+            continue;
+        }
+        if (arg == "--machine" && i + 1 < argc) {
+            opt.target_machine = argv[++i];
+            continue;
+        }
         if (arg == "--help" || arg == "-h") {
             PrintUsage(argv[0]);
             return false;
@@ -400,6 +415,19 @@ int main(int argc, char** argv) {
         req.layer_height_mm  = opt.layer_height_mm;
         req.base_layers      = opt.base_layers;
         req.double_sided     = opt.double_sided;
+        req.target_machine   = opt.target_machine;
+
+        std::optional<BambuPresetCatalog> catalog;
+        if (!opt.data_dir.empty()) {
+            req.preset_dir = (std::filesystem::path(opt.data_dir) / "presets").string();
+            try {
+                catalog.emplace(BambuPresetCatalog::LoadFromDir(opt.data_dir));
+                req.catalog = &*catalog;
+            } catch (const std::exception& e) {
+                spdlog::warn("Catalog not loaded from {}: {} (3MF will fall back to standard mode)",
+                             opt.data_dir, e.what());
+            }
+        }
 
         req.generate_preview     = true;
         req.generate_source_mask = true;

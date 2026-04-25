@@ -57,7 +57,17 @@
 
 ## Bambu Studio 预设参数
 
-校准板生成端点（`POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`）、定位端点（`POST /api/v1/calibration/locate`）和图像转换端点（`POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`）支持 `nozzle_size` 与 `face_orientation` 参数；转换端点另外支持 `base_layers` 与 `double_sided`。后端在 `convert_service.cpp` / `calibration_service.cpp` 解析后传递给核心库：`face_orientation=facedown` 会触发导出几何绕 Y 轴旋转 180°，`base_layers` 可覆盖底板层数，`double_sided=true` 会启用双面镜像色层，并在预设选择阶段强制使用 `facedown` 预设文件。`flip_y` 仍保持图像/坐标系适配语义，不等价于 `face_orientation`。
+校准板生成端点（`POST /api/v1/calibration/boards`、`POST /api/v1/calibration/boards/8color`）、定位端点（`POST /api/v1/calibration/locate`）和图像转换端点（`POST /api/v1/convert/raster`、`POST /api/v1/convert/vector`）支持 `nozzle_size`、`face_orientation`、`target_machine` 参数；转换端点另外支持 `base_layers` 与 `double_sided`。后端在 `convert_service.cpp` / `calibration_service.cpp` 解析后传递给核心库：`face_orientation=facedown` 会触发导出几何绕 Y 轴旋转 180°，`base_layers` 可覆盖底板层数，`double_sided=true` 会启用双面镜像色层。`target_machine` 由 `BambuPresetCatalog::Resolve()` 解析为具体 `MachineSpec`，并在 3MF 中写入 `print_compatible_printers`（同 topology 同 nozzle 的全部机型）以保证 BambuStudio 切换机型时保留切片参数。`flip_y` 仍保持图像/坐标系适配语义，不等价于 `face_orientation`。
+
+## 多机型预设（BambuPresetCatalog）
+
+`ServerFacade` 在启动时加载 `BambuPresetCatalog`（`<data_dir>/presets/machines.json` + `chromaprint_patches.json` + `<data_dir>/preset_bases/*.json`），单例注入到 `ConvertService` 与 `CalibrationService`。catalog 缺失时（数据目录不全）服务不会失败：3MF 退化为标准模式，前端 `/api/v1/machines` 返回空列表导致下拉自动隐藏。
+
+新增端点：
+
+- `GET /api/v1/machines` — 返回 `{default_machine, machines[]}`，每条 `MachineInfo` 含 `name`、`extruder_topology`（`single`/`dual`）、`nozzles[]`、`printer_model`。前端用于驱动机型下拉选择。
+
+详见 [docs/agents/tasks/extend_machine_support.md](../../tasks/extend_machine_support.md)。
 
 ## 模型包元数据
 

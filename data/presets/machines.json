@@ -1,0 +1,174 @@
+{
+  "default_machine": "Bambu Lab P2S",
+  "machines": {
+    "Bambu Lab P2S": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL P2S 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL P2S"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL P2S 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL P2S"
+      },
+      "printer_template": "Bambu Lab P2S {nozzle} nozzle"
+    },
+    "Bambu Lab P1P": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL P1P 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL P1P"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL P1P 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL P1P"
+      },
+      "printer_template": "Bambu Lab P1P {nozzle} nozzle"
+    },
+    "Bambu Lab P1S": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL X1C"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL X1C 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL P1S 0.4 nozzle"
+      },
+      "printer_template": "Bambu Lab P1S {nozzle} nozzle"
+    },
+    "Bambu Lab X1 Carbon": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL X1C"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL X1C 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL X1C"
+      },
+      "printer_template": "Bambu Lab X1 Carbon {nozzle} nozzle"
+    },
+    "Bambu Lab X1": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL X1C"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL X1C 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL X1"
+      },
+      "printer_template": "Bambu Lab X1 {nozzle} nozzle"
+    },
+    "Bambu Lab X1E": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL X1C"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL X1C 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL X1C"
+      },
+      "printer_template": "Bambu Lab X1E {nozzle} nozzle"
+    },
+    "Bambu Lab A1": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL A1 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL A1"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL A1 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL A1"
+      },
+      "printer_template": "Bambu Lab A1 {nozzle} nozzle"
+    },
+    "Bambu Lab A1 mini": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL A1M 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL A1M"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL A1M 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL A1M"
+      },
+      "printer_template": "Bambu Lab A1 mini {nozzle} nozzle"
+    },
+    "Bambu Lab H2S": {
+      "extruder_topology": "single",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL H2S 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL H2S"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL H2S 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL H2S"
+      },
+      "printer_template": "Bambu Lab H2S {nozzle} nozzle"
+    },
+    "Bambu Lab H2D": {
+      "extruder_topology": "dual",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm Extra Fine @BBL H2D 0.2 nozzle",
+        "0.4": "0.08mm Extra Fine @BBL H2D"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL H2D 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL H2D"
+      },
+      "printer_template": "Bambu Lab H2D {nozzle} nozzle"
+    },
+    "Bambu Lab H2D Pro": {
+      "extruder_topology": "dual",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm Extra Fine @BBL H2DP 0.2 nozzle",
+        "0.4": "0.08mm Extra Fine @BBL H2DP"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL H2DP 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL H2DP"
+      },
+      "printer_template": "Bambu Lab H2D Pro {nozzle} nozzle"
+    },
+    "Bambu Lab H2C": {
+      "extruder_topology": "dual",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL H2C 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL H2C"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL H2C 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL H2C"
+      },
+      "printer_template": "Bambu Lab H2C {nozzle} nozzle"
+    },
+    "Bambu Lab X2D": {
+      "extruder_topology": "dual",
+      "nozzles": ["0.2", "0.4"],
+      "process_template": {
+        "0.2": "0.08mm High Quality @BBL X2D 0.2 nozzle",
+        "0.4": "0.08mm High Quality @BBL X2D"
+      },
+      "filament_template": {
+        "0.2": "Bambu PLA Basic @BBL X2D 0.2 nozzle",
+        "0.4": "Bambu PLA Basic @BBL X2D 0.4 nozzle"
+      },
+      "printer_template": "Bambu Lab X2D {nozzle} nozzle"
+    }
+  }
+}

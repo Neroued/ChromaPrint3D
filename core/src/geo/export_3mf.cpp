@@ -312,7 +312,7 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
     addMeta("Metadata/process_settings_1.config", "application/octet-stream",
             detail::BuildEmbeddedProcessPreset(preset));
     addMeta("Metadata/model_settings.config", "application/octet-stream",
-            detail::BuildModelSettings(group));
+            detail::BuildModelSettings(group, preset));
     addMeta("Metadata/slice_info.config", "application/octet-stream", detail::BuildSliceInfo());
     addMeta("Metadata/cut_information.xml", "application/xml", detail::BuildCutInformation(group));
     addMeta("Metadata/filament_sequence.json", "application/json", detail::BuildFilamentSequence());
@@ -572,7 +572,7 @@ std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshC
         });
     EnsureNonEmptyGeometry(objects, meshes.size());
 
-    if (!preset.preset_json_path.empty()) {
+    if (preset.machine_resolved()) {
         return WriteDocument(BuildBambuDocument(objects, preset, model_ir.name));
     }
     return WriteDocument(BuildStandardDocument(objects));
@@ -615,7 +615,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
         });
     EnsureNonEmptyGeometry(objects, mutable_meshes.size());
 
-    if (!preset.preset_json_path.empty()) {
+    if (preset.machine_resolved()) {
         return WriteDocument(BuildBambuDocument(objects, preset, model_name));
     }
     return WriteDocument(BuildStandardDocument(objects));
@@ -665,7 +665,7 @@ std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
         [&](std::size_t i) -> int { return slots[i]; });
     EnsureNonEmptyGeometry(objects, mutable_meshes.size());
 
-    if (!preset.preset_json_path.empty()) {
+    if (preset.machine_resolved()) {
         return WriteDocument(BuildBambuDocument(objects, preset, model_name));
     }
     return WriteDocument(BuildStandardDocument(objects));
@@ -707,7 +707,7 @@ void Export3mfToFile(const std::string& path, const ModelIR& model_ir, const Bui
         });
     EnsureNonEmptyGeometry(objects, meshes.size());
 
-    if (!preset.preset_json_path.empty()) {
+    if (preset.machine_resolved()) {
         WriteDocumentToFile(path, BuildBambuDocument(objects, preset, model_ir.name));
     } else {
         WriteDocumentToFile(path, BuildStandardDocument(objects));
@@ -752,7 +752,7 @@ void Export3mfFromMeshesToFile(const std::string& path, const std::vector<Mesh>&
         });
     EnsureNonEmptyGeometry(objects, mutable_meshes.size());
 
-    if (!preset.preset_json_path.empty()) {
+    if (preset.machine_resolved()) {
         WriteDocumentToFile(path, BuildBambuDocument(objects, preset, model_name));
     } else {
         WriteDocumentToFile(path, BuildStandardDocument(objects));

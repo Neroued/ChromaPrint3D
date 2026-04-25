@@ -12,12 +12,17 @@
 #include <string>
 #include <vector>
 
+namespace ChromaPrint3D {
+class BambuPresetCatalog;
+}
+
 namespace chromaprint3d::backend {
 
 class CalibrationService {
 public:
     CalibrationService(const ServerConfig& cfg, DataRepository& data, SessionStore& sessions,
-                       BoardRuntimeCache& boards);
+                       BoardRuntimeCache& boards,
+                       const ChromaPrint3D::BambuPresetCatalog* catalog = nullptr);
 
     ServiceResult GenerateBoard(const nlohmann::json& body);
     ServiceResult Generate8ColorBoard(const nlohmann::json& body);
@@ -33,6 +38,7 @@ private:
     DataRepository& data_;
     SessionStore& sessions_;
     BoardRuntimeCache& boards_;
+    const ChromaPrint3D::BambuPresetCatalog* catalog_ = nullptr;
 };
 
 } // namespace chromaprint3d::backend

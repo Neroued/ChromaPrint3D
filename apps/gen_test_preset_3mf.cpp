@@ -1,3 +1,4 @@
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/common.h"
 #include "chromaprint3d/export_3mf.h"
 #include "chromaprint3d/slicer_preset.h"
@@ -30,14 +31,16 @@ static Mesh MakeBoxMesh(int w, int h, int layers) {
 }
 
 int main(int argc, char* argv[]) {
-    std::string preset_dir = "data/presets";
+    std::string data_dir   = "data";
     std::string output     = "test_8color_preset.3mf";
     std::string nozzle_str = "n04";
     std::string face_str   = "faceup";
+    std::string machine    = ""; // empty -> catalog default
     if (argc > 1) output = argv[1];
-    if (argc > 2) preset_dir = argv[2];
+    if (argc > 2) data_dir = argv[2];
     if (argc > 3) nozzle_str = argv[3];
     if (argc > 4) face_str = argv[4];
+    if (argc > 5) machine = argv[5];
 
     // Project channels: the logical color channels used in the image
     struct ChannelInfo {
@@ -72,11 +75,20 @@ int main(int argc, char* argv[]) {
     profile.nozzle_size      = ParseNozzleSize(nozzle_str);
     profile.face_orientation = ParseFaceOrientation(face_str);
 
-    std::cout << "Nozzle: " << nozzle_str << ", Face: " << face_str << "\n";
+    std::cout << "Nozzle: " << nozzle_str << ", Face: " << face_str
+              << ", Machine: " << (machine.empty() ? "<default>" : machine) << "\n";
 
-    auto preset = SlicerPreset::FromProfile(preset_dir, profile);
-    if (preset.preset_json_path.empty()) {
-        std::cerr << "ERROR: preset file not found in " << preset_dir << "\n";
+    BambuPresetCatalog catalog;
+    try {
+        catalog = BambuPresetCatalog::LoadFromDir(data_dir);
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR: cannot load catalog from " << data_dir << ": " << e.what() << "\n";
+        return 1;
+    }
+
+    auto preset = SlicerPreset::FromProfile(catalog, profile, machine);
+    if (!preset.machine_resolved()) {
+        std::cerr << "ERROR: machine not resolved (target='" << machine << "')\n";
         return 1;
     }
 

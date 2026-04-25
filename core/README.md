@@ -232,8 +232,9 @@ core/
 | `Export3mfToBuffer()` | 将 ModelIR 导出为内存缓冲区 |
 | `Export3mfFromMeshes()` | 从预构建的 Mesh 向量导出（用于缓存场景） |
 
-导出器默认输出标准 3MF；当提供可用 `SlicerPreset`（`preset_json_path` 非空）时，会附加
-`Metadata/*` 私有切片器参数文件（当前已支持 Bambu settings 关系类型），若预设缺失则自动回退到标准 3MF。
+导出器默认输出标准 3MF；当提供可用 `SlicerPreset`（`SlicerPreset::machine_resolved()` 为 `true`）时，会附加
+`Metadata/*` 私有切片器参数文件（含 Bambu Studio 跨机型兼容列表），若预设无法解析则自动回退到标准 3MF。
+`SlicerPreset` 通过 `BambuPresetCatalog::Resolve(machine, nozzle, layer_height)` 从 `data/presets/machines.json` + `data/preset_bases/<slug>_<lh>_<nozzle>.json` 构造，运行时再叠加 `data/presets/chromaprint_patches.json`。
 ZIP 打包默认按阈值自动选择 `Store/Deflate`：小条目使用 Store，大条目优先 Deflate；若缺少 zlib 或压缩失败会安全回退 Store。
 
 Mesh 构建（体素网格、挤出与导出前预处理）支持 OpenMP 通道级并行。

@@ -61,3 +61,7 @@ announcements/*.local.yml
 announcements/*.local.json
 
 test_data/
+
+# BambuStudio upstream source (locally cloned by maintainers for preset base generation;
+# not tracked in this repo or CI). See data/preset_bases/ for the pre-generated artifacts.
+/BambuStudio/

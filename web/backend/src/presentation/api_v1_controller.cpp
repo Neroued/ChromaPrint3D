@@ -294,6 +294,10 @@ void ApiV1Controller::MattingMethods(const drogon::HttpRequestPtr& /*req*/, Call
     ReplyJson(std::move(cb), Facade().MattingMethods());
 }
 
+void ApiV1Controller::Machines(const drogon::HttpRequestPtr& /*req*/, Callback&& cb) {
+    ReplyJson(std::move(cb), Facade().ListMachines());
+}
+
 void ApiV1Controller::SubmitMatting(const drogon::HttpRequestPtr& req, Callback&& cb) {
     drogon::MultiPartParser parser;
     if (parser.parse(req) != 0) {

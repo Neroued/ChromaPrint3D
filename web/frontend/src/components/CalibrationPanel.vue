@@ -20,6 +20,7 @@ import { useBlobDownload } from '../composables/useBlobDownload'
 import { generateBoard, getBoardMetaPath, getBoardModelPath } from '../services/calibrationService'
 import { resolveErrorCode, shortenError, toDurationMs, trackEvent } from '../services/analytics'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
+import MachineSelector from './param/MachineSelector.vue'
 
 type EditablePaletteChannel = PaletteChannel & {
   id: number
@@ -46,6 +47,7 @@ const emit = defineEmits<{
 
 const nozzleSize = ref<NozzleSize>('n04')
 const faceOrientation = ref<FaceOrientation>('faceup')
+const targetMachine = ref<string>('')
 
 const maxChannels = 4
 const minChannels = 2
@@ -115,6 +117,7 @@ async function handleGenerate() {
       palette: toPaletteRequest(palette.value),
       nozzle_size: nozzleSize.value,
       face_orientation: faceOrientation.value,
+      target_machine: targetMachine.value || undefined,
     })
     boardId.value = response.board_id
     message.success(t('calibration.generateSuccess'))
@@ -171,6 +174,7 @@ async function downloadMeta() {
 function handleResetCalibrationParams() {
   nozzleSize.value = 'n04'
   faceOrientation.value = 'faceup'
+  targetMachine.value = ''
   palette.value = [
     createChannel('White', 'PLA Basic'),
     createChannel('Yellow', 'PLA Basic'),
@@ -228,6 +232,7 @@ function handleResetCalibrationParams() {
         >
       </template>
       <NSpace vertical :size="12">
+        <MachineSelector v-model="targetMachine" :nozzle-size="nozzleSize" />
         <div class="calibration-preset-row">
           <span class="calibration-preset-label">{{ t('calibration.nozzleSize') }}</span>
           <NRadioGroup v-model:value="nozzleSize" size="small">

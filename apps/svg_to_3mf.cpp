@@ -1,3 +1,4 @@
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/logging.h"
 #include "chromaprint3d/pipeline.h"
 
@@ -6,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +37,9 @@ struct Options {
     int base_layers                 = -1;
     bool double_sided               = false;
 
+    std::string data_dir;
+    std::string target_machine;
+
     std::string log_level = "info";
 };
 
@@ -58,6 +63,8 @@ void PrintUsage(const char* exe) {
         "  --double-sided 0|1  Generate mirrored color layers on both sides (default 0)\n"
         "  --tess-tol X        Bezier tessellation tolerance in mm (default 0.03)\n"
         "  --gradient-px-mm X  Gradient rasterization resolution in mm/px (0=auto)\n"
+        "  --data-dir PATH     Data dir holding presets/ and preset_bases/ (default: data)\n"
+        "  --machine NAME      Target Bambu Lab machine name (default: catalog default)\n"
         "  --log-level LEVEL   trace/debug/info/warn/error/off (default: info)\n",
         exe);
 }
@@ -258,6 +265,14 @@ bool ParseArgs(int argc, char** argv, Options& opt) {
             opt.log_level = argv[++i];
             continue;
         }
+        if (arg == "--data-dir" && i + 1 < argc) {
+            opt.data_dir = argv[++i];
+            continue;
+        }
+        if (arg == "--machine" && i + 1 < argc) {
+            opt.target_machine = argv[++i];
+            continue;
+        }
         if (arg == "--help" || arg == "-h") {
             PrintUsage(argv[0]);
             return false;
@@ -291,11 +306,24 @@ int main(int argc, char** argv) {
         req.target_height_mm = opt.target_height_mm;
         req.color_layers     = opt.color_layers;
         if (opt.color_layer_height_mm > 0.0f) req.layer_height_mm = opt.color_layer_height_mm;
-        req.color_space               = opt.color_space;
-        req.k_candidates              = opt.k_candidates;
-        req.flip_y                    = opt.flip_y;
-        req.nozzle_size               = opt.nozzle_size;
-        req.face_orientation          = opt.face_orientation;
+        req.color_space      = opt.color_space;
+        req.k_candidates     = opt.k_candidates;
+        req.flip_y           = opt.flip_y;
+        req.nozzle_size      = opt.nozzle_size;
+        req.face_orientation = opt.face_orientation;
+        req.target_machine   = opt.target_machine;
+
+        std::optional<BambuPresetCatalog> catalog;
+        if (!opt.data_dir.empty()) {
+            req.preset_dir = (std::filesystem::path(opt.data_dir) / "presets").string();
+            try {
+                catalog.emplace(BambuPresetCatalog::LoadFromDir(opt.data_dir));
+                req.catalog = &*catalog;
+            } catch (const std::exception& e) {
+                spdlog::warn("Catalog not loaded from {}: {} (3MF will fall back to standard mode)",
+                             opt.data_dir, e.what());
+            }
+        }
         req.layer_height_mm           = opt.layer_height_mm;
         req.base_layers               = opt.base_layers;
         req.double_sided              = opt.double_sided;

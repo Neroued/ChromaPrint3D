@@ -169,6 +169,10 @@ export default {
     faceDirection: '观赏面朝向',
     faceUp: '朝上',
     faceDown: '朝下',
+    targetMachine: '目标机型',
+    targetMachineHint: '选择目标机型',
+    targetMachineTooltip:
+      '导出的 3MF 会含同类拓扑各机型的其他 nozzle，BambuStudio 切换机型时可保留切片参数。',
     baseLayers: '底板层数',
     doubleSided: '双面生成',
     transparentLayer: '透明镀层',
@@ -285,6 +289,10 @@ export default {
     faceDirection: '观赏面朝向',
     faceUp: '观赏面朝上',
     faceDown: '观赏面朝下',
+    targetMachine: '目标机型',
+    targetMachineHint: '选择目标机型',
+    targetMachineTooltip:
+      '导出的校准板 3MF 会含同拓扑各机型的其他 nozzle，BambuStudio 切换机型时可保留切片参数。',
     colorPlaceholder: '颜色名称（例如 White）',
     materialPlaceholder: '材质（例如 PLA Basic）',
     generateBoard: '生成校准板',

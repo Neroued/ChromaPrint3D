@@ -5,10 +5,21 @@
 
 #include "chromaprint3d/slicer_preset.h"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
 namespace ChromaPrint3D::detail {
+
+/// Variant-meta helpers (plan v13 §6.1).
+/// Returns N x K_process slot ids ["1","1",...,"1","2","2",...,"N","N",...,"N"].
+std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_process);
+
+/// Returns N x K_process variant labels by repeating \p process_variant N times.
+/// BBB key fix (plan v13 §6.1): base must be `print_extruder_variant`, NOT the
+/// 1-element `filament_extruder_variant` produced by filament inheritance.
+std::vector<std::string>
+BuildFilamentExtruderVariant(const std::vector<std::string>& process_variant, std::size_t N);
 
 /// Describes a single exported mesh part and its filament slot assignment.
 struct ExportedObject {
@@ -46,7 +57,10 @@ std::string BuildEmbeddedProcessPreset(const SlicerPreset& preset);
 std::string BuildLayerConfigRanges(const SlicerPreset& preset);
 
 /// Generate model_settings.config XML for independent mesh objects.
-std::string BuildModelSettings(const ExportedGroup& group);
+/// Embeds `<metadata key="printer_model_id" value="...">` (plate metadata,
+/// plan v13 §6.6 / proposition 8). When `preset.machine_resolved()` is false,
+/// the printer_model_id metadata is omitted.
+std::string BuildModelSettings(const ExportedGroup& group, const SlicerPreset& preset);
 
 /// Generate slice_info.config XML.
 std::string BuildSliceInfo();

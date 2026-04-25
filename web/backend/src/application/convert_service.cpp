@@ -1,5 +1,6 @@
 #include "application/convert_service.h"
 
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/pipeline.h"
 #include "chromaprint3d/shape_width_analyzer.h"
 
@@ -17,8 +18,9 @@ using json = nlohmann::json;
 using namespace ChromaPrint3D;
 
 ConvertService::ConvertService(const ServerConfig& cfg, DataRepository& data,
-                               SessionStore& sessions, TaskRuntime& tasks)
-    : cfg_(cfg), data_(data), sessions_(sessions), tasks_(tasks) {}
+                               SessionStore& sessions, TaskRuntime& tasks,
+                               const ChromaPrint3D::BambuPresetCatalog* catalog)
+    : cfg_(cfg), data_(data), sessions_(sessions), tasks_(tasks), catalog_(catalog) {}
 
 ServiceResult ConvertService::SubmitConvertRaster(const std::string& owner,
                                                   const std::vector<uint8_t>& image,
@@ -199,6 +201,11 @@ ServiceResult ConvertService::BuildRasterRequest(const json& params,
     auto presets_path = std::filesystem::path(cfg_.data_dir) / "presets";
     if (std::filesystem::is_directory(presets_path)) { out.preset_dir = presets_path.string(); }
 
+    if (params.contains("target_machine") && params["target_machine"].is_string()) {
+        out.target_machine = params["target_machine"].get<std::string>();
+    }
+    if (catalog_ && !catalog_->empty()) { out.catalog = catalog_; }
+
     std::string common_vendor, common_material;
     auto selected = ResolveSelectedColorDbs(params, session, data_, out.preloaded_dbs,
                                             common_vendor, common_material);
@@ -361,6 +368,11 @@ ServiceResult ConvertService::BuildVectorRequest(const json& params,
 
     auto vpresets = std::filesystem::path(cfg_.data_dir) / "presets";
     if (std::filesystem::is_directory(vpresets)) { out.preset_dir = vpresets.string(); }
+
+    if (params.contains("target_machine") && params["target_machine"].is_string()) {
+        out.target_machine = params["target_machine"].get<std::string>();
+    }
+    if (catalog_ && !catalog_->empty()) { out.catalog = catalog_; }
 
     std::string vec_common_vendor, vec_common_material;
     auto selected = ResolveSelectedColorDbs(params, session, data_, out.preloaded_dbs,

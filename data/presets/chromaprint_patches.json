@@ -1,0 +1,125 @@
+{
+  "_doc": [
+    "ChromaPrint3D process patch definitions (plan v13 §3.2).",
+    "Schema:",
+    "  process_common: applied to all (machine × nozzle × face) combinations",
+    "  process_per_nozzle.<nozzle>: applied for that nozzle, overrides process_common",
+    "  process_per_face.<face>: applied for that face, overrides earlier layers",
+    "  filament_common: applied to all filament arrays (currently empty - ChromaPrint3D",
+    "                   does not modify filament_options_with_variant fields)",
+    "Field categories (per BambuStudio PrintConfig.cpp):",
+    "  scalar       : single value, e.g. 'arachne'",
+    "  $variant_indexed: dict {variant_name: value} resolved at runtime by",
+    "                   base_dict['print_extruder_variant'][i] -> dict[variant_name]",
+    "                   (kPrintWithVariantKeys, length = K_process)",
+    "Template variables: ${layer_height} replaced at runtime."
+  ],
+  "process_common": {
+    "wall_generator": "arachne",
+    "wall_loops": "1",
+    "sparse_infill_density": "100%",
+    "sparse_infill_pattern": "zig-zag",
+    "top_surface_pattern": "zig-zag",
+    "bottom_surface_pattern": "zig-zag",
+    "skeleton_infill_density": "100%",
+    "skin_infill_density": "100%",
+    "min_bead_width": "60%",
+    "prime_tower_width": "200",
+    "prime_tower_rib_wall": "0",
+    "detect_narrow_internal_solid_infill": "0",
+    "outer_wall_speed": {
+      "$variant_indexed": {
+        "Direct Drive Standard": "50",
+        "Direct Drive High Flow": "60",
+        "Direct Drive TPU High Flow": "50",
+        "Bowden Standard": "50",
+        "Bowden High Flow": "50"
+      }
+    },
+    "internal_solid_infill_speed": {
+      "$variant_indexed": {
+        "Direct Drive Standard": "100",
+        "Direct Drive High Flow": "150",
+        "Direct Drive TPU High Flow": "100",
+        "Bowden Standard": "100",
+        "Bowden High Flow": "100"
+      }
+    },
+    "top_surface_speed": {
+      "$variant_indexed": {
+        "Direct Drive Standard": "100",
+        "Direct Drive High Flow": "150",
+        "Direct Drive TPU High Flow": "100",
+        "Bowden Standard": "100",
+        "Bowden High Flow": "100"
+      }
+    }
+  },
+  "process_per_nozzle": {
+    "0.2": {
+      "initial_layer_line_width": "0.22",
+      "line_width": "0.22",
+      "top_color_penetration_layers": "7",
+      "bottom_color_penetration_layers": "5",
+      "smooth_coefficient": "4",
+      "prime_tower_fillet_wall": "0",
+      "elefant_foot_compensation": "0",
+      "inner_wall_speed": {
+        "$variant_indexed": {
+          "Direct Drive Standard": "50",
+          "Direct Drive High Flow": "150",
+          "Direct Drive TPU High Flow": "50",
+          "Bowden Standard": "50",
+          "Bowden High Flow": "50"
+        }
+      }
+    },
+    "0.4": {
+      "initial_layer_line_width": "0.42",
+      "line_width": "0.42",
+      "inner_wall_line_width": "0.42",
+      "skeleton_infill_line_width": "0.42",
+      "skin_infill_line_width": "0.42",
+      "sparse_infill_line_width": "0.42",
+      "top_color_penetration_layers": "9",
+      "bottom_color_penetration_layers": "7",
+      "smooth_coefficient": "1",
+      "prime_tower_fillet_wall": "1",
+      "elefant_foot_compensation": "0.15",
+      "inner_wall_speed": {
+        "$variant_indexed": {
+          "Direct Drive Standard": "50",
+          "Direct Drive High Flow": "120",
+          "Direct Drive TPU High Flow": "50",
+          "Bowden Standard": "50",
+          "Bowden High Flow": "50"
+        }
+      },
+      "sparse_infill_speed": {
+        "$variant_indexed": {
+          "Direct Drive Standard": "100",
+          "Direct Drive High Flow": "150",
+          "Direct Drive TPU High Flow": "100",
+          "Bowden Standard": "100",
+          "Bowden High Flow": "100"
+        }
+      },
+      "initial_layer_infill_speed": {
+        "$variant_indexed": {
+          "Direct Drive Standard": "100",
+          "Direct Drive High Flow": "105",
+          "Direct Drive TPU High Flow": "100",
+          "Bowden Standard": "100",
+          "Bowden High Flow": "100"
+        }
+      }
+    }
+  },
+  "process_per_face": {
+    "FaceUp": {},
+    "FaceDown": {
+      "initial_layer_print_height": "${layer_height}"
+    }
+  },
+  "filament_common": {}
+}

@@ -23,6 +23,7 @@ import {
 } from '../services/calibrationService'
 import { resolveErrorCode, shortenError, toDurationMs, trackEvent } from '../services/analytics'
 import type { FaceOrientation, NozzleSize, PaletteChannel } from '../types'
+import MachineSelector from './param/MachineSelector.vue'
 
 type EditablePaletteChannel = PaletteChannel & {
   id: number
@@ -60,6 +61,7 @@ const emit = defineEmits<{
 
 const nozzleSize = ref<NozzleSize>('n04')
 const faceOrientation = ref<FaceOrientation>('faceup')
+const targetMachine = ref<string>('')
 
 const palette = ref<EditablePaletteChannel[]>(DEFAULT_8_COLORS.map((item) => ({ ...item })))
 const board1Id = ref<string | null>(null)
@@ -115,6 +117,7 @@ async function handleGenerateBoard(boardIndex: number) {
       board_index: boardIndex,
       nozzle_size: nozzleSize.value,
       face_orientation: faceOrientation.value,
+      target_machine: targetMachine.value || undefined,
     })
     boardRef.value = response.board_id
     message.success(t('calibration.eightColor.boardGenerateSuccess', { index: boardIndex }))
@@ -177,6 +180,7 @@ async function downloadMeta(boardId: string | null) {
 function handleResetCalibrationParams() {
   nozzleSize.value = 'n04'
   faceOrientation.value = 'faceup'
+  targetMachine.value = ''
   palette.value = DEFAULT_8_COLORS.map((item) => ({ ...item }))
 }
 </script>
@@ -231,6 +235,7 @@ function handleResetCalibrationParams() {
           {{ t('calibration.eightColor.tip') }}
         </NAlert>
 
+        <MachineSelector v-model="targetMachine" :nozzle-size="nozzleSize" />
         <div class="calibration-preset-row">
           <span class="calibration-preset-label">{{ t('calibration.nozzleSize') }}</span>
           <NRadioGroup v-model:value="nozzleSize" size="small">

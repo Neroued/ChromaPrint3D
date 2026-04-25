@@ -14,12 +14,12 @@
 ## 简介
 
 ChromaPrint3D 可以把图片转换成多色 3D 打印可用的 3MF 模型。  
-支持 Bambu Studio 预设参数自动写入（0.2mm/0.4mm 喷嘴 × 观赏面朝上/朝下，共 4 种预设），并自动将模型颜色匹配到最接近的耗材丝槽位。  
+支持 Bambu Studio 预设参数自动写入（覆盖全部 13 款 BBL 机型：P2S/P1P/P1S/X1C/X1/X1E/A1/A1 mini/H2D/H2D Pro/H2C/H2S/X2D，每机型 × 0.2mm/0.4mm 喷嘴 × 观赏面朝上/朝下），3MF 含同拓扑同 nozzle 的跨机型兼容群，BambuStudio 切换机型时可保留切片参数；自动将模型颜色匹配到最接近的耗材丝槽位。  
 如果你只是想先体验效果，不需要先读一堆文档，直接从下面三种方式里选一种就行。
 
 ## 核心功能
 
-- 图片 / SVG → 多色 3MF，4 种 Bambu Studio 预设自动注入
+- 图片 / SVG → 多色 3MF，13 款 BBL 机型 × 0.2/0.4mm 喷嘴 × 观赏面朝上/朝下的 Bambu Studio 预设自动注入
 - 模型颜色自动匹配到耗材丝槽位（RGB 欧氏距离）
 - 深度学习抠图（ONNX Runtime 推理）
 - 矢量化处理：抗锯齿检测、边缘感知 SLIC 分割、逐像素标签细化
@@ -102,12 +102,12 @@ ChromaPrint3D 构建在众多优秀开源项目之上，特别感谢：
 ### Introduction
 
 ChromaPrint3D turns images into multi-color 3MF models for 3D printing.  
-It supports automatic Bambu Studio preset injection (0.2mm/0.4mm nozzle × face-up/face-down, 4 presets) and auto-matches model colors to the closest filament slot.  
+It supports automatic Bambu Studio preset injection across all 13 BBL machines (P2S/P1P/P1S/X1C/X1/X1E/A1/A1 mini/H2D/H2D Pro/H2C/H2S/X2D) at 0.2mm/0.4mm nozzles × face-up/face-down, with cross-machine compatibility groups so BambuStudio retains slicer parameters when switching printers, and auto-matches model colors to the closest filament slot.  
 If you only want a quick hands-on try, pick one of the options below.
 
 ### Features
 
-- Image / SVG to multi-color 3MF with auto-injected Bambu Studio presets (4 variants)
+- Image / SVG to multi-color 3MF with auto-injected Bambu Studio presets (13 BBL machines × 0.2/0.4mm nozzles × face-up/face-down)
 - Auto-match model colors to filament slots (RGB Euclidean distance)
 - Deep-learning matting (ONNX Runtime inference)
 - Vectorization: anti-aliasing detection, edge-aware SLIC, per-pixel label refinement

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/export_3mf.h"
 #include "chromaprint3d/slicer_preset.h"
 #include "chromaprint3d/voxel.h"
@@ -10,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -222,25 +224,45 @@ std::vector<Vec3f> ParseVerticesFromModelXml(const std::string& model_xml) {
     return vertices;
 }
 
-std::string GetPresetDir() {
-    const char* env = std::getenv("CHROMAPRINT3D_PRESET_DIR");
+std::string GetDataDir() {
+    const char* env = std::getenv("CHROMAPRINT3D_DATA_DIR");
     if (env) return env;
+    // Legacy env var still respected; treat its value as `<data_dir>/presets`.
+    const char* legacy = std::getenv("CHROMAPRINT3D_PRESET_DIR");
+    if (legacy) {
+        std::filesystem::path p(legacy);
+        if (p.filename() == "presets") return p.parent_path().string();
+        return legacy;
+    }
     const char* pwd = std::getenv("PWD");
-    return std::string(pwd ? pwd : ".") + "/data/presets";
+    return std::string(pwd ? pwd : ".") + "/data";
 }
 
-bool PresetFileExists() {
-    return std::filesystem::exists(GetPresetDir() + "/bambu_p2s_0.08mm_n04_faceup.json");
+bool PresetFilesExist() {
+    return std::filesystem::exists(GetDataDir() + "/preset_bases/bambu_p2s_0.08mm_n04.json") &&
+           std::filesystem::exists(GetDataDir() + "/presets/machines.json");
 }
 
-SlicerPreset MakeTestPreset() {
-    SlicerPreset preset;
-    preset.preset_json_path = GetPresetDir() + "/bambu_p2s_0.08mm_n04_faceup.json";
-    preset.filaments        = {
-        {.type = "PLA", .colour = "#C12E1F"},
-        {.type = "PLA", .colour = "#00AE42"},
-        {.type = "PLA", .colour = "#0A2989"},
-    };
+std::optional<BambuPresetCatalog> LoadCatalogOrNull() {
+    try {
+        return BambuPresetCatalog::LoadFromDir(GetDataDir());
+    } catch (const std::exception&) { return std::nullopt; }
+}
+
+SlicerPreset MakeTestPreset(const BambuPresetCatalog& catalog,
+                            FaceOrientation face = FaceOrientation::FaceUp) {
+    PrintProfile profile;
+    profile.layer_height_mm  = 0.08f;
+    profile.nozzle_size      = NozzleSize::N04;
+    profile.face_orientation = face;
+    profile.palette          = {
+        {"Red", "PLA", "#C12E1F"}, {"Green", "PLA", "#00AE42"}, {"Blue", "PLA", "#0A2989"}};
+
+    auto preset = SlicerPreset::FromProfile(catalog, profile, "Bambu Lab P2S");
+    // Ensure each slot's colour matches the test palette regardless of FilamentConfig defaults.
+    for (size_t i = 0; i < preset.filaments.size() && i < profile.palette.size(); ++i) {
+        preset.filaments[i].colour = profile.palette[i].hex_color;
+    }
     return preset;
 }
 
@@ -259,22 +281,28 @@ Mesh MakeBoxMesh() {
 
 } // namespace
 
-TEST(SlicerPreset, FindPresetFileFindsExisting) {
-    std::string dir  = GetPresetDir();
-    std::string path = FindPresetFile(dir, "Bambu Lab P2S", 0.08f);
-    if (PresetFileExists()) {
-        ASSERT_FALSE(path.empty());
-        EXPECT_NE(path.find("bambu_p2s_0.08mm_n04_faceup.json"), std::string::npos);
-    }
+TEST(SlicerPreset, CatalogResolvesP2SDefault) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    EXPECT_EQ(spec->machine_name, "Bambu Lab P2S");
+    EXPECT_EQ(spec->extruder_topology, "single");
+    EXPECT_EQ(spec->printer_template, "Bambu Lab P2S 0.4 nozzle");
+    EXPECT_FALSE(spec->compatible_printers.empty());
 }
 
-TEST(SlicerPreset, FindPresetFileReturnsEmptyForMissing) {
-    std::string dir  = GetPresetDir();
-    std::string path = FindPresetFile(dir, "Bambu Lab P2S", 0.99f);
-    EXPECT_TRUE(path.empty());
+TEST(SlicerPreset, CatalogReturnsNulloptForMissingNozzle) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // 0.99mm layer height has no base file; Resolve returns nullopt.
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N04, 0.99f);
+    EXPECT_FALSE(spec.has_value());
 }
 
 TEST(SlicerPreset, DoubleSidedForcesFaceDownPresetSelection) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     PrintProfile profile;
     profile.nozzle_size      = NozzleSize::N04;
     profile.face_orientation = FaceOrientation::FaceUp;
@@ -282,17 +310,20 @@ TEST(SlicerPreset, DoubleSidedForcesFaceDownPresetSelection) {
     profile.palette.push_back(Channel{"Red", "PLA"});
 
     const SlicerPreset single_sided =
-        SlicerPreset::FromProfile(GetPresetDir(), profile, nullptr, false);
+        SlicerPreset::FromProfile(*catalog, profile, "Bambu Lab P2S", nullptr, false);
     const SlicerPreset double_sided =
-        SlicerPreset::FromProfile(GetPresetDir(), profile, nullptr, true);
+        SlicerPreset::FromProfile(*catalog, profile, "Bambu Lab P2S", nullptr, true);
 
     EXPECT_EQ(single_sided.face, FaceOrientation::FaceUp);
     EXPECT_EQ(double_sided.face, FaceOrientation::FaceDown);
+    EXPECT_TRUE(single_sided.machine_resolved());
+    EXPECT_TRUE(double_sided.machine_resolved());
 }
 
 TEST(SlicerPreset, ExportWithPresetContainsBambuMetadata) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
@@ -312,8 +343,9 @@ TEST(SlicerPreset, ExportWithPresetContainsBambuMetadata) {
 }
 
 TEST(SlicerPreset, ProjectSettingsContainsPatchedFilaments) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}};
@@ -338,8 +370,9 @@ TEST(SlicerPreset, ProjectSettingsContainsPatchedFilaments) {
 }
 
 TEST(SlicerPreset, ModelSettingsXmlContainsObjectsAndExtruders) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
@@ -360,8 +393,9 @@ TEST(SlicerPreset, ModelSettingsXmlContainsObjectsAndExtruders) {
 }
 
 TEST(SlicerPreset, ExplicitSlotsMappingSurvivesDroppedMesh) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes       = {MakeBoxMesh(), Mesh{}, MakeBoxMesh()};
     std::vector<std::string> names = {"ObjA", "ObjDeg", "ObjC"};
@@ -410,8 +444,9 @@ TEST(SlicerPreset, ExportWithoutPresetStillWorks) {
 }
 
 TEST(SlicerPreset, WriteToTempFile) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
@@ -617,8 +652,9 @@ TEST(LayerConfigRanges, N02NozzleUsesHalfDiameterCoarseLH) {
 }
 
 TEST(LayerConfigRanges, ExportedZipContainsLayerRangesFile) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
     preset.base_layers  = 10;
     preset.color_layers = 5;
 
@@ -756,10 +792,10 @@ TEST(TransparentLayer, BuildMeshNamesAndSlotsNoBase) {
 }
 
 TEST(TransparentLayer, ExportWithTransparentLayerMesh) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset         = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset         = MakeTestPreset(*catalog, FaceOrientation::FaceDown);
     preset.transparent_layer_mm = 0.04f;
-    preset.face                 = FaceOrientation::FaceDown;
     FilamentSlot t_slot;
     t_slot.type        = "PLA";
     t_slot.colour      = "#FEFEFE";

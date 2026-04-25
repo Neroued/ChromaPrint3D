@@ -26,6 +26,7 @@ import type { WidthAnalysisResult } from '../types'
 import ChannelSelector from './param/ChannelSelector.vue'
 import ColorDBSelector from './param/ColorDBSelector.vue'
 import ParamAdvancedSection from './param/ParamAdvancedSection.vue'
+import MachineSelector from './param/MachineSelector.vue'
 import ParamModeSwitch from './param/ParamModeSwitch.vue'
 import ParamSimpleSection from './param/ParamSimpleSection.vue'
 import WidthHistogram from './WidthHistogram.vue'
@@ -174,6 +175,15 @@ watch(canEnableTransparentLayer, (can) => {
       <!-- ==================== SIMPLE MODE ==================== -->
       <ParamSimpleSection v-if="mode === 'simple'" :disabled="disabled || loading">
         <!-- Bambu preset selection -->
+        <div class="param-inline-row">
+          <MachineSelector
+            class="param-inline-item"
+            :model-value="modelValue.target_machine"
+            :nozzle-size="modelValue.nozzle_size ?? 'n04'"
+            :label-width="inlineLabelWidth"
+            @update:model-value="(v: string) => update({ target_machine: v })"
+          />
+        </div>
         <div class="param-inline-row">
           <NFormItem
             class="param-inline-item"
@@ -751,6 +761,11 @@ watch(canEnableTransparentLayer, (can) => {
         <!-- Bambu preset group -->
         <NCollapse default-expanded-names="bambu-preset" style="margin-bottom: 8px">
           <NCollapseItem :title="t('param.bambuPresets')" name="bambu-preset">
+            <MachineSelector
+              :model-value="modelValue.target_machine"
+              :nozzle-size="modelValue.nozzle_size ?? 'n04'"
+              @update:model-value="(v: string) => update({ target_machine: v })"
+            />
             <NFormItem>
               <template #label>
                 <span class="tip-label">{{ t('param.nozzleSize') }}</span>

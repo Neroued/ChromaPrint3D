@@ -34,9 +34,9 @@
 
 ## Bambu Studio 预设体系
 
-`core/include/chromaprint3d/common.h` 定义了 `NozzleSize`（N02/N04）和 `FaceOrientation`（FaceUp/FaceDown）枚举。`PrintProfile` 携带这两个字段，通过 `SlicerPreset::FromProfile` 选择 4 种预设 JSON 之一（`data/presets/bambu_p2s_0.08mm_{n02|n04}_{faceup|facedown}.json`）。同时，`face_orientation` 也会联动 3MF 导出几何：`FaceDown` 时模型整体绕 Y 轴旋转 180°，`FaceUp` 保持原方向。
+`core/include/chromaprint3d/common.h` 定义了 `NozzleSize`（N02/N04）和 `FaceOrientation`（FaceUp/FaceDown）枚举。`PrintProfile` 携带这两个字段。多机型预设体系由 `BambuPresetCatalog`（`core/include/chromaprint3d/bambu_preset_catalog.h`）统一管理：从 `data/presets/machines.json` + `data/presets/chromaprint_patches.json` + `data/preset_bases/*.json` 加载，`SlicerPreset::FromProfile(catalog, profile, target_machine, ...)` 依据机型名、喷嘴、层高解析出 `MachineSpec`，其中 `compatible_printers` 会列出同拓扑同 nozzle 的全部机型，Bambu Studio 切换机型时可保留切片参数（`is_compatible_with_printer` 返回 true 不替换 process preset）。`face_orientation` 也会联动 3MF 导出几何：`FaceDown` 时模型整体绕 Y 轴旋转 180°，`FaceUp` 保持原方向。
 
-颜色匹配逻辑在 `bambu_metadata.cpp` 中：`MatchColorToSlot` 基于 RGB 欧氏距离将每个 mesh 颜色匹配到预设 `filament_colour` 数组中最近的槽位。预设中的耗材丝信息（颜色、类型、温度等）完整保留到 3MF 输出中。导出翻转逻辑位于 `export_3mf.cpp`，与 `flip_y`（坐标系适配）解耦。
+颜色匹配逻辑在 `bambu_metadata.cpp` 中：`MatchColorToSlot` 基于 RGB 欧氏距离将每个 mesh 颜色匹配到预设 `filament_colour` 数组中最近的槽位。`BuildProjectSettings` 运行时叠加 `chromaprint_patches.json`（含 `$variant_indexed` 多变体項）、按 N×K_process 扩展 filament 数组、生成 BambuStudio 必填的 3 个 variant 元字段（`extruder_variant_list`/`filament_extruder_variant`/`filament_self_index`）。导出翻转逻辑位于 `export_3mf.cpp`，与 `flip_y`（坐标系适配）解耦。
 
 ## 输入输出契约（高频）
 

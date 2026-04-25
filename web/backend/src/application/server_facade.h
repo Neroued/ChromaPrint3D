@@ -4,6 +4,8 @@
 #include "application/calibration_service.h"
 #include "application/color_db_service.h"
 #include "application/convert_service.h"
+
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "application/matting_vectorize_service.h"
 #include "application/recipe_editor_service.h"
 #include "application/service_result.h"
@@ -91,6 +93,7 @@ public:
                                        const std::string& artifact, TaskArtifact& out);
 
     ServiceResult MattingMethods() const;
+    ServiceResult ListMachines() const;
     nlohmann::json GetModelPackInfo() const;
 
     ServiceResult GenerateBoard(const nlohmann::json& body);
@@ -113,6 +116,11 @@ private:
     SessionStore sessions_;
     TaskRuntime tasks_;
     BoardRuntimeCache boards_;
+
+    /// Multi-machine preset catalog (loaded from `<data_dir>/presets/`).
+    /// May be empty when the catalog files are missing; downstream services
+    /// fall back to standard 3MF in that case.
+    ChromaPrint3D::BambuPresetCatalog catalog_;
 
     ColorDbService color_db_svc_;
     TaskService task_svc_;
