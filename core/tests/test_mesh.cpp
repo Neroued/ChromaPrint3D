@@ -47,14 +47,11 @@ TEST(Mesh, TriangleIndicesAreValid) {
     grid.Set(0, 0, 0, true);
     grid.Set(1, 0, 0, true);
 
-    Mesh mesh      = Mesh::Build(grid);
-    int max_vertex = static_cast<int>(mesh.vertices.size());
-    for (const Vec3i& tri : mesh.indices) {
-        EXPECT_GE(tri.x, 0);
+    Mesh mesh           = Mesh::Build(grid);
+    uint32_t max_vertex = static_cast<uint32_t>(mesh.vertices.size());
+    for (const Vec3u& tri : mesh.indices) {
         EXPECT_LT(tri.x, max_vertex);
-        EXPECT_GE(tri.y, 0);
         EXPECT_LT(tri.y, max_vertex);
-        EXPECT_GE(tri.z, 0);
         EXPECT_LT(tri.z, max_vertex);
     }
 }

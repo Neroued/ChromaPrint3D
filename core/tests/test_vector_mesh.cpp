@@ -35,49 +35,49 @@ VectorRecipeMap BuildSingleChannelRecipeMap(int shape_count) {
 }
 
 struct EdgeKey {
-    int a = 0;
-    int b = 0;
+    uint32_t a = 0;
+    uint32_t b = 0;
 
     bool operator==(const EdgeKey& o) const { return a == o.a && b == o.b; }
 };
 
 struct EdgeKeyHash {
     size_t operator()(const EdgeKey& e) const {
-        size_t h = std::hash<int>{}(e.a);
-        h ^= std::hash<int>{}(e.b) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        size_t h = std::hash<uint32_t>{}(e.a);
+        h ^= std::hash<uint32_t>{}(e.b) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };
 
 struct FaceKey {
-    int a = 0;
-    int b = 0;
-    int c = 0;
+    uint32_t a = 0;
+    uint32_t b = 0;
+    uint32_t c = 0;
 
     bool operator==(const FaceKey& o) const { return a == o.a && b == o.b && c == o.c; }
 };
 
 struct FaceKeyHash {
     size_t operator()(const FaceKey& f) const {
-        size_t h = std::hash<int>{}(f.a);
-        h ^= std::hash<int>{}(f.b) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<int>{}(f.c) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        size_t h = std::hash<uint32_t>{}(f.a);
+        h ^= std::hash<uint32_t>{}(f.b) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint32_t>{}(f.c) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };
 
-EdgeKey MakeEdgeKey(int a, int b) {
+EdgeKey MakeEdgeKey(uint32_t a, uint32_t b) {
     if (b < a) std::swap(a, b);
     return {a, b};
 }
 
-FaceKey MakeFaceKey(int i0, int i1, int i2) {
-    std::array<int, 3> ids{i0, i1, i2};
+FaceKey MakeFaceKey(uint32_t i0, uint32_t i1, uint32_t i2) {
+    std::array<uint32_t, 3> ids{i0, i1, i2};
     std::sort(ids.begin(), ids.end());
     return {ids[0], ids[1], ids[2]};
 }
 
-bool IsDegenerateByArea(const Mesh& mesh, const Vec3i& tri) {
+bool IsDegenerateByArea(const Mesh& mesh, const Vec3u& tri) {
     const Vec3f& a = mesh.vertices[static_cast<size_t>(tri.x)];
     const Vec3f& b = mesh.vertices[static_cast<size_t>(tri.y)];
     const Vec3f& c = mesh.vertices[static_cast<size_t>(tri.z)];
@@ -102,10 +102,10 @@ MeshTopologyMetrics AnalyzeMesh(const Mesh& mesh) {
     edge_use.reserve(mesh.indices.size() * 3);
     faces.reserve(mesh.indices.size() * 2);
 
-    const int max_idx = static_cast<int>(mesh.vertices.size());
-    for (const Vec3i& tri : mesh.indices) {
-        if (tri.x < 0 || tri.y < 0 || tri.z < 0 || tri.x >= max_idx || tri.y >= max_idx ||
-            tri.z >= max_idx || tri.x == tri.y || tri.y == tri.z || tri.x == tri.z ||
+    const uint32_t max_idx = static_cast<uint32_t>(mesh.vertices.size());
+    for (const Vec3u& tri : mesh.indices) {
+        if (tri.x >= max_idx || tri.y >= max_idx || tri.z >= max_idx ||
+            tri.x == tri.y || tri.y == tri.z || tri.x == tri.z ||
             IsDegenerateByArea(mesh, tri)) {
             ++m.degenerate_triangles;
             continue;

@@ -4,6 +4,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdint>
+#include <limits>
 #include <unordered_map>
 
 namespace ChromaPrint3D {
@@ -12,6 +14,18 @@ inline size_t GridIndex(int w, int h, int l, int width, int height, int layers) 
     return (static_cast<size_t>(h) * static_cast<size_t>(width) + static_cast<size_t>(w)) *
                static_cast<size_t>(layers) +
            static_cast<size_t>(l);
+}
+
+uint32_t CheckedU32Index(std::size_t value) {
+    if (value > static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+        throw InputError("Mesh vertex index exceeds uint32_t range");
+    }
+    return static_cast<uint32_t>(value);
+}
+
+uint32_t CheckedU32Coord(int value) {
+    if (value < 0) { throw InputError("Mesh coordinate is negative"); }
+    return static_cast<uint32_t>(value);
 }
 } // namespace
 
@@ -198,17 +212,17 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(layers);
     if (voxel_grid.ooc.size() < expected) { throw InputError("VoxelGrid ooc size mismatch"); }
 
-    struct Vec3iHash {
-        size_t operator()(const Vec3i& v) const {
-            size_t h = std::hash<int>{}(v.x);
-            h ^= std::hash<int>{}(v.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-            h ^= std::hash<int>{}(v.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    struct Vec3uHash {
+        size_t operator()(const Vec3u& v) const {
+            size_t h = std::hash<uint32_t>{}(v.x);
+            h ^= std::hash<uint32_t>{}(v.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<uint32_t>{}(v.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
             return h;
         }
     };
 
-    struct Vec3iEq {
-        bool operator()(const Vec3i& a, const Vec3i& b) const {
+    struct Vec3uEq {
+        bool operator()(const Vec3u& a, const Vec3u& b) const {
             return a.x == b.x && a.y == b.y && a.z == b.z;
         }
     };
@@ -220,33 +234,33 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     mesh.vertices.reserve(estimated_surface);
     mesh.indices.reserve(estimated_surface * 2);
 
-    std::unordered_map<Vec3i, int, Vec3iHash, Vec3iEq> vertex_map;
+    std::unordered_map<Vec3u, uint32_t, Vec3uHash, Vec3uEq> vertex_map;
     vertex_map.reserve(estimated_surface);
 
     const float px = cfg.pixel_mm;
     const float pz = cfg.layer_height_mm;
 
-    auto add_vertex = [&](const Vec3i& v) {
+    auto add_vertex = [&](const Vec3u& v) {
         auto it = vertex_map.find(v);
         if (it != vertex_map.end()) { return it->second; }
         float z = static_cast<float>(v.z) * pz;
         for (const auto& gap : cfg.interface_offsets) {
-            if (gap.z_index >= 0 && v.z == gap.z_index) {
+            if (gap.z_index >= 0 && v.z == static_cast<uint32_t>(gap.z_index)) {
                 z += gap.offset_mm;
                 break;
             }
         }
-        const int idx = static_cast<int>(mesh.vertices.size());
+        const uint32_t idx = CheckedU32Index(mesh.vertices.size());
         mesh.vertices.emplace_back(static_cast<float>(v.x) * px, static_cast<float>(v.y) * px, z);
         vertex_map.emplace(v, idx);
         return idx;
     };
 
-    auto add_quad = [&](const Vec3i& v0, const Vec3i& v1, const Vec3i& v2, const Vec3i& v3) {
-        const int i0 = add_vertex(v0);
-        const int i1 = add_vertex(v1);
-        const int i2 = add_vertex(v2);
-        const int i3 = add_vertex(v3);
+    auto add_quad = [&](const Vec3u& v0, const Vec3u& v1, const Vec3u& v2, const Vec3u& v3) {
+        const uint32_t i0 = add_vertex(v0);
+        const uint32_t i1 = add_vertex(v1);
+        const uint32_t i2 = add_vertex(v2);
+        const uint32_t i3 = add_vertex(v3);
         mesh.indices.emplace_back(i0, i1, i2);
         mesh.indices.emplace_back(i0, i2, i3);
     };
@@ -325,10 +339,14 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
                     x3[u] += w;
                     x3[v] += h;
 
-                    const Vec3i v0{x0[0], x0[1], x0[2]};
-                    const Vec3i v1{x1[0], x1[1], x1[2]};
-                    const Vec3i v2{x2[0], x2[1], x2[2]};
-                    const Vec3i v3{x3[0], x3[1], x3[2]};
+                    const Vec3u v0{CheckedU32Coord(x0[0]), CheckedU32Coord(x0[1]),
+                                    CheckedU32Coord(x0[2])};
+                    const Vec3u v1{CheckedU32Coord(x1[0]), CheckedU32Coord(x1[1]),
+                                    CheckedU32Coord(x1[2])};
+                    const Vec3u v2{CheckedU32Coord(x2[0]), CheckedU32Coord(x2[1]),
+                                    CheckedU32Coord(x2[2])};
+                    const Vec3u v3{CheckedU32Coord(x3[0]), CheckedU32Coord(x3[1]),
+                                    CheckedU32Coord(x3[2])};
                     if (c > 0) {
                         add_quad(v0, v1, v3, v2);
                     } else {

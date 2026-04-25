@@ -26,7 +26,7 @@ struct TriangulatedRegion {
     std::vector<Vec2f> vertices;
 
     /// Triangle indices into `vertices`.
-    std::vector<Vec3i> triangles;
+    std::vector<Vec3u> triangles;
 
     bool Empty() const { return polygon_groups.empty(); }
 };

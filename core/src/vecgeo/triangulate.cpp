@@ -1,5 +1,7 @@
 #include "triangulate.h"
 
+#include "chromaprint3d/error.h"
+
 #include <earcut/earcut.hpp>
 
 #include <algorithm>
@@ -28,6 +30,13 @@ namespace ChromaPrint3D::detail {
 namespace {
 
 constexpr double kClipperScale = 100000.0;
+
+uint32_t CheckedU32Index(std::size_t value) {
+    if (value > static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+        throw InputError("Triangulated vertex index exceeds uint32_t range");
+    }
+    return static_cast<uint32_t>(value);
+}
 
 Contour Path64ToContour(const Clipper2Lib::Path64& path) {
     Contour c;
@@ -170,8 +179,9 @@ TriangulatedRegion TriangulateMergedPaths(const Clipper2Lib::Paths64& paths) {
             const auto& v1 = result.vertices[base + i1];
             const auto& v2 = result.vertices[base + i2];
             if (IsDegenerateTriangle2D(v0, v1, v2)) continue;
-            result.triangles.emplace_back(static_cast<int>(base + i0), static_cast<int>(base + i1),
-                                          static_cast<int>(base + i2));
+            result.triangles.emplace_back(CheckedU32Index(base + i0),
+                                          CheckedU32Index(base + i1),
+                                          CheckedU32Index(base + i2));
         }
     }
 
