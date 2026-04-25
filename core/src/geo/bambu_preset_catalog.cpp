@@ -5,15 +5,12 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <map>
-#include <sstream>
-#include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace ChromaPrint3D {
 
@@ -21,31 +18,18 @@ namespace {
 
 const char* NozzleSizeStr(NozzleSize n) { return n == NozzleSize::N02 ? "0.2" : "0.4"; }
 
-std::string MachineSlug(const std::string& machine_name) {
-    // Hand-curated mapping mirroring scripts/build_preset_bases.py:slugify_machine.
-    static const std::map<std::string, std::string> kSlug = {
-        {"Bambu Lab P2S", "bambu_p2s"},      {"Bambu Lab P1P", "bambu_p1p"},
-        {"Bambu Lab P1S", "bambu_p1s"},      {"Bambu Lab X1 Carbon", "bambu_x1c"},
-        {"Bambu Lab X1", "bambu_x1"},        {"Bambu Lab X1E", "bambu_x1e"},
-        {"Bambu Lab A1", "bambu_a1"},        {"Bambu Lab A1 mini", "bambu_a1m"},
-        {"Bambu Lab H2S", "bambu_h2s"},      {"Bambu Lab H2D", "bambu_h2d"},
-        {"Bambu Lab H2D Pro", "bambu_h2dp"}, {"Bambu Lab H2C", "bambu_h2c"},
-        {"Bambu Lab X2D", "bambu_x2d"},
-    };
-    auto it = kSlug.find(machine_name);
-    if (it != kSlug.end()) return it->second;
-
-    // Fallback: lowercase + non-alnum -> underscore.
-    std::string out;
-    out.reserve(machine_name.size());
-    for (char c : machine_name) {
-        if (std::isalnum(static_cast<unsigned char>(c))) {
-            out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-        } else if (c == ' ' || c == '_') {
-            out.push_back('_');
-        }
+/// Validate a slug against `^[a-z0-9_]+$`. Mirrors `_SLUG_RE` in
+/// `scripts/build_preset_bases.py` (single source of truth: `machines.json`).
+bool IsValidSlug(const std::string& s) {
+    if (s.empty()) return false;
+    for (char c : s) {
+        const auto u = static_cast<unsigned char>(c);
+        const bool is_lower = (u >= 'a' && u <= 'z');
+        const bool is_digit = (u >= '0' && u <= '9');
+        const bool is_underscore = (c == '_');
+        if (!is_lower && !is_digit && !is_underscore) return false;
     }
-    return out;
+    return true;
 }
 
 std::string FormatPrinterTemplate(const std::string& tpl, const std::string& nozzle) {
@@ -138,6 +122,7 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         throw FormatError("machines.json missing required `machines` object");
     }
 
+    std::unordered_map<std::string, int> seen_slugs;
     for (auto it = j["machines"].begin(); it != j["machines"].end(); ++it) {
         const std::string& name = it.key();
         const auto& spec_json   = it.value();
@@ -145,6 +130,19 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         MachineRecord rec;
         rec.extruder_topology = spec_json.value("extruder_topology", std::string{"single"});
         rec.printer_template  = spec_json.value("printer_template", std::string{});
+
+        // Strict slug schema validation (plan v13.1 / m1: single source of truth).
+        if (!spec_json.contains("slug") || !spec_json["slug"].is_string()) {
+            throw FormatError("machines.json: machine `" + name + "` missing string `slug` field");
+        }
+        rec.slug = spec_json["slug"].get<std::string>();
+        if (!IsValidSlug(rec.slug)) {
+            throw FormatError("machines.json: machine `" + name + "` has invalid slug `" +
+                              rec.slug + "` (must match ^[a-z0-9_]+$)");
+        }
+        if (!seen_slugs.emplace(rec.slug, 1).second) {
+            throw FormatError("machines.json: duplicate slug `" + rec.slug + "`");
+        }
 
         if (spec_json.contains("nozzles") && spec_json["nozzles"].is_array()) {
             for (const auto& n : spec_json["nozzles"]) {
@@ -188,8 +186,50 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         throw IOError("preset_bases directory not found at " + bases_dir.string());
     }
 
-    spdlog::info("BambuPresetCatalog loaded: {} machines, default = {}", cat.machines_.size(),
-                 cat.default_machine_);
+    // One-shot scan of base files to populate printer_model cache (plan v13.1 / m2 + s2).
+    // Reads `_chromaprint3d_meta.printer_model` first, falling back to top-level
+    // `printer_model` field. Avoids re-parsing on every Resolve call.
+    std::size_t cache_misses = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(bases_dir)) {
+        if (!entry.is_regular_file()) continue;
+        const auto& path = entry.path();
+        if (path.extension() != ".json") continue;
+        const std::string stem = path.stem().string();
+        std::ifstream bif(path);
+        if (!bif.is_open()) {
+            ++cache_misses;
+            continue;
+        }
+        try {
+            nlohmann::json bd = nlohmann::json::parse(bif);
+            std::string pm;
+            if (bd.contains("_chromaprint3d_meta") && bd["_chromaprint3d_meta"].is_object()) {
+                const auto& meta = bd["_chromaprint3d_meta"];
+                if (meta.contains("printer_model") && meta["printer_model"].is_string()) {
+                    pm = meta["printer_model"].get<std::string>();
+                }
+            }
+            if (pm.empty() && bd.contains("printer_model") && bd["printer_model"].is_string()) {
+                pm = bd["printer_model"].get<std::string>();
+            }
+            if (!pm.empty()) {
+                cat.base_printer_model_cache_.emplace(stem, std::move(pm));
+            } else {
+                ++cache_misses;
+                spdlog::warn("BambuPresetCatalog: base file {} has no printer_model",
+                             path.string());
+            }
+        } catch (const std::exception& e) {
+            ++cache_misses;
+            spdlog::warn("BambuPresetCatalog: failed to parse base file {}: {}", path.string(),
+                         e.what());
+        }
+    }
+
+    spdlog::info("BambuPresetCatalog loaded: {} machines, default = {}, cached {} base "
+                 "printer_model entries ({} misses)",
+                 cat.machines_.size(), cat.default_machine_,
+                 cat.base_printer_model_cache_.size(), cache_misses);
     return cat;
 }
 
@@ -221,15 +261,13 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
         return std::nullopt;
     }
 
-    const std::string fname =
-        MachineSlug(name) + "_" +
-        [&] {
-            char buf[16];
-            std::snprintf(buf, sizeof(buf), "%.2fmm", static_cast<double>(layer_height_mm));
-            return std::string(buf);
-        }() +
-        "_" + (nozzle == NozzleSize::N02 ? "n02" : "n04") + ".json";
-    auto base_path = data_dir_ / "preset_bases" / fname;
+    char lh_buf[16];
+    std::snprintf(lh_buf, sizeof(lh_buf), "%.2fmm", static_cast<double>(layer_height_mm));
+    const std::string lh_str    = lh_buf;
+    const std::string nozzle_tag = nozzle == NozzleSize::N02 ? "n02" : "n04";
+    const std::string stem      = rec.slug + "_" + lh_str + "_" + nozzle_tag;
+    const std::string fname     = stem + ".json";
+    auto base_path              = data_dir_ / "preset_bases" / fname;
     if (!std::filesystem::exists(base_path)) {
         spdlog::warn(
             "BambuPresetCatalog::Resolve: preset base file missing for `{}` n{} lh{} -> {}", name,
@@ -239,6 +277,7 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
 
     MachineSpec spec;
     spec.machine_name      = name;
+    spec.slug              = rec.slug;
     spec.extruder_topology = rec.extruder_topology;
     spec.nozzles           = rec.nozzles;
     spec.process_template  = pit->second;
@@ -260,19 +299,13 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
     // Share the catalog's patches with this MachineSpec (shared_ptr aliasing).
     spec.patches = patches_;
 
-    // printer_model is read out of the base file.
-    std::ifstream bif(base_path);
-    if (bif.is_open()) {
-        try {
-            nlohmann::json bd = nlohmann::json::parse(bif);
-            if (bd.contains("printer_model") && bd["printer_model"].is_string()) {
-                spec.printer_model = bd["printer_model"].get<std::string>();
-            }
-        } catch (const std::exception& e) {
-            spdlog::warn("BambuPresetCatalog::Resolve: failed to read printer_model from {}: {}",
-                         base_path.string(), e.what());
-        }
+    // printer_model: pull from the cache populated at LoadFromDir time.
+    auto cit = base_printer_model_cache_.find(stem);
+    if (cit != base_printer_model_cache_.end()) {
+        spec.printer_model = cit->second;
     }
+    // (cache miss is non-fatal; spec.printer_model stays empty and downstream
+    //  metadata writers omit the printer_model_id plate annotation.)
 
     return spec;
 }

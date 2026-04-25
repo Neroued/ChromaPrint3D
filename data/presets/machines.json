@@ -3,6 +3,7 @@
   "machines": {
     "Bambu Lab P2S": {
       "extruder_topology": "single",
+      "slug": "bambu_p2s",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL P2S 0.2 nozzle",
@@ -16,6 +17,7 @@
     },
     "Bambu Lab P1P": {
       "extruder_topology": "single",
+      "slug": "bambu_p1p",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL P1P 0.2 nozzle",
@@ -29,6 +31,7 @@
     },
     "Bambu Lab P1S": {
       "extruder_topology": "single",
+      "slug": "bambu_p1s",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
@@ -42,6 +45,7 @@
     },
     "Bambu Lab X1 Carbon": {
       "extruder_topology": "single",
+      "slug": "bambu_x1c",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
@@ -55,6 +59,7 @@
     },
     "Bambu Lab X1": {
       "extruder_topology": "single",
+      "slug": "bambu_x1",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
@@ -68,6 +73,7 @@
     },
     "Bambu Lab X1E": {
       "extruder_topology": "single",
+      "slug": "bambu_x1e",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL X1C 0.2 nozzle",
@@ -81,6 +87,7 @@
     },
     "Bambu Lab A1": {
       "extruder_topology": "single",
+      "slug": "bambu_a1",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL A1 0.2 nozzle",
@@ -94,6 +101,7 @@
     },
     "Bambu Lab A1 mini": {
       "extruder_topology": "single",
+      "slug": "bambu_a1m",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL A1M 0.2 nozzle",
@@ -107,6 +115,7 @@
     },
     "Bambu Lab H2S": {
       "extruder_topology": "single",
+      "slug": "bambu_h2s",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL H2S 0.2 nozzle",
@@ -120,6 +129,7 @@
     },
     "Bambu Lab H2D": {
       "extruder_topology": "dual",
+      "slug": "bambu_h2d",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm Extra Fine @BBL H2D 0.2 nozzle",
@@ -133,6 +143,7 @@
     },
     "Bambu Lab H2D Pro": {
       "extruder_topology": "dual",
+      "slug": "bambu_h2dp",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm Extra Fine @BBL H2DP 0.2 nozzle",
@@ -146,6 +157,7 @@
     },
     "Bambu Lab H2C": {
       "extruder_topology": "dual",
+      "slug": "bambu_h2c",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL H2C 0.2 nozzle",
@@ -159,6 +171,7 @@
     },
     "Bambu Lab X2D": {
       "extruder_topology": "dual",
+      "slug": "bambu_x2d",
       "nozzles": ["0.2", "0.4"],
       "process_template": {
         "0.2": "0.08mm High Quality @BBL X2D 0.2 nozzle",

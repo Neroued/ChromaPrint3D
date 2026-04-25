@@ -12,12 +12,13 @@ this script:
   3. Combines them into a single flat `base_dict` (mirrors BambuStudio's
      project_settings.config layout).
   4. Step 3.5 (plan v13 §4.1 / CCC) - pre-aligns every `filament_options_with_variant`
-     field to K_process = len(base_dict["print_extruder_variant"]):
-        - K_filament_raw == K_process : pass through
-        - K_filament_raw == 1         : replicate single value across K_process slots
-        - K_filament_raw < K_process  : pattern-replicate by i % K_filament_raw
-                                        (e.g. H2D K_filament=2 -> [a,b,a,b,a])
-        - otherwise                   : fail with diagnostic
+     field to K_per_extruder = len(extruder_variant_list[0].split(',')):
+        - K_filament_raw == K_per_extruder : pass through
+        - K_filament_raw == 1              : replicate single value across K_per_extruder slots
+        - K_filament_raw < K_per_extruder  : pattern-replicate by i % K_filament_raw
+        - otherwise                        : fail with diagnostic
+     (plan v13.2: filament arrays use K_per_extruder, NOT K_process. K_process is
+      the print_options_with_variant length and is preserved separately.)
   5. Injects 1-slot filament user-level placeholders (filament_colour,
      filament_multi_colour, filament_ids, default_filament_colour,
      filament_settings_id) - BambuStudio inheritance never produces these.
@@ -94,6 +95,7 @@ RUNTIME_METADATA_FIELDS = {
     "printer_settings_id",
     "filament_settings_id",  # injected per machine below, but never inherited
     "instantiation",
+    "include",          # BambuStudio inherits-chain meta (analogous to `inherits`)
     "renamed_from",
     "default_filament_profile",
     "default_print_profile",
@@ -240,8 +242,28 @@ def load_field_sets(profiles_dir: str) -> Dict[str, Set[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Step 3.5: K_process pre-alignment
+# Step 3.5: K_per_extruder pre-alignment (plan v13.2)
 # ---------------------------------------------------------------------------
+
+
+def parse_extruder0_variants(extruder_variant_list: List[str]) -> List[str]:
+    """Parse `extruder_variant_list[0]` (e.g. 'Direct Drive Standard,Direct Drive High Flow')
+    into the list of variants for extruder 0. K_per_extruder = len(result).
+
+    Source-of-truth fact (BambuStudio PrintConfig.cpp:7571-7580 +
+    PresetBundle.cpp:225-232 + Print.cpp:8462+):
+    BambuStudio's filament arrays use N × K_per_extruder length, and
+    K_per_extruder = number of variants on extruder 0 (= filament_variant_count[i]).
+    """
+    if not isinstance(extruder_variant_list, list) or not extruder_variant_list:
+        raise ValueError("extruder_variant_list is empty or missing")
+    raw = extruder_variant_list[0]
+    if not isinstance(raw, str):
+        raise ValueError(f"extruder_variant_list[0] is not a string: {raw!r}")
+    variants = [v.strip() for v in raw.split(",") if v.strip()]
+    if not variants:
+        raise ValueError(f"extruder_variant_list[0] yielded no variants: {raw!r}")
+    return variants
 
 
 def align_filament_with_variant(
@@ -250,17 +272,20 @@ def align_filament_with_variant(
     machine_name: str,
     nozzle: str,
 ) -> Tuple[int, int, List[str]]:
-    """Align every `filament_options_with_variant` array in base_dict to K_process.
+    """Align every `filament_options_with_variant` array in base_dict to K_per_extruder.
 
-    Returns (K_process, K_filament_raw, modified_keys).
+    Returns (K_per_extruder, K_filament_raw, modified_keys).
     Raises ValueError on unsupported alignment patterns.
+
+    Plan v13.2 / m-realfile: K is K_per_extruder (= len(extruder_variant_list[0].split(',')))
+    not K_process (= len(print_extruder_variant)). For most machines K_process ==
+    extruder_count × K_per_extruder; some (H2D) have asymmetric per-extruder variant
+    counts where K_process != extruder_count × K_per_extruder, but BambuStudio's
+    filament arrays still use K_per_extruder as the per-slot stride.
     """
-    process_variant = base_dict.get("print_extruder_variant", [])
-    if not isinstance(process_variant, list) or not process_variant:
-        raise ValueError(
-            f"{machine_name} {nozzle}: missing or empty print_extruder_variant"
-        )
-    K_process = len(process_variant)
+    extruder_variant_list = base_dict.get("extruder_variant_list", [])
+    extruder0_variants = parse_extruder0_variants(extruder_variant_list)
+    K_per_extruder = len(extruder0_variants)
 
     # Use nozzle_temperature as the canonical filament-with-variant length probe.
     nt = base_dict.get("nozzle_temperature", [])
@@ -276,37 +301,39 @@ def align_filament_with_variant(
         if not isinstance(v, list):
             continue
         cur_len = len(v)
-        if cur_len == K_process:
+        if cur_len == K_per_extruder:
             continue
         if cur_len == 1:
-            base_dict[key] = [v[0]] * K_process
-        elif cur_len < K_process and K_process % cur_len == 0:
-            # i % cur_len pattern-replicate (e.g. H2D K_filament=2, K_process=5 -> [a,b,a,b,a]).
-            base_dict[key] = [v[i % cur_len] for i in range(K_process)]
-        elif cur_len < K_process:
-            # Non-divisor short array: pattern-replicate anyway with diagnostic.
-            base_dict[key] = [v[i % cur_len] for i in range(K_process)]
+            base_dict[key] = [v[0]] * K_per_extruder
+        elif cur_len < K_per_extruder and K_per_extruder % cur_len == 0:
+            base_dict[key] = [v[i % cur_len] for i in range(K_per_extruder)]
+        elif cur_len < K_per_extruder:
+            # Non-divisor: i%cur_len fallback + warn
+            base_dict[key] = [v[i % cur_len] for i in range(K_per_extruder)]
             print(
                 f"warn: {machine_name} {nozzle} field {key!r}: "
-                f"K_filament={cur_len} not a divisor of K_process={K_process}; "
-                f"pattern-replicated as i%{cur_len}",
+                f"K_filament={cur_len} not a divisor of K_per_extruder={K_per_extruder}; "
+                f"non-divisor pattern-replicate (i%{cur_len} fallback; consider explicit "
+                f"override if precision required)",
                 file=sys.stderr,
             )
-        elif cur_len > K_process:
-            base_dict[key] = v[:K_process]
+        elif cur_len > K_per_extruder:
+            # Truncate longer-than-K_per_extruder arrays.
+            base_dict[key] = v[:K_per_extruder]
             print(
                 f"warn: {machine_name} {nozzle} field {key!r}: "
-                f"K_filament={cur_len} > K_process={K_process}; truncated",
+                f"K_filament={cur_len} > K_per_extruder={K_per_extruder}; truncated "
+                f"(consider explicit override if precision required)",
                 file=sys.stderr,
             )
         else:
             raise ValueError(
                 f"{machine_name} {nozzle} field {key!r}: "
-                f"unsupported length combination cur={cur_len}, K_process={K_process}"
+                f"unsupported length combination cur={cur_len}, K_per_extruder={K_per_extruder}"
             )
         modified.append(key)
 
-    return K_process, K_filament_raw, modified
+    return K_per_extruder, K_filament_raw, modified
 
 
 # ---------------------------------------------------------------------------
@@ -338,8 +365,8 @@ def build_base_dict(
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Return (base_dict, diagnostics) for one (machine, nozzle).
 
-    diagnostics carries K_process / K_filament_raw / topology / aligned_keys for
-    `--validate-only` reporting.
+    diagnostics carries K_per_extruder / K_process / K_filament_raw / topology / aligned_keys
+    for `--validate-only` reporting.
     """
     process_template = machine_spec["process_template"][nozzle]
     filament_template = machine_spec["filament_template"][nozzle]
@@ -393,15 +420,17 @@ def build_base_dict(
     # 4. Inject filament user-level 1-slot placeholders.
     inject_filament_user_fields(base_dict, filament_template)
 
-    # 5. Step 3.5 K_process pre-alignment.
-    K_process, K_filament_raw, aligned = align_filament_with_variant(
+    # 5. Step 3.5 K_per_extruder pre-alignment (plan v13.2).
+    K_per_extruder, K_filament_raw, aligned = align_filament_with_variant(
         base_dict, sets["filament_options_with_variant"], machine_name, nozzle
     )
+    K_process = len(base_dict["print_extruder_variant"])
 
-    # 6. filament_extruder_variant: BambuStudio inherits chain produces a
-    #    single-element ['Direct Drive Standard'] regardless of machine; for
-    #    base output we pre-align it to K_process using print_extruder_variant.
-    base_dict["filament_extruder_variant"] = list(base_dict["print_extruder_variant"])
+    # 6. filament_extruder_variant: BambuStudio's filament arrays use
+    #    extruder_variant_list[0]'s variants (extruder 0 only, K_per_extruder),
+    #    NOT print_extruder_variant (K_process). See plan v13.2 / m-realfile.
+    extruder0_variants = parse_extruder0_variants(base_dict["extruder_variant_list"])
+    base_dict["filament_extruder_variant"] = list(extruder0_variants)
 
     # 7. Validate `extruder_variant_list` is present (BambuStudio strictly
     #    checks this on 3MF load - plan v13 proposition 13).
@@ -415,6 +444,7 @@ def build_base_dict(
         "nozzle": nozzle,
         "topology": machine_spec["extruder_topology"],
         "K_process": K_process,
+        "K_per_extruder": K_per_extruder,
         "K_filament_raw": K_filament_raw,
         "aligned_keys": aligned,
         "process_template": process_template,
@@ -428,33 +458,45 @@ def build_base_dict(
     return base_dict, diag
 
 
-def slugify_machine(name: str) -> str:
-    """`Bambu Lab A1 mini` -> `bambu_a1m`. Hand-curated to match common shorthand."""
-    short_map = {
-        "Bambu Lab P2S": "bambu_p2s",
-        "Bambu Lab P1P": "bambu_p1p",
-        "Bambu Lab P1S": "bambu_p1s",
-        "Bambu Lab X1 Carbon": "bambu_x1c",
-        "Bambu Lab X1": "bambu_x1",
-        "Bambu Lab X1E": "bambu_x1e",
-        "Bambu Lab A1": "bambu_a1",
-        "Bambu Lab A1 mini": "bambu_a1m",
-        "Bambu Lab H2S": "bambu_h2s",
-        "Bambu Lab H2D": "bambu_h2d",
-        "Bambu Lab H2D Pro": "bambu_h2dp",
-        "Bambu Lab H2C": "bambu_h2c",
-        "Bambu Lab X2D": "bambu_x2d",
-    }
-    if name in short_map:
-        return short_map[name]
-    s = name.lower().replace(" ", "_")
-    return re.sub(r"[^a-z0-9_]", "", s)
+_SLUG_RE = re.compile(r"^[a-z0-9_]+$")
 
 
-def output_filename(machine: str, nozzle: str, layer_height: float) -> str:
+def validate_machines_schema(machines_json: Dict[str, Any]) -> None:
+    """Strict-validate `machines.json` schema; raise ValueError on first issue.
+
+    Required per-entry: extruder_topology, slug, nozzles, process_template,
+    filament_template, printer_template. `slug` must match ^[a-z0-9_]+$ and be unique.
+    """
+    if "machines" not in machines_json or not isinstance(machines_json["machines"], dict):
+        raise ValueError("machines.json: missing or invalid 'machines' object")
+    if "default_machine" not in machines_json:
+        raise ValueError("machines.json: missing 'default_machine'")
+    seen_slugs: Set[str] = set()
+    required = ("extruder_topology", "slug", "nozzles",
+                "process_template", "filament_template", "printer_template")
+    for name, spec in machines_json["machines"].items():
+        for k in required:
+            if k not in spec:
+                raise ValueError(f"machines.json: {name!r} missing field {k!r}")
+        slug = spec["slug"]
+        if not isinstance(slug, str) or not _SLUG_RE.match(slug):
+            raise ValueError(
+                f"machines.json: {name!r} has invalid slug {slug!r} "
+                f"(must match ^[a-z0-9_]+$)"
+            )
+        if slug in seen_slugs:
+            raise ValueError(f"machines.json: duplicate slug {slug!r}")
+        seen_slugs.add(slug)
+
+
+def output_filename(slug: str, nozzle: str, layer_height: float) -> str:
+    """Compose preset_bases output filename: e.g. `bambu_p2s_0.08mm_n04.json`.
+
+    `slug` MUST come from `machines.json` `slug` field (plan v13.1 / m1).
+    """
     nozzle_tag = "n02" if nozzle == "0.2" else "n04"
     lh = f"{layer_height:.2f}mm"
-    return f"{slugify_machine(machine)}_{lh}_{nozzle_tag}.json"
+    return f"{slug}_{lh}_{nozzle_tag}.json"
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +560,8 @@ def main() -> int:
     with open(args.machines, "r", encoding="utf-8") as f:
         machines = json.load(f)
 
+    validate_machines_schema(machines)
+
     registry = BambuRegistry(args.bambu_resources)
     layer_heights = [float(x) for x in args.layer_heights.split(",")]
 
@@ -565,7 +609,7 @@ def main() -> int:
             }
 
             for lh in layer_heights:
-                fname = output_filename(machine_name, nozzle, lh)
+                fname = output_filename(spec["slug"], nozzle, lh)
                 fpath = os.path.join(out_dir, fname)
                 if args.check:
                     if os.path.exists(fpath):
@@ -582,18 +626,19 @@ def main() -> int:
 
     # Validate-only summary report.
     if args.validate_only:
-        print("\n=== K_process vs K_filament report ===")
-        mismatches = [d for d in diagnostics if d["K_process"] != d["K_filament_raw"]]
+        print("\n=== K_per_extruder vs K_filament_raw report (plan v13.2) ===")
+        mismatches = [d for d in diagnostics if d["K_per_extruder"] != d["K_filament_raw"]]
         for d in diagnostics:
-            ok = "OK" if d["K_process"] == d["K_filament_raw"] else "MISMATCH"
+            ok = "OK" if d["K_per_extruder"] == d["K_filament_raw"] else "MISMATCH"
             print(
                 f"  {d['machine']:25s} {d['nozzle']}  topology={d['topology']:6s}  "
-                f"K_process={d['K_process']}  K_filament_raw={d['K_filament_raw']}  [{ok}]  "
+                f"K_process={d['K_process']}  K_per_extruder={d['K_per_extruder']}  "
+                f"K_filament_raw={d['K_filament_raw']}  [{ok}]  "
                 f"aligned={len(d['aligned_keys'])} fields"
             )
         if mismatches:
             print(
-                f"\n{len(mismatches)} (machine,nozzle) combination(s) require Step 3.5 alignment."
+                f"\n{len(mismatches)} (machine,nozzle) combination(s) require Step 3.5 alignment to K_per_extruder."
             )
 
     if failures:

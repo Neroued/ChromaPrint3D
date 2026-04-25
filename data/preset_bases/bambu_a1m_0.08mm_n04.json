@@ -243,13 +243,6 @@
   "layer_change_gcode": "; layer num/total_layer_count: {layer_num+1}/[total_layer_count]\n; update layer progress\nM73 L{layer_num+1}\nM991 S0 P{layer_num} ;notify layer change",
   "machine_pause_gcode": "M400 U1",
   "printer_model": "Bambu Lab A1 mini",
-  "include": [
-    "Bambu Lab A1 mini 0.4 nozzle template machine_start_gcode",
-    "Bambu Lab A1 mini 0.4 nozzle template machine_end_gcode",
-    "Bambu Lab A1 mini 0.4 nozzle template layer_change_gcode",
-    "Bambu Lab A1 mini 0.4 nozzle template time_lapse_gcode",
-    "Bambu Lab A1 mini 0.4 nozzle template change_filament_gcode"
-  ],
   "activate_air_filtration": [
     "0"
   ],

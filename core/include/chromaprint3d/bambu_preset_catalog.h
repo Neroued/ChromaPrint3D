@@ -27,7 +27,8 @@ struct ChromaPrintPatches;
 /// overlay for a specific (machine, nozzle, layer height).
 struct MachineSpec {
     std::string machine_name;         ///< e.g. "Bambu Lab P2S".
-    std::string printer_model;        ///< Read from base_dict, e.g. "Bambu Lab P2S".
+    std::string slug;                 ///< Filename stem from `machines.json`, e.g. "bambu_p2s".
+    std::string printer_model;        ///< Read from base file cache, e.g. "Bambu Lab P2S".
     std::string extruder_topology;    ///< "single" | "dual".
     std::vector<std::string> nozzles; ///< e.g. ["0.2", "0.4"].
     std::string process_template;     ///< For embedded process preset `inherits`.
@@ -97,6 +98,7 @@ public:
 
 private:
     struct MachineRecord {
+        std::string slug;                                     // from machines.json
         std::string extruder_topology;
         std::vector<std::string> nozzles;
         std::map<std::string, std::string> process_template;  // nozzle -> template
@@ -109,6 +111,13 @@ private:
     std::map<std::string, MachineRecord> machines_;
     std::shared_ptr<const ChromaPrintPatches> patches_;
     std::string default_machine_;
+
+    /// Cache of `printer_model` keyed by base filename stem `<slug>_<lh>mm_<nozzle>`
+    /// (e.g. `bambu_p2s_0.08mm_n04`). Populated once at LoadFromDir; consumed
+    /// by Resolve to avoid re-parsing base JSON on every export call.
+    /// Reads from `_chromaprint3d_meta.printer_model` first, falling back to
+    /// the top-level `printer_model` field.
+    std::unordered_map<std::string, std::string> base_printer_model_cache_;
 };
 
 } // namespace ChromaPrint3D

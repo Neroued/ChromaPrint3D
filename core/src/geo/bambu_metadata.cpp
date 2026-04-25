@@ -55,7 +55,7 @@ void PatchFlushMatrix(nlohmann::json& j, const std::vector<int>& matrix) {
 }
 
 void PatchFilamentArrays(nlohmann::json& j, const std::vector<FilamentSlot>& filaments,
-                         std::size_t K_process) {
+                         std::size_t K_per_extruder) {
     if (filaments.empty()) return;
     const std::size_t N = filaments.size();
 
@@ -73,18 +73,19 @@ void PatchFilamentArrays(nlohmann::json& j, const std::vector<FilamentSlot>& fil
     auto patch_with_variant = [&](const char* key, auto extractor) {
         if (!j.contains(key) || !j[key].is_array()) return;
         auto& arr                = j[key];
-        const std::size_t target = N * K_process;
+        const std::size_t target = N * K_per_extruder;
         if (arr.size() != target) {
             nlohmann::json templ = arr.empty() ? nlohmann::json("0") : arr.front();
-            // Tile a single user-slot block (K_process entries) per filament.
+            // Tile a single user-slot block (K_per_extruder entries) per filament.
             arr = nlohmann::json::array();
             for (std::size_t i = 0; i < N; ++i) {
-                for (std::size_t k = 0; k < K_process; ++k) arr.push_back(templ);
+                for (std::size_t k = 0; k < K_per_extruder; ++k) arr.push_back(templ);
             }
         }
         for (std::size_t i = 0; i < N; ++i) {
             const auto value = extractor(filaments[i]);
-            for (std::size_t k = 0; k < K_process; ++k) arr[i * K_process + k] = value;
+            for (std::size_t k = 0; k < K_per_extruder; ++k)
+                arr[i * K_per_extruder + k] = value;
         }
     };
 
@@ -479,22 +480,23 @@ const std::unordered_set<std::string>& FilamentWithVariantKeys() {
 // Variant-meta helpers
 // ---------------------------------------------------------------------------
 
-std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_process) {
+std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_per_extruder) {
     std::vector<std::string> out;
-    out.reserve(N * K_process);
+    out.reserve(N * K_per_extruder);
     for (std::size_t i = 1; i <= N; ++i) {
         const std::string id = std::to_string(i);
-        for (std::size_t k = 0; k < K_process; ++k) out.push_back(id);
+        for (std::size_t k = 0; k < K_per_extruder; ++k) out.push_back(id);
     }
     return out;
 }
 
 std::vector<std::string>
-BuildFilamentExtruderVariant(const std::vector<std::string>& process_variant, std::size_t N) {
+BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants,
+                              std::size_t N) {
     std::vector<std::string> out;
-    out.reserve(process_variant.size() * N);
+    out.reserve(extruder0_variants.size() * N);
     for (std::size_t i = 0; i < N; ++i) {
-        out.insert(out.end(), process_variant.begin(), process_variant.end());
+        out.insert(out.end(), extruder0_variants.begin(), extruder0_variants.end());
     }
     return out;
 }
@@ -507,8 +509,10 @@ bool IsFilamentNoVariantKey(const std::string& key) {
     static const std::unordered_set<std::string> kExtra = {
         "activate_air_filtration",
         "additional_cooling_fan_speed",
+        "additional_fan_full_speed_layer",
         "chamber_temperatures",
         "circle_compensation_speed",
+        "close_additional_fan_first_x_layers",
         "close_fan_the_first_x_layers",
         "complete_print_exhaust_fan_speed",
         "cool_plate_temp",
@@ -640,28 +644,68 @@ void ExpandFilamentNoVariantToN(nlohmann::json& final_dict, std::size_t N) {
     }
 }
 
+/// Expand each `filament_options_with_variant` array from K_per_extruder to
+/// N*K_per_extruder by repeating the per-extruder slice for every user filament slot.
+///
+/// **Pre-condition**: base_dict has been pre-aligned to K_per_extruder by
+/// `scripts/build_preset_bases.py` step 3.5; any other length here indicates
+/// data corruption or a base/code drift, so we throw rather than silently skip
+/// (plan v13.1 / m5 + v13.2 / m-realfile; aligns with §10 risk table CCC).
 void ExpandFilamentWithVariantToN(nlohmann::json& final_dict, std::size_t N,
-                                  std::size_t K_process) {
+                                  std::size_t K_per_extruder) {
     for (auto it = final_dict.begin(); it != final_dict.end(); ++it) {
         if (!FilamentWithVariantKeys().count(it.key())) continue;
         if (!it.value().is_array()) continue;
-        const std::size_t target = N * K_process;
+        const std::size_t target = N * K_per_extruder;
         if (it.value().size() == target) continue;
-        if (it.value().size() != K_process) {
-            spdlog::warn("ExpandFilamentWithVariantToN: {} length {} != K_process {} (skipped)",
-                         it.key(), it.value().size(), K_process);
-            continue;
+        if (it.value().size() != K_per_extruder) {
+            throw FormatError(
+                "ExpandFilamentWithVariantToN: field `" + it.key() + "` length " +
+                std::to_string(it.value().size()) + " != K_per_extruder " +
+                std::to_string(K_per_extruder) +
+                " (expected base_dict to be pre-aligned by "
+                "scripts/build_preset_bases.py step 3.5; check base file integrity)");
         }
         nlohmann::json arr = nlohmann::json::array();
         for (std::size_t i = 0; i < N; ++i) {
-            for (std::size_t k = 0; k < K_process; ++k) arr.push_back(it.value().at(k));
+            for (std::size_t k = 0; k < K_per_extruder; ++k) arr.push_back(it.value().at(k));
         }
         it.value() = arr;
     }
 }
 
+/// Parse extruder_variant_list[0] (CSV) -> extruder 0's variants.
+/// Returns empty vector if the field is missing/malformed (caller throws).
+std::vector<std::string>
+ParseExtruder0Variants(const nlohmann::json& extruder_variant_list) {
+    std::vector<std::string> out;
+    if (!extruder_variant_list.is_array() || extruder_variant_list.empty()) return out;
+    if (!extruder_variant_list.front().is_string()) return out;
+    const std::string raw = extruder_variant_list.front().get<std::string>();
+    std::string token;
+    for (char c : raw) {
+        if (c == ',') {
+            // Trim whitespace.
+            std::size_t l = 0, r = token.size();
+            while (l < r && std::isspace(static_cast<unsigned char>(token[l]))) ++l;
+            while (r > l && std::isspace(static_cast<unsigned char>(token[r - 1]))) --r;
+            if (l < r) out.emplace_back(token.substr(l, r - l));
+            token.clear();
+        } else {
+            token.push_back(c);
+        }
+    }
+    if (!token.empty()) {
+        std::size_t l = 0, r = token.size();
+        while (l < r && std::isspace(static_cast<unsigned char>(token[l]))) ++l;
+        while (r > l && std::isspace(static_cast<unsigned char>(token[r - 1]))) --r;
+        if (l < r) out.emplace_back(token.substr(l, r - l));
+    }
+    return out;
+}
+
 void InjectMandatoryVariantMetaFields(nlohmann::json& final_dict, const nlohmann::json& base_dict,
-                                      const std::vector<std::string>& process_variant,
+                                      const std::vector<std::string>& extruder0_variants,
                                       std::size_t N) {
     if (base_dict.contains("extruder_variant_list")) {
         final_dict["extruder_variant_list"] = base_dict["extruder_variant_list"];
@@ -670,24 +714,33 @@ void InjectMandatoryVariantMetaFields(nlohmann::json& final_dict, const nlohmann
             "preset_base missing extruder_variant_list (BambuStudio load will throw)");
     }
 
-    final_dict["filament_extruder_variant"] = BuildFilamentExtruderVariant(process_variant, N);
-    final_dict["filament_self_index"]       = BuildFilamentSelfIndex(N, process_variant.size());
+    final_dict["filament_extruder_variant"] = BuildFilamentExtruderVariant(extruder0_variants, N);
+    final_dict["filament_self_index"] = BuildFilamentSelfIndex(N, extruder0_variants.size());
 }
 
-void InjectInheritsGroup(nlohmann::json& final_dict, std::size_t N) {
+void InjectInheritsGroup(nlohmann::json& final_dict, std::size_t N,
+                          const std::string& process_template) {
     // BambuStudio expects N+2 entries: print, printer, then N filaments.
-    // We use empty strings since presets are project-embedded, not inherited.
+    // [0] = process inherits chain head (= machine.process_template);
+    // [1..N+1] = empty (printer + N filaments are project-embedded).
+    // Plan v13.2 / m-realfile: real BambuStudio 3MFs fill [0] with the
+    // process_template name (e.g. "0.08mm High Quality @BBL P2S").
     nlohmann::json arr = nlohmann::json::array();
-    for (std::size_t i = 0; i < N + 2; ++i) arr.push_back("");
+    arr.push_back(process_template);
+    for (std::size_t i = 0; i < N + 1; ++i) arr.push_back("");
     final_dict["inherits_group"] = arr;
 }
 
+/// Compose the print_settings_id used as preset name in BambuStudio's
+/// project_settings.config.
+///
+/// **Pre-condition**: `preset.machine_resolved() == true` (enforced at
+/// `BuildProjectSettings` entry; see plan v13.1 / m4).
 std::string MakePrintSettingsId(const SlicerPreset& preset) {
     char buf[160];
-    const std::string& machine =
-        preset.machine_resolved() ? preset.machine.machine_name : std::string{"P2S"};
     std::snprintf(buf, sizeof(buf), "ChromaPrint3D %.2fmm @%s %smm nozzle %s",
-                  static_cast<double>(preset.layer_height_mm), machine.c_str(),
+                  static_cast<double>(preset.layer_height_mm),
+                  preset.machine.machine_name.c_str(),
                   preset.nozzle == NozzleSize::N02 ? "0.2" : "0.4",
                   FaceOrientationTag(preset.face));
     return std::string(buf);
@@ -722,6 +775,19 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     const std::size_t K_process = process_variant.size();
     const std::size_t N         = preset.filaments.empty() ? 1 : preset.filaments.size();
 
+    // Plan v13.2 / m-realfile: filament arrays use K_per_extruder = len(extruder_variant_list[0].csv),
+    // NOT K_process. K_process is preserved separately for print_options_with_variant.
+    if (!base_dict.contains("extruder_variant_list")) {
+        throw FormatError("preset_base missing extruder_variant_list");
+    }
+    const std::vector<std::string> extruder0_variants =
+        ParseExtruder0Variants(base_dict["extruder_variant_list"]);
+    if (extruder0_variants.empty()) {
+        throw FormatError(
+            "preset_base extruder_variant_list[0] yielded no variants (malformed CSV)");
+    }
+    const std::size_t K_per_extruder = extruder0_variants.size();
+
     // Apply ChromaPrint3D patches (process_common -> per_nozzle -> per_face).
     if (preset.machine.patches) {
         const auto& patches = *preset.machine.patches;
@@ -744,21 +810,20 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     // Compute dynamic diff (single concatenated `;`-joined string).
     const std::string diff_str = ComputeDynamicDiff(final_dict, base_dict);
 
-    // N-slot expansion (4 categories, plan v13 §6.4 step 4).
+    // N-slot expansion (plan v13 §6.4 step 4 + v13.2 K_per_extruder semantics).
     ExpandFilamentNoVariantToN(final_dict, N);
-    ExpandFilamentWithVariantToN(final_dict, N, K_process);
+    ExpandFilamentWithVariantToN(final_dict, N, K_per_extruder);
 
-    // 3 mandatory variant meta-fields (plan v13 §6.4 step 5; BBB+WW).
-    InjectMandatoryVariantMetaFields(final_dict, base_dict, process_variant, N);
+    // 3 mandatory variant meta-fields (plan v13 §6.4 step 5; BBB+WW + v13.2 m-realfile).
+    InjectMandatoryVariantMetaFields(final_dict, base_dict, extruder0_variants, N);
 
     // Apply user-level overrides (palette colors, settings_id, etc.).
     PatchFlushMatrix(final_dict, preset.flush_volumes_matrix);
-    PatchFilamentArrays(final_dict, preset.filaments, K_process);
+    PatchFilamentArrays(final_dict, preset.filaments, K_per_extruder);
 
-    // Inject metadata (plan v13 §6.4 step 8).
+    // Inject metadata (plan v13 §6.4 step 8 + v13.2 / m-realfile cleanup).
     final_dict["from"]                = "project";
     final_dict["name"]                = "project_settings";
-    final_dict["is_custom_defined"]   = "0";
     final_dict["version"]             = preset_defaults::kBambuStudioVersion;
     final_dict["print_settings_id"]   = MakePrintSettingsId(preset);
     final_dict["printer_settings_id"] = preset.machine.printer_template;
@@ -766,20 +831,18 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     if (!final_dict.contains("printer_variant") || !final_dict["printer_variant"].is_string()) {
         final_dict["printer_variant"] = preset.nozzle == NozzleSize::N02 ? "0.2" : "0.4";
     }
+    // is_custom_defined / compatible_*_expression_group are NOT written here:
+    // BambuStudio's `add_if_some_non_empty` (PresetBundle.cpp:264) only writes
+    // expression_group fields when non-empty; user real-file 3MFs omit them.
+    // is_custom_defined is also absent in user real-file 3MFs.
 
-    // Project-level metadata for compatibility groups (length N+2).
-    InjectInheritsGroup(final_dict, N);
+    // Project-level metadata. inherits_group[0] = process_template (plan v13.2).
+    InjectInheritsGroup(final_dict, N, preset.machine.process_template);
     {
         nlohmann::json arr = nlohmann::json::array();
         arr.push_back(diff_str); // print
         for (std::size_t i = 0; i < N + 1; ++i) arr.push_back("");
         final_dict["different_settings_to_system"] = arr;
-    }
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (std::size_t i = 0; i < N + 2; ++i) arr.push_back("");
-        final_dict["compatible_machine_expression_group"] = arr;
-        final_dict["compatible_process_expression_group"] = arr;
     }
 
     // Cross-machine retention list (plan v13 §6.4 step 8 / proposition 1).
@@ -789,8 +852,8 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
         final_dict["print_compatible_printers"] = arr;
     }
 
-    spdlog::debug("BuildProjectSettings: machine={} N={} K_process={} fields={}",
-                  preset.machine.machine_name, N, K_process, final_dict.size());
+    spdlog::debug("BuildProjectSettings: machine={} N={} K_process={} K_per_extruder={} fields={}",
+                  preset.machine.machine_name, N, K_process, K_per_extruder, final_dict.size());
     return final_dict.dump(4);
 }
 

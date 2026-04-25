@@ -7,19 +7,28 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ChromaPrint3D::detail {
 
-/// Variant-meta helpers (plan v13 §6.1).
-/// Returns N x K_process slot ids ["1","1",...,"1","2","2",...,"N","N",...,"N"].
-std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_process);
+/// Field-set constants (plan v13 §6.1, mirrored from BambuStudio
+/// `PrintConfig.cpp`). Exposed for unit-test introspection (set disjointness,
+/// upstream-drift detection).
+const std::unordered_set<std::string>& PrintWithVariantKeys();
+const std::unordered_set<std::string>& FilamentWithVariantKeys();
 
-/// Returns N x K_process variant labels by repeating \p process_variant N times.
-/// BBB key fix (plan v13 §6.1): base must be `print_extruder_variant`, NOT the
-/// 1-element `filament_extruder_variant` produced by filament inheritance.
+/// Variant-meta helpers (plan v13 §6.1, plan v13.2 K_per_extruder semantics).
+/// Returns N x K_per_extruder slot ids ["1",...,"N"], each repeated K_per_extruder times.
+std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_per_extruder);
+
+/// Returns N x K_per_extruder variant labels by repeating \p extruder0_variants N times.
+/// Plan v13.2 / m-realfile: BambuStudio's filament arrays use extruder 0's variants
+/// (K_per_extruder = len(extruder_variant_list[0].split(','))), NOT print_extruder_variant
+/// (which has K_process = sum_over_extruders(variants_per_extruder) length).
 std::vector<std::string>
-BuildFilamentExtruderVariant(const std::vector<std::string>& process_variant, std::size_t N);
+BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants,
+                              std::size_t N);
 
 /// Describes a single exported mesh part and its filament slot assignment.
 struct ExportedObject {

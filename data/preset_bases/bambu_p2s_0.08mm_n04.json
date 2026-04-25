@@ -293,9 +293,6 @@
     "30",
     "30"
   ],
-  "include": [
-    "fdm_filament_template_direct_dual"
-  ],
   "activate_air_filtration": [
     "0"
   ],
