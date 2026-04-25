@@ -131,7 +131,7 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         rec.extruder_topology = spec_json.value("extruder_topology", std::string{"single"});
         rec.printer_template  = spec_json.value("printer_template", std::string{});
 
-        // Strict slug schema validation (plan v13.1 / m1: single source of truth).
+        // Strict slug schema validation (machines.json is the single source of truth).
         if (!spec_json.contains("slug") || !spec_json["slug"].is_string()) {
             throw FormatError("machines.json: machine `" + name + "` missing string `slug` field");
         }
@@ -186,7 +186,7 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         throw IOError("preset_bases directory not found at " + bases_dir.string());
     }
 
-    // One-shot scan of base files to populate printer_model cache (plan v13.1 / m2 + s2).
+    // One-shot scan of base files to populate the printer_model cache.
     // Reads `_chromaprint3d_meta.printer_model` first, falling back to top-level
     // `printer_model` field. Avoids re-parsing on every Resolve call.
     std::size_t cache_misses = 0;

@@ -1,7 +1,8 @@
 """Schema validation for `data/presets/chromaprint_patches.json`.
 
-The patches file is a hand-maintained artifact (plan v13.1 / m3). The original
-draft generator was retired; future maintenance is direct edits to the JSON.
+The patches file is a hand-maintained artifact. The original draft generator
+(scripts/build_chromaprint_patches.py) was retired; future maintenance is
+direct edits to the JSON.
 This module locks in the contract BambuStudio relies on:
 
 - top-level sections: `process_common`, `process_per_nozzle`, `process_per_face`, `filament_common`
@@ -85,7 +86,7 @@ class CanonicalPatchesStructureTest(unittest.TestCase):
         self.assertEqual(self.data["filament_common"], {})
 
     # -----------------------------------------------------------------
-    # plan v13.2 / chromaprint_patches.json field audit (H2C primary machine)
+    # chromaprint_patches.json field audit (H2C primary machine)
     # -----------------------------------------------------------------
 
     def test_color_penetration_layers_set_to_one(self) -> None:

@@ -11,14 +11,15 @@ this script:
         - printer:  printer_template (formatted with {nozzle})
   3. Combines them into a single flat `base_dict` (mirrors BambuStudio's
      project_settings.config layout).
-  4. Step 3.5 (plan v13 §4.1 / CCC) - pre-aligns every `filament_options_with_variant`
-     field to K_per_extruder = len(extruder_variant_list[0].split(',')):
+  4. Step 3.5 (K_per_extruder pre-alignment) - pre-aligns every
+     `filament_options_with_variant` field to
+     K_per_extruder = len(extruder_variant_list[0].split(',')):
         - K_filament_raw == K_per_extruder : pass through
         - K_filament_raw == 1              : replicate single value across K_per_extruder slots
         - K_filament_raw < K_per_extruder  : pattern-replicate by i % K_filament_raw
         - otherwise                        : fail with diagnostic
-     (plan v13.2: filament arrays use K_per_extruder, NOT K_process. K_process is
-      the print_options_with_variant length and is preserved separately.)
+     (filament arrays use K_per_extruder, NOT K_process. K_process is the
+      print_options_with_variant length and is preserved separately.)
   5. Injects 1-slot filament user-level placeholders (filament_colour,
      filament_multi_colour, filament_ids, default_filament_colour,
      filament_settings_id) - BambuStudio inheritance never produces these.
@@ -32,8 +33,6 @@ The C++ runtime (`BuildProjectSettings`) consumes these base files and:
   - generates the 3 mandatory variant meta-fields (extruder_variant_list,
     filament_extruder_variant, filament_self_index),
   - patches user-supplied filament colours/material slots.
-
-Plan reference: v13 §4.1, §3.3.
 
 Usage:
     python3 scripts/build_preset_bases.py \
@@ -101,7 +100,7 @@ RUNTIME_METADATA_FIELDS = {
     "default_print_profile",
 }
 
-# 1-slot filament user-level placeholders (plan v13 §3.3).
+# 1-slot filament user-level placeholders.
 INJECTED_FILAMENT_FIELDS = {
     "filament_colour": ["#FFFFFF"],
     "filament_multi_colour": ["#FFFFFF"],
@@ -242,7 +241,7 @@ def load_field_sets(profiles_dir: str) -> Dict[str, Set[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Step 3.5: K_per_extruder pre-alignment (plan v13.2)
+# Step 3.5: K_per_extruder pre-alignment
 # ---------------------------------------------------------------------------
 
 
@@ -277,10 +276,10 @@ def align_filament_with_variant(
     Returns (K_per_extruder, K_filament_raw, modified_keys).
     Raises ValueError on unsupported alignment patterns.
 
-    Plan v13.2 / m-realfile: K is K_per_extruder (= len(extruder_variant_list[0].split(',')))
-    not K_process (= len(print_extruder_variant)). For most machines K_process ==
-    extruder_count × K_per_extruder; some (H2D) have asymmetric per-extruder variant
-    counts where K_process != extruder_count × K_per_extruder, but BambuStudio's
+    K is K_per_extruder (= len(extruder_variant_list[0].split(','))) not
+    K_process (= len(print_extruder_variant)). For most machines K_process ==
+    extruder_count × K_per_extruder; some (H2D) have asymmetric per-extruder
+    variant counts where K_process != extruder_count × K_per_extruder, but BambuStudio's
     filament arrays still use K_per_extruder as the per-slot stride.
     """
     extruder_variant_list = base_dict.get("extruder_variant_list", [])
@@ -342,7 +341,7 @@ def align_filament_with_variant(
 
 
 def inject_filament_user_fields(base_dict: Dict[str, Any], filament_template: str) -> None:
-    """Inject 1-slot filament user-level fields (plan v13 §3.3 / proposition 11)."""
+    """Inject 1-slot filament user-level fields."""
     for key, default in INJECTED_FILAMENT_FIELDS.items():
         # Always overwrite to the canonical 1-slot placeholder (BambuStudio
         # inheritance may seed empty strings, e.g. filament_settings_id: [""]).
@@ -420,7 +419,7 @@ def build_base_dict(
     # 4. Inject filament user-level 1-slot placeholders.
     inject_filament_user_fields(base_dict, filament_template)
 
-    # 5. Step 3.5 K_per_extruder pre-alignment (plan v13.2).
+    # 5. Step 3.5 K_per_extruder pre-alignment.
     K_per_extruder, K_filament_raw, aligned = align_filament_with_variant(
         base_dict, sets["filament_options_with_variant"], machine_name, nozzle
     )
@@ -428,12 +427,12 @@ def build_base_dict(
 
     # 6. filament_extruder_variant: BambuStudio's filament arrays use
     #    extruder_variant_list[0]'s variants (extruder 0 only, K_per_extruder),
-    #    NOT print_extruder_variant (K_process). See plan v13.2 / m-realfile.
+    #    NOT print_extruder_variant (K_process).
     extruder0_variants = parse_extruder0_variants(base_dict["extruder_variant_list"])
     base_dict["filament_extruder_variant"] = list(extruder0_variants)
 
     # 7. Validate `extruder_variant_list` is present (BambuStudio strictly
-    #    checks this on 3MF load - plan v13 proposition 13).
+    #    checks this on 3MF load).
     if "extruder_variant_list" not in base_dict:
         raise ValueError(
             f"{machine_name} {nozzle}: extruder_variant_list missing from printer chain"
@@ -492,7 +491,7 @@ def validate_machines_schema(machines_json: Dict[str, Any]) -> None:
 def output_filename(slug: str, nozzle: str, layer_height: float) -> str:
     """Compose preset_bases output filename: e.g. `bambu_p2s_0.08mm_n04.json`.
 
-    `slug` MUST come from `machines.json` `slug` field (plan v13.1 / m1).
+    `slug` MUST come from `machines.json` `slug` field (single source of truth).
     """
     nozzle_tag = "n02" if nozzle == "0.2" else "n04"
     lh = f"{layer_height:.2f}mm"
@@ -626,7 +625,7 @@ def main() -> int:
 
     # Validate-only summary report.
     if args.validate_only:
-        print("\n=== K_per_extruder vs K_filament_raw report (plan v13.2) ===")
+        print("\n=== K_per_extruder vs K_filament_raw report ===")
         mismatches = [d for d in diagnostics if d["K_per_extruder"] != d["K_filament_raw"]]
         for d in diagnostics:
             ok = "OK" if d["K_per_extruder"] == d["K_filament_raw"] else "MISMATCH"

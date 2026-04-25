@@ -1,4 +1,4 @@
-"""Unit tests for `scripts/build_preset_bases.py` (plan v13 §9 step 3 verification).
+"""Unit tests for `scripts/build_preset_bases.py`.
 
 Covers:
   - inherits-chain merge (process / filament / printer)
@@ -90,7 +90,7 @@ class BuildBaseDictTest(unittest.TestCase):
         self.assertEqual(base["printer_model"], "Bambu Lab P2S")
 
     def test_h2d_n04_dual_kprocess5_kper_extruder2(self) -> None:
-        # Plan v13.2: H2D K_process=5 (extruder 0 has 2 variants, extruder 1 has 3),
+        # H2D K_process=5 (extruder 0 has 2 variants, extruder 1 has 3),
         # but K_per_extruder=2 (extruder 0 only). filament arrays use K_per_extruder.
         base, diag = self._build("Bambu Lab H2D", "0.4")
         self.assertEqual(diag["K_process"], 5)
@@ -111,7 +111,7 @@ class BuildBaseDictTest(unittest.TestCase):
         self.assertEqual(base["print_extruder_variant"][4], "Direct Drive TPU High Flow")
 
     def test_x2d_n04_kper_extruder_truncates_filament(self) -> None:
-        # Plan v13.2: X2D K_process=4, K_per_extruder=2 (extruder 0 = DD Std + DD HF).
+        # X2D K_process=4, K_per_extruder=2 (extruder 0 = DD Std + DD HF).
         # filament base K_filament_raw=4 truncated to K_per_extruder=2 (extruder 0 only).
         base, diag = self._build("Bambu Lab X2D", "0.4")
         self.assertEqual(diag["K_process"], 4)
@@ -136,7 +136,7 @@ class BuildBaseDictTest(unittest.TestCase):
         self.assertEqual(len(base["filament_extruder_variant"]), 1)
 
     def test_h2c_n04_dual_kprocess4_kper_extruder2(self) -> None:
-        # Plan v13.2: H2C K_process=4 (2 extruders × 2 variants), K_per_extruder=2.
+        # H2C K_process=4 (2 extruders × 2 variants), K_per_extruder=2.
         # filament arrays use K_per_extruder (not K_process).
         base, diag = self._build("Bambu Lab H2C", "0.4")
         self.assertEqual(diag["K_process"], 4)
@@ -307,7 +307,7 @@ class GeneratedBaseFilesTest(unittest.TestCase):
 
 
 class SlugSchemaTest(unittest.TestCase):
-    """Validate `machines.json` slug field is the single source of truth (plan v13.1 / m1)."""
+    """Validate `machines.json` slug field is the single source of truth."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -378,8 +378,6 @@ class FilamentNoVariantDriftDetectionTest(unittest.TestCase):
     and they're not in `kExtra`, ChromaPrint3D will silently miss N-slot expansion
     for those fields. This test extracts the `kExtra` set from the C++ source and
     cross-checks against a reference filament chain, alerting maintainers to sync.
-
-    Plan reference: v13.1 / m8.
     """
 
     BAMBU_METADATA_CPP = REPO_ROOT / "core" / "src" / "geo" / "bambu_metadata.cpp"

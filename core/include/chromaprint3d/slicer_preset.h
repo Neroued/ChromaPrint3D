@@ -57,7 +57,6 @@ struct FilamentConfig {
 };
 
 /// Slicer preset loaded from a multi-machine catalog, with runtime filament overrides.
-/// Plan reference: v13 §6.3.
 struct SlicerPreset {
     /// Resolved machine specification (machine name, topology, preset_base_path,
     /// compatible_printers list, etc.). Populated by `FromProfile`.

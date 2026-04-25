@@ -46,7 +46,7 @@ build/bin/raster_to_3mf --help
 
 ## 多机型预设与 CLI
 
-`raster_to_3mf` / `svg_to_3mf` / `gen_test_preset_3mf` 支持以下与多机型预设相关的参数（plan v13）：
+`raster_to_3mf` / `svg_to_3mf` / `gen_test_preset_3mf` 支持以下与多机型预设相关的参数：
 
 - `--data-dir <PATH>`：包含 `presets/` + `preset_bases/` 的数据目录（默认无，缺省时 3MF 退化为标准模式）。
 - `--machine <NAME>`：指定 Bambu Lab 机型名（如 `Bambu Lab P2S` / `Bambu Lab H2D`）；空字符串使用 catalog 默认机型。

@@ -375,11 +375,11 @@ SlicerPreset SlicerPreset::FromProfile(const BambuPresetCatalog& catalog,
 namespace detail {
 
 // ---------------------------------------------------------------------------
-// Field-set constants (plan v13 §6.1).
-// Hand-mirrored from BambuStudio src/libslic3r/PrintConfig.cpp print_options_with_variant
-// (lines 6986-7028) and filament_options_with_variant (lines 7030-7074).
-// scripts/build_preset_bases.py --list-{print,filament}-with-variant-keys reproduces
-// these sets at runtime; they MUST match this constant.
+// Field-set constants hand-mirrored from BambuStudio
+// src/libslic3r/PrintConfig.cpp: print_options_with_variant (lines 6986-7028)
+// and filament_options_with_variant (lines 7030-7074).
+// scripts/build_preset_bases.py --list-{print,filament}-with-variant-keys
+// reproduces these sets at runtime; they MUST match this constant.
 // ---------------------------------------------------------------------------
 
 const std::unordered_set<std::string>& PrintWithVariantKeys() {
@@ -649,8 +649,7 @@ void ExpandFilamentNoVariantToN(nlohmann::json& final_dict, std::size_t N) {
 ///
 /// **Pre-condition**: base_dict has been pre-aligned to K_per_extruder by
 /// `scripts/build_preset_bases.py` step 3.5; any other length here indicates
-/// data corruption or a base/code drift, so we throw rather than silently skip
-/// (plan v13.1 / m5 + v13.2 / m-realfile; aligns with §10 risk table CCC).
+/// data corruption or a base/code drift, so we throw rather than silently skip.
 void ExpandFilamentWithVariantToN(nlohmann::json& final_dict, std::size_t N,
                                   std::size_t K_per_extruder) {
     for (auto it = final_dict.begin(); it != final_dict.end(); ++it) {
@@ -723,8 +722,8 @@ void InjectInheritsGroup(nlohmann::json& final_dict, std::size_t N,
     // BambuStudio expects N+2 entries: print, printer, then N filaments.
     // [0] = process inherits chain head (= machine.process_template);
     // [1..N+1] = empty (printer + N filaments are project-embedded).
-    // Plan v13.2 / m-realfile: real BambuStudio 3MFs fill [0] with the
-    // process_template name (e.g. "0.08mm High Quality @BBL P2S").
+    // Real BambuStudio 3MFs fill [0] with the process_template name
+    // (e.g. "0.08mm High Quality @BBL P2S").
     nlohmann::json arr = nlohmann::json::array();
     arr.push_back(process_template);
     for (std::size_t i = 0; i < N + 1; ++i) arr.push_back("");
@@ -735,7 +734,7 @@ void InjectInheritsGroup(nlohmann::json& final_dict, std::size_t N,
 /// project_settings.config.
 ///
 /// **Pre-condition**: `preset.machine_resolved() == true` (enforced at
-/// `BuildProjectSettings` entry; see plan v13.1 / m4).
+/// `BuildProjectSettings` entry).
 std::string MakePrintSettingsId(const SlicerPreset& preset) {
     char buf[160];
     std::snprintf(buf, sizeof(buf), "ChromaPrint3D %.2fmm @%s %smm nozzle %s",
@@ -775,7 +774,7 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     const std::size_t K_process = process_variant.size();
     const std::size_t N         = preset.filaments.empty() ? 1 : preset.filaments.size();
 
-    // Plan v13.2 / m-realfile: filament arrays use K_per_extruder = len(extruder_variant_list[0].csv),
+    // Filament arrays use K_per_extruder = len(extruder_variant_list[0].csv),
     // NOT K_process. K_process is preserved separately for print_options_with_variant.
     if (!base_dict.contains("extruder_variant_list")) {
         throw FormatError("preset_base missing extruder_variant_list");
@@ -810,18 +809,21 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     // Compute dynamic diff (single concatenated `;`-joined string).
     const std::string diff_str = ComputeDynamicDiff(final_dict, base_dict);
 
-    // N-slot expansion (plan v13 §6.4 step 4 + v13.2 K_per_extruder semantics).
+    // N-slot expansion (filament_no_variant + filament_with_variant categories).
     ExpandFilamentNoVariantToN(final_dict, N);
     ExpandFilamentWithVariantToN(final_dict, N, K_per_extruder);
 
-    // 3 mandatory variant meta-fields (plan v13 §6.4 step 5; BBB+WW + v13.2 m-realfile).
+    // Inject the 3 mandatory variant meta-fields BambuStudio reads at 3MF
+    // load time: extruder_variant_list / filament_extruder_variant /
+    // filament_self_index. filament_extruder_variant is built from extruder 0's
+    // variants (NOT print_extruder_variant), repeated N times.
     InjectMandatoryVariantMetaFields(final_dict, base_dict, extruder0_variants, N);
 
     // Apply user-level overrides (palette colors, settings_id, etc.).
     PatchFlushMatrix(final_dict, preset.flush_volumes_matrix);
     PatchFilamentArrays(final_dict, preset.filaments, K_per_extruder);
 
-    // Inject metadata (plan v13 §6.4 step 8 + v13.2 / m-realfile cleanup).
+    // Inject project-settings metadata (mirrors BambuStudio real-file output).
     final_dict["from"]                = "project";
     final_dict["name"]                = "project_settings";
     final_dict["version"]             = preset_defaults::kBambuStudioVersion;
@@ -836,7 +838,7 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     // expression_group fields when non-empty; user real-file 3MFs omit them.
     // is_custom_defined is also absent in user real-file 3MFs.
 
-    // Project-level metadata. inherits_group[0] = process_template (plan v13.2).
+    // Project-level metadata. inherits_group[0] = process_template.
     InjectInheritsGroup(final_dict, N, preset.machine.process_template);
     {
         nlohmann::json arr = nlohmann::json::array();
@@ -845,7 +847,8 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
         final_dict["different_settings_to_system"] = arr;
     }
 
-    // Cross-machine retention list (plan v13 §6.4 step 8 / proposition 1).
+    // Cross-machine retention list: same-topology + same-nozzle machines, so
+    // BambuStudio retains slicer parameters when the user switches printer.
     {
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& pname : preset.machine.compatible_printers) arr.push_back(pname);

@@ -1,6 +1,6 @@
 # 扩展机型支持 / 同步上游 Bambu 资源（维护手册）
 
-本手册覆盖 ChromaPrint3D 多机型预设体系（plan v13）的 3 类常见维护场景：
+本手册覆盖 ChromaPrint3D 多机型预设体系的 3 类常见维护场景：
 
 - **场景 A**：新增一个 BBL 机型（即 `data/presets/machines.json` + `data/preset_bases/*.json`）
 - **场景 B**：BambuStudio 上游升级（`PrintConfig.cpp` 字段集合或 system 默认值变化）
@@ -61,24 +61,24 @@ python3 scripts/build_preset_bases.py \
   --validate-only
 ```
 
-预期输出：每个机型 × nozzle 一行，格式（v13.2）：
+预期输出：每个机型 × nozzle 一行，格式：
 
 ```
 Bambu Lab <NEW>           0.2  topology=single  K_process=2  K_per_extruder=2  K_filament_raw=2  [OK]  aligned=N fields
 Bambu Lab <NEW>           0.4  topology=single  K_process=2  K_per_extruder=2  K_filament_raw=2  [OK]  aligned=N fields
 ```
 
-K 量说明（v13.2 / m-realfile）：
+K 量说明：
 
 - **K_process** = `print_extruder_variant.size()`，包含所有 extruder × variant 组合（H2D=5、X2D=4、H2C=4）。
 - **K_per_extruder** = `extruder_variant_list[0].split(',').size()`，仅 extruder 0 的 variants。
 - **K_filament_raw** = filament inherits 链合并后 `nozzle_temperature.size()`（一般=K_per_extruder或 1）。
-- BambuStudio filament 数组长度 = `N × K_per_extruder`（**不是 N×K_process**，源码证据见 plan v13.2 附录 A0a）。
+- BambuStudio filament 数组长度 = `N × K_per_extruder`（**不是 N×K_process**）；源码证据见 BambuStudio `src/libslic3r/PrintConfig.cpp:7571-7580` + `PresetBundle.cpp:225-232` + `Print.cpp:8462+`。
 
 如果出现 `[MISMATCH]`（K_per_extruder ≠ K_filament_raw）：
-- X2D：K_filament_raw=4 > K_per_extruder=2，脚本会截断到 K_per_extruder（仅保留 extruder 0 的 variants）—— 这是预期行为（plan v13.2）。
+- X2D：K_filament_raw=4 > K_per_extruder=2，脚本会截断到 K_per_extruder（仅保留 extruder 0 的 variants）—— 这是预期行为。
 - A1/A1M：K_filament_raw=K_per_extruder=1，一致 ✅。
-- H2D/H2DP/H2C：K_filament_raw=K_per_extruder=2，一致 ✅（v13.2 修正后，原 i%2 兜底问题消失）。
+- H2D/H2DP/H2C：K_filament_raw=K_per_extruder=2，一致 ✅。
 
 如果出现 `error: ... not registered`：检查 `process_template` / `filament_template` / `printer_template` 是否拼写正确。
 
@@ -106,7 +106,7 @@ CHROMAPRINT3D_DATA_DIR=$(pwd)/data ctest --test-dir build -R SlicerPreset
 
 ### A5. 真机回归（PR 截图）
 
-参考 plan v13 §9 步骤 4b 的 8 组合表。新增机型至少在 0.4mm 下做 FaceUp + FaceDown 两组手动加载验证（BambuStudio 加载 3MF 不报错、参数与预期一致）。
+覆盖 (nozzle × face) 4 个组合：新增机型至少在 0.4mm 下做 FaceUp + FaceDown 两组手动加载验证（BambuStudio 加载 3MF 不报错、参数与预期一致）。
 
 ## 场景 B：BambuStudio 上游升级
 
@@ -169,7 +169,7 @@ python3 -m pytest scripts/tests/ -v
 CHROMAPRINT3D_DATA_DIR=$(pwd)/data ctest --test-dir build
 ```
 
-真机回归至少覆盖以下 (K_per_extruder, K_process) 组合（v13.2 / m-realfile）：
+真机回归至少覆盖以下 (K_per_extruder, K_process) 组合：
 - (1, 1) A1/A1M — single extruder + 1 variant
 - (2, 2) P2S/X1C/P1S/P1P/X1/X1E/H2S — single extruder + 2 variants
 - (2, 4) H2C — dual extruder + 2 variants/extruder
@@ -180,7 +180,7 @@ CHROMAPRINT3D_DATA_DIR=$(pwd)/data ctest --test-dir build
 
 ### C1. 直接编辑 `chromaprint_patches.json`
 
-`data/presets/chromaprint_patches.json` 是 ChromaPrint3D 团队人工维护的产物（plan v13.1 / m3）。原一次性 diff 工具 `scripts/build_chromaprint_patches.py` 已废弃；后续维护直接编辑该 JSON 文件即可。
+`data/presets/chromaprint_patches.json` 是 ChromaPrint3D 团队人工维护的产物。原一次性 diff 工具 `scripts/build_chromaprint_patches.py` 已废弃；后续维护直接编辑该 JSON 文件即可。
 
 直接编辑 `data/presets/chromaprint_patches.json`：
 
@@ -211,7 +211,7 @@ python3 -m pytest scripts/tests/test_chromaprint_patches_schema.py -v
 
 ### 问题：BambuStudio 加载 3MF 时 throw `extruder_variant_count != filament_self_index.size()`
 
-**原因**：`filament_extruder_variant` 不等于 `print_extruder_variant × N`（plan v13 / BBB 关键证据）。
+**原因**：`filament_extruder_variant` 必须等于 extruder 0's variants × N（不能取自 filament 继承链的 1 元素结果，也不是 `print_extruder_variant × N`）。
 
 **排查**：检查 base 文件中 `filament_extruder_variant` 是否被正确预对齐（应等于 `print_extruder_variant`）。重新跑 `build_preset_bases.py` 应能修复。
 
@@ -224,11 +224,11 @@ python3 -m pytest scripts/tests/test_chromaprint_patches_schema.py -v
 2. 确认目标机型 `<machine> <nozzle> nozzle` 在数组中。
 3. 如果不在：检查 `machines.json` 中两台机型的 `extruder_topology` 是否一致（catalog 仅在同 topology 内联合）。
 
-### 已解决：H2D × TPU 精度问题（v13.2 修正）
+### 已解决：H2D × TPU 精度问题
 
-**背景**：plan v13 / LLL 原担心 H2D `filament_max_volumetric_speed` 在 DD TPU HF slot 用 i%2 fallback 到 DD Std 值，可能不准。
+**背景**：早期担心 H2D `filament_max_volumetric_speed` 在 DD TPU HF slot 用 i%2 fallback 到 DD Std 值，可能不准（non-divisor pattern fallback）。
 
-**v13.2 修正后**：filament 数组长度从 N×K_process 改为 N×K_per_extruder，**TPU HF 仅出现在 `print_extruder_variant`（K_process=5）中，不出现在 filament 数组**。H2D K_per_extruder=2=K_filament_raw，无需 i%2 兜底，问题根本消失。
+**现状**：filament 数组长度已从 N×K_process 改为 N×K_per_extruder，**TPU HF 仅出现在 `print_extruder_variant`（K_process=5）中，不出现在 filament 数组**。H2D K_per_extruder=2=K_filament_raw，无需 i%2 兜底，问题根本消失。
 
 ## 相关文件
 
@@ -241,4 +241,3 @@ python3 -m pytest scripts/tests/test_chromaprint_patches_schema.py -v
 - `core/src/geo/bambu_preset_catalog.cpp`：catalog 加载实现（`LoadFromDir` 一次性扫描 base 缓存 `printer_model`）
 - `core/src/geo/bambu_metadata.cpp`：BuildProjectSettings + 字段集合常量
 - `core/include/chromaprint3d/bambu_preset_catalog.h`：公开 API
-- 完整设计文档：`/home/neroued/.windsurf/plans/multi-machine-preset-redesign-7f831c.md`（v13）+ review-fix 修订 `/home/neroued/.windsurf/plans/multi-machine-preset-review-fixes-411128.md`（v13.1）

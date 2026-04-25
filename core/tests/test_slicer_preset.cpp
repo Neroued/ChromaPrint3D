@@ -280,7 +280,7 @@ Mesh MakeBoxMesh() {
 }
 
 /// Build a SlicerPreset for any registered machine with N user filament slots.
-/// Used by the multi-machine variant / N-slot expansion test groups (plan v13.1 / M1).
+/// Used by the multi-machine variant / N-slot expansion test groups.
 SlicerPreset MakeTestPresetForMachine(const BambuPresetCatalog& catalog,
                                        const std::string& machine_name, NozzleSize nozzle,
                                        std::size_t N,
@@ -869,7 +869,7 @@ TEST(TransparentLayer, ExportWithTransparentLayerMesh) {
 }
 
 // ===========================================================================
-// Group 1: $variant_indexed patch application (plan v13.1 / M1 + plan v13 §8)
+// Group 1: $variant_indexed patch application
 // ===========================================================================
 
 TEST(VariantIndexed, AppliedToP2sK2) {
@@ -936,7 +936,7 @@ TEST(VariantIndexed, MissingMappingThrows) {
 
 // ===========================================================================
 // Group 2: N-slot expansion (filament_no_variant / filament_with_variant /
-//          print_with_variant) across machines (plan v13.1 / M1)
+//          print_with_variant) across machines
 // ===========================================================================
 
 TEST(NSlotExpand, FilamentNoVariantP2sN8) {
@@ -975,7 +975,7 @@ TEST(NSlotExpand, FilamentWithVariantH2dN8) {
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 8);
     auto j      = ExportAndExtractProjectSettings(preset);
     // H2D K_per_extruder=2 (extruder 0 = [DD Std, DD HF]); N=8 -> length = 16.
-    // Plan v13.2: filament arrays use K_per_extruder, not K_process (=5 for H2D).
+    // Filament arrays use K_per_extruder, not K_process (=5 for H2D).
     ASSERT_TRUE(j["nozzle_temperature"].is_array());
     EXPECT_EQ(j["nozzle_temperature"].size(), 16u);
     // base nozzle_temperature aligned to K_per_extruder=2: ['220','220'].
@@ -998,7 +998,7 @@ TEST(NSlotExpand, FilamentWithVariantH2dN8) {
 TEST(NSlotExpand, FilamentWithVariantA1N8) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
-    // A1 K_process=K_filament=1 (plan v13.1 / m7 fact-fix).
+    // A1 K_process == K_filament == 1 (single direct-drive variant).
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab A1", NozzleSize::N04, 8);
     auto j      = ExportAndExtractProjectSettings(preset);
     ASSERT_TRUE(j["nozzle_temperature"].is_array());
@@ -1013,7 +1013,7 @@ TEST(NSlotExpand, FilamentWithVariantX2dN8) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     // X2D K_process=4, K_per_extruder=2 (extruder 0 = [DD Std, DD HF]; extruder 1 = Bowden).
-    // Plan v13.2: filament arrays use K_per_extruder=2 (extruder 0 only).
+    // Filament arrays use K_per_extruder=2 (extruder 0 only).
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab X2D", NozzleSize::N04, 8);
     auto j      = ExportAndExtractProjectSettings(preset);
     ASSERT_TRUE(j["nozzle_temperature"].is_array());
@@ -1056,7 +1056,8 @@ TEST(NSlotExpand, ThreeKeySetsAreDisjoint) {
 }
 
 // ===========================================================================
-// Group 3: Mandatory variant meta fields (plan v13.1 / M1, BBB+WW guardrails)
+// Group 3: Mandatory variant meta fields
+// (extruder_variant_list / filament_extruder_variant / filament_self_index)
 // ===========================================================================
 
 TEST(VariantMeta, P2sN8FilamentSelfIndex) {
@@ -1080,7 +1081,7 @@ TEST(VariantMeta, P2sN8FilamentExtruderVariant) {
     auto j      = ExportAndExtractProjectSettings(preset);
     ASSERT_TRUE(j["filament_extruder_variant"].is_array());
     EXPECT_EQ(j["filament_extruder_variant"].size(), 16u);
-    // Pattern: print_extruder_variant repeated N=8 times (BBB key fix).
+    // Pattern: extruder 0's variants repeated N=8 times.
     for (std::size_t i = 0; i < 8; ++i) {
         EXPECT_EQ(j["filament_extruder_variant"][2 * i], "Direct Drive Standard");
         EXPECT_EQ(j["filament_extruder_variant"][2 * i + 1], "Direct Drive High Flow");
@@ -1103,9 +1104,9 @@ TEST(VariantMeta, H2dN8FilamentSelfIndexLength) {
 }
 
 TEST(VariantMeta, H2dN8FilamentExtruderVariantUsesExtruder0Only) {
-    // Plan v13.2 / m-realfile: BambuStudio's filament arrays use extruder 0's
-    // variants only (DD Std + DD HF for H2D). DD TPU HF is in extruder 1 of
-    // H2D (extruder_variant_list[1]) and lives ONLY in print_extruder_variant
+    // BambuStudio's filament arrays use extruder 0's variants only
+    // (DD Std + DD HF for H2D). DD TPU HF is in extruder 1 of H2D
+    // (extruder_variant_list[1]) and lives ONLY in print_extruder_variant
     // (K_process), NOT in filament_extruder_variant (K_per_extruder).
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
@@ -1159,7 +1160,7 @@ TEST(VariantMeta, X2dN8FilamentExtruderVariantUsesExtruder0Only) {
 // ===========================================================================
 
 TEST(PrintExtruderVariant, H2dPreservesTpuHf) {
-    // Plan v13.2: print_extruder_variant retains K_process (5 for H2D),
+    // print_extruder_variant retains K_process (5 for H2D),
     // including DD TPU HF on extruder 1.
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
@@ -1183,7 +1184,7 @@ TEST(PrintExtruderVariant, X2dPreservesBowden) {
 
 // ===========================================================================
 // Group 6: Patch value alignment with H2C primary machine real-file values
-// (plan v13.2 / chromaprint_patches.json field audit)
+// (chromaprint_patches.json field audit)
 // ===========================================================================
 
 TEST(PatchValueAlignment, OuterWallSpeedDdStd50) {
@@ -1218,9 +1219,9 @@ TEST(PatchValueAlignment, BottomColorPenetrationLayers1) {
 }
 
 TEST(PatchValueAlignment, ShellLayersBothOne) {
-    // Plan v13.2 update: bottom + top shell layers both = 1 (symmetric design,
-    // matches user real-file varesa_foreground; H2C/P2S use thickness instead
-    // but BambuStudio's max(layers, thickness/h) rule makes layers=1 + thickness=0
+    // Bottom + top shell layers both = 1 (symmetric design, matches user
+    // real-file `varesa_foreground`; H2C/P2S use thickness instead but
+    // BambuStudio's max(layers, thickness/h) rule makes layers=1 + thickness=0
     // the most explicit "1 layer" expression). Color penetration system:
     //   *_color_penetration_layers=1 + *_shell_layers=1 + *_shell_thickness=0
     auto catalog = LoadCatalogOrNull();
@@ -1232,9 +1233,9 @@ TEST(PatchValueAlignment, ShellLayersBothOne) {
 }
 
 TEST(PatchValueAlignment, ShellThicknessZero) {
-    // Plan v13.2: thickness=0 means "trust shell_layers count exactly", no
-    // minimum-thickness coercion. User real-file 3MFs all use bottom_shell_thickness=0
-    // (varesa also has top_shell_thickness=0 for symmetric design).
+    // thickness=0 means "trust shell_layers count exactly", no minimum-thickness
+    // coercion. User real-file 3MFs all use bottom_shell_thickness=0 (varesa
+    // also has top_shell_thickness=0 for symmetric design).
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
@@ -1244,8 +1245,8 @@ TEST(PatchValueAlignment, ShellThicknessZero) {
 }
 
 TEST(PatchValueAlignment, SurfaceDensity100pct) {
-    // Plan v13.2: solid fill density 100% on both surfaces (no gaps for color
-    // continuity). User real-file all 3 use 100%.
+    // Solid fill density 100% on both surfaces (no gaps for color continuity).
+    // User real-file all 3 use 100%.
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
@@ -1255,8 +1256,8 @@ TEST(PatchValueAlignment, SurfaceDensity100pct) {
 }
 
 TEST(PatchValueAlignment, SurfacePatternsMonotonicForQuality) {
-    // Plan v13.2 / varesa-standard: monotonic mode mitigates surface-quality
-    // issues caused by zig-zag (straight-line) print direction reversals.
+    // varesa-standard: monotonic mode mitigates surface-quality issues caused
+    // by zig-zag (straight-line) print direction reversals.
     // - bottom_surface_pattern: system default is already 'monotonic' (no patch needed).
     // - top_surface_pattern: system default is 'monotonicline'; patch to 'monotonic'
     //   per user varesa real-file standard.
@@ -1296,13 +1297,13 @@ TEST(PatchValueAlignment, ElefantFootCompensationZero) {
 }
 
 // ===========================================================================
-// Group 7: Metadata field cleanup (plan v13.2 / m-realfile)
+// Group 7: Metadata field cleanup (mirrors BambuStudio user real-file output)
 // ===========================================================================
 
 TEST(MetadataCleanup, NoCompatibleExpressionGroupFields) {
-    // Plan v13.2 / m-realfile: BambuStudio's `add_if_some_non_empty`
-    // (PresetBundle.cpp:264) only writes these when non-empty; user real-file
-    // 3MFs omit them. CP3D should not write empty arrays.
+    // BambuStudio's `add_if_some_non_empty` (PresetBundle.cpp:264) only writes
+    // these when non-empty; user real-file 3MFs omit them. CP3D should not
+    // write empty arrays.
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
@@ -1336,7 +1337,7 @@ TEST(MetadataCleanup, InheritsGroupHeadIsProcessTemplate) {
 }
 
 // ===========================================================================
-// Group 4: Error / formatting guardrails (plan v13.1 / M1)
+// Group 4: Error / formatting guardrails
 // ===========================================================================
 
 TEST(Patches, UnknownFieldFiltered) {
@@ -1391,7 +1392,7 @@ TEST(PrinterModel, P2sMetadataPlate) {
 TEST(ExpandFilament, MismatchedLengthThrows) {
     // Synthesize a base_dict with a deliberately-bad length for a
     // filament-with-variant key, and verify ExpandFilamentWithVariantToN throws
-    // (plan v13.1 / m5 — silent skip removed).
+    // (silent skip path removed; mismatched length now throws).
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     // Use H2D so K_process=5; BUT pass a base file whose

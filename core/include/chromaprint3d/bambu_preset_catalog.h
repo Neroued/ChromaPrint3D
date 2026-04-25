@@ -3,8 +3,6 @@
 /// \file bambu_preset_catalog.h
 /// \brief Multi-machine preset catalog: maps user-selected machine to a
 /// pre-generated base_dict and the ChromaPrint3D patch overlay.
-///
-/// Plan reference: v13 §6.2 / §3.3.
 
 #include "print_profile.h"
 

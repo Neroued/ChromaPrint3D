@@ -12,20 +12,20 @@
 
 namespace ChromaPrint3D::detail {
 
-/// Field-set constants (plan v13 §6.1, mirrored from BambuStudio
-/// `PrintConfig.cpp`). Exposed for unit-test introspection (set disjointness,
-/// upstream-drift detection).
+/// Field-set constants mirrored from BambuStudio `PrintConfig.cpp`
+/// (`print_options_with_variant` / `filament_options_with_variant`). Exposed
+/// for unit-test introspection (set disjointness, upstream-drift detection).
 const std::unordered_set<std::string>& PrintWithVariantKeys();
 const std::unordered_set<std::string>& FilamentWithVariantKeys();
 
-/// Variant-meta helpers (plan v13 §6.1, plan v13.2 K_per_extruder semantics).
+/// Variant-meta helpers.
 /// Returns N x K_per_extruder slot ids ["1",...,"N"], each repeated K_per_extruder times.
 std::vector<std::string> BuildFilamentSelfIndex(std::size_t N, std::size_t K_per_extruder);
 
 /// Returns N x K_per_extruder variant labels by repeating \p extruder0_variants N times.
-/// Plan v13.2 / m-realfile: BambuStudio's filament arrays use extruder 0's variants
-/// (K_per_extruder = len(extruder_variant_list[0].split(','))), NOT print_extruder_variant
-/// (which has K_process = sum_over_extruders(variants_per_extruder) length).
+/// BambuStudio's filament arrays use extruder 0's variants
+/// (K_per_extruder = len(extruder_variant_list[0].split(','))), NOT
+/// print_extruder_variant (which has K_process = sum_over_extruders length).
 std::vector<std::string>
 BuildFilamentExtruderVariant(const std::vector<std::string>& extruder0_variants,
                               std::size_t N);
@@ -66,9 +66,9 @@ std::string BuildEmbeddedProcessPreset(const SlicerPreset& preset);
 std::string BuildLayerConfigRanges(const SlicerPreset& preset);
 
 /// Generate model_settings.config XML for independent mesh objects.
-/// Embeds `<metadata key="printer_model_id" value="...">` (plate metadata,
-/// plan v13 §6.6 / proposition 8). When `preset.machine_resolved()` is false,
-/// the printer_model_id metadata is omitted.
+/// Embeds `<metadata key="printer_model_id" value="...">` as plate-level
+/// metadata. When `preset.machine_resolved()` is false, the printer_model_id
+/// metadata is omitted.
 std::string BuildModelSettings(const ExportedGroup& group, const SlicerPreset& preset);
 
 /// Generate slice_info.config XML.
