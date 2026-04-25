@@ -257,19 +257,6 @@ Mesh MakeBoxMesh() {
     return Mesh::Build(grid);
 }
 
-Mesh MakeDegenerateMesh() {
-    Mesh mesh;
-    mesh.vertices = {
-        Vec3f{0.0f, 0.0f, 0.0f},
-        Vec3f{1.0f, 0.0f, 0.0f},
-        Vec3f{2.0f, 0.0f, 0.0f},
-    };
-    mesh.indices = {
-        Vec3i{0, 1, 2},
-    };
-    return mesh;
-}
-
 } // namespace
 
 TEST(SlicerPreset, FindPresetFileFindsExisting) {
@@ -376,7 +363,7 @@ TEST(SlicerPreset, ExplicitSlotsMappingSurvivesDroppedMesh) {
     if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
     SlicerPreset preset = MakeTestPreset();
 
-    std::vector<Mesh> meshes       = {MakeBoxMesh(), MakeDegenerateMesh(), MakeBoxMesh()};
+    std::vector<Mesh> meshes       = {MakeBoxMesh(), Mesh{}, MakeBoxMesh()};
     std::vector<std::string> names = {"ObjA", "ObjDeg", "ObjC"};
     std::vector<int> slots         = {1, 8, 2};
 
@@ -448,7 +435,7 @@ TEST(SlicerPreset, FaceDownRotatesMeshesAroundGlobalBounds) {
         Vec3f{1.0f, 0.0f, 0.0f},
         Vec3f{0.0f, 0.0f, 1.0f},
     };
-    mesh_a.indices = {Vec3i{0, 1, 2}};
+    mesh_a.indices = {Vec3u{0, 1, 2}};
 
     Mesh mesh_b;
     mesh_b.vertices = {
@@ -456,7 +443,7 @@ TEST(SlicerPreset, FaceDownRotatesMeshesAroundGlobalBounds) {
         Vec3f{12.0f, 0.0f, 5.0f},
         Vec3f{10.0f, 0.0f, 7.0f},
     };
-    mesh_b.indices = {Vec3i{0, 1, 2}};
+    mesh_b.indices = {Vec3u{0, 1, 2}};
 
     std::vector<Mesh> meshes     = {mesh_a, mesh_b};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Blue", "PLA"}};

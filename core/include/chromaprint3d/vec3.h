@@ -1,41 +1,46 @@
 #pragma once
 
 /// \file vec3.h
-/// \brief 3-component integer and float vector types.
+/// \brief 3-component vector types: generic `Vec3<T>` (with `Vec3i`/`Vec3u`
+/// aliases) for integer coordinates / mesh indices, and a dedicated `Vec3f`
+/// for floating-point geometry.
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace ChromaPrint3D {
 
-/// 3-component integer vector.
-struct Vec3i {
-    int x = 0; ///< X component.
-    int y = 0; ///< Y component.
-    int z = 0; ///< Z component.
+/// 3-component generic vector. Used with integer instantiations for voxel
+/// coordinates and mesh indices; see the `Vec3i`/`Vec3u` aliases below.
+template <typename T>
+struct Vec3 {
+    T x = 0; ///< X component.
+    T y = 0; ///< Y component.
+    T z = 0; ///< Z component.
 
-    constexpr Vec3i() = default;
+    constexpr Vec3() = default;
 
     /// Constructs a vector with the given components.
     /// \param x_ X component
     /// \param y_ Y component
     /// \param z_ Z component
-    constexpr Vec3i(int x_, int y_, int z_) : x(x_), y(y_), z(z_) {}
+    constexpr Vec3(T x_, T y_, T z_) : x(x_), y(y_), z(z_) {}
 
     /// Vector addition.
-    Vec3i operator+(const Vec3i& o) const { return {x + o.x, y + o.y, z + o.z}; }
+    Vec3 operator+(const Vec3& o) const { return {x + o.x, y + o.y, z + o.z}; }
 
     /// Vector subtraction.
-    Vec3i operator-(const Vec3i& o) const { return {x - o.x, y - o.y, z - o.z}; }
+    Vec3 operator-(const Vec3& o) const { return {x - o.x, y - o.y, z - o.z}; }
 
     /// Scalar multiplication.
-    Vec3i operator*(int s) const { return {x * s, y * s, z * s}; }
+    Vec3 operator*(T s) const { return {x * s, y * s, z * s}; }
 
     /// Scalar division.
-    Vec3i operator/(int s) const { return {x / s, y / s, z / s}; }
+    Vec3 operator/(T s) const { return {x / s, y / s, z / s}; }
 
     /// In-place vector addition.
-    Vec3i& operator+=(const Vec3i& o) {
+    Vec3& operator+=(const Vec3& o) {
         x += o.x;
         y += o.y;
         z += o.z;
@@ -43,7 +48,7 @@ struct Vec3i {
     }
 
     /// In-place vector subtraction.
-    Vec3i& operator-=(const Vec3i& o) {
+    Vec3& operator-=(const Vec3& o) {
         x -= o.x;
         y -= o.y;
         z -= o.z;
@@ -51,7 +56,7 @@ struct Vec3i {
     }
 
     /// In-place scalar multiplication.
-    Vec3i& operator*=(int s) {
+    Vec3& operator*=(T s) {
         x *= s;
         y *= s;
         z *= s;
@@ -59,7 +64,7 @@ struct Vec3i {
     }
 
     /// In-place scalar division.
-    Vec3i& operator/=(int s) {
+    Vec3& operator/=(T s) {
         x /= s;
         y /= s;
         z /= s;
@@ -67,22 +72,38 @@ struct Vec3i {
     }
 
     /// Component access by index (0=x, 1=y, 2=z).
-    int& operator[](int i) { return i == 0 ? x : (i == 1 ? y : z); }
+    T& operator[](int i) { return i == 0 ? x : (i == 1 ? y : z); }
 
     /// Component access by index (0=x, 1=y, 2=z).
-    const int& operator[](int i) const { return i == 0 ? x : (i == 1 ? y : z); }
+    const T& operator[](int i) const { return i == 0 ? x : (i == 1 ? y : z); }
 
     /// Computes the dot product with another vector.
     /// \param o The other vector
     /// \return Dot product result
-    int Dot(const Vec3i& o) const { return x * o.x + y * o.y + z * o.z; }
+    T Dot(const Vec3& o) const { return x * o.x + y * o.y + z * o.z; }
 
     /// Computes the squared length of the vector.
     /// \return Squared length (x² + y² + z²)
-    int LengthSquared() const { return Dot(*this); }
+    T LengthSquared() const { return Dot(*this); }
+
+    /// Componentwise equality (auto-generated `!=` via C++20).
+    bool operator==(const Vec3&) const = default;
 };
 
-inline Vec3i operator*(int s, const Vec3i& v) { return v * s; }
+template <typename S, typename T>
+inline Vec3<T> operator*(S s, const Vec3<T>& v) {
+    return v * static_cast<T>(s);
+}
+
+/// Signed 32-bit integer vector. Used for voxel coordinates and signed offsets.
+using Vec3i = Vec3<int32_t>;
+
+/// Unsigned 32-bit integer vector. Used for mesh triangle indices; matches
+/// `neroued_3mf::IndexTriangle` layout for zero-copy 3MF export.
+using Vec3u = Vec3<uint32_t>;
+
+static_assert(sizeof(Vec3u) == 12,
+              "Vec3u must be 12 bytes for layout compatibility with IndexTriangle");
 
 /// 3-component float vector.
 struct Vec3f {

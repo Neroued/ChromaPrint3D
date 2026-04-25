@@ -4,6 +4,7 @@
 #include "chromaprint3d/version.h"
 #include "chromaprint3d/voxel.h"
 #include "bambu_metadata.h"
+#include "export_bridge.h"
 
 #include <neroued/3mf/neroued_3mf.h>
 
@@ -25,49 +26,6 @@
 
 namespace ChromaPrint3D {
 namespace {
-
-// ── Mesh type conversion ────────────────────────────────────────────────────
-
-bool IsDegenerateTriangle(const Vec3f& a, const Vec3f& b, const Vec3f& c) {
-    Vec3f ab = b - a;
-    Vec3f ac = c - a;
-    float cx = ab.y * ac.z - ab.z * ac.y;
-    float cy = ab.z * ac.x - ab.x * ac.z;
-    float cz = ab.x * ac.y - ab.y * ac.x;
-    return (cx * cx + cy * cy + cz * cz) <= 1e-12f;
-}
-
-neroued_3mf::Mesh ConvertMesh(const Mesh& src) {
-    neroued_3mf::Mesh dst;
-    const std::size_t vc = src.vertices.size();
-
-    dst.vertices.reserve(vc);
-    for (const Vec3f& v : src.vertices) { dst.vertices.push_back({v.x, v.y, v.z}); }
-
-    dst.triangles.reserve(src.indices.size());
-    std::size_t dropped = 0;
-    for (const Vec3i& tri : src.indices) {
-        if (tri.x < 0 || tri.y < 0 || tri.z < 0 || static_cast<std::size_t>(tri.x) >= vc ||
-            static_cast<std::size_t>(tri.y) >= vc || static_cast<std::size_t>(tri.z) >= vc) {
-            throw InputError("Mesh index out of range");
-        }
-        if (tri.x == tri.y || tri.y == tri.z || tri.x == tri.z) {
-            ++dropped;
-            continue;
-        }
-        const Vec3f& v0 = src.vertices[static_cast<std::size_t>(tri.x)];
-        const Vec3f& v1 = src.vertices[static_cast<std::size_t>(tri.y)];
-        const Vec3f& v2 = src.vertices[static_cast<std::size_t>(tri.z)];
-        if (IsDegenerateTriangle(v0, v1, v2)) {
-            ++dropped;
-            continue;
-        }
-        dst.triangles.push_back({static_cast<uint32_t>(tri.x), static_cast<uint32_t>(tri.y),
-                                 static_cast<uint32_t>(tri.z)});
-    }
-    if (dropped > 0) { spdlog::debug("ConvertMesh: filtered {} degenerate triangle(s)", dropped); }
-    return dst;
-}
 
 // ── Hex color normalization ─────────────────────────────────────────────────
 
@@ -268,15 +226,11 @@ neroued_3mf::Document BuildStandardDocument(const std::vector<InputObject>& obje
     }
     uint32_t bmg_id = builder.AddBaseMaterialGroup(std::move(materials));
 
+    // BuildInputObjects already filters empty meshes; the views here are non-empty.
     for (std::size_t i = 0; i < objects.size(); ++i) {
-        neroued_3mf::Mesh converted = ConvertMesh(*objects[i].mesh);
-        if (converted.triangles.empty()) {
-            spdlog::warn("BuildStandardDocument: object '{}' dropped (all triangles degenerate)",
-                         objects[i].name);
-            continue;
-        }
-        uint32_t oid = builder.AddMeshObject(objects[i].name, std::move(converted), bmg_id,
-                                             static_cast<uint32_t>(i));
+        auto view = detail::MakeMeshView(*objects[i].mesh);
+        uint32_t oid =
+            builder.AddMeshObject(objects[i].name, view, bmg_id, static_cast<uint32_t>(i));
         builder.AddBuildItem(oid);
     }
 
@@ -326,16 +280,12 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
 
     std::vector<uint32_t> object_ids;
     int part_id = 1;
+    // BuildInputObjects already filters empty meshes; the views here are non-empty.
     for (std::size_t i = 0; i < objects.size(); ++i) {
-        neroued_3mf::Mesh converted = ConvertMesh(*objects[i].mesh);
-        int face_count              = static_cast<int>(converted.triangles.size());
-        if (converted.triangles.empty()) {
-            spdlog::warn("BuildBambuDocument: object '{}' dropped (all triangles degenerate)",
-                         objects[i].name);
-            continue;
-        }
+        auto view            = detail::MakeMeshView(*objects[i].mesh);
+        const int face_count = static_cast<int>(view.triangles.size());
 
-        uint32_t oid = builder.AddMeshObject(objects[i].name, std::move(converted));
+        uint32_t oid = builder.AddMeshObject(objects[i].name, view);
         builder.AddBuildItem(oid);
         object_ids.push_back(oid);
 

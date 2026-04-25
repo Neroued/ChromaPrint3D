@@ -32,7 +32,7 @@ struct BuildMeshConfig {
 /// A simple indexed triangle mesh.
 struct Mesh {
     std::vector<Vec3f> vertices;
-    std::vector<Vec3i> indices;
+    std::vector<Vec3u> indices;
 
     /// Generate a mesh from a VoxelGrid using greedy meshing.
     static Mesh Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg = BuildMeshConfig{});

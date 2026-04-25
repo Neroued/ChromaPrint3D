@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,13 @@ namespace ChromaPrint3D {
 namespace {
 
 constexpr double kClipperScale = 100000.0;
+
+uint32_t CheckedU32Index(std::size_t value) {
+    if (value > static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+        throw InputError("Mesh vertex index exceeds uint32_t range");
+    }
+    return static_cast<uint32_t>(value);
+}
 
 // ---------------------------------------------------------------------------
 // Coordinate conversion
@@ -191,11 +199,11 @@ ZRange ComputeBaseZ(int color_layers, int base_layers, float lh, float half_gap,
 // ---------------------------------------------------------------------------
 
 void ExtrudeSlab(const detail::TriangulatedRegion& region, float z_bot, float z_top,
-                 std::vector<Vec3f>& out_verts, std::vector<Vec3i>& out_faces) {
+                 std::vector<Vec3f>& out_verts, std::vector<Vec3u>& out_faces) {
     if (region.Empty()) return;
 
-    const int N    = static_cast<int>(region.vertices.size());
-    const int base = static_cast<int>(out_verts.size());
+    const size_t N    = region.vertices.size();
+    const size_t base = out_verts.size();
 
     out_verts.reserve(out_verts.size() + static_cast<size_t>(2 * N));
     for (const Vec2f& v : region.vertices) { out_verts.push_back({v.x, v.y, z_top}); }
@@ -205,29 +213,31 @@ void ExtrudeSlab(const detail::TriangulatedRegion& region, float z_bot, float z_
     const size_t num_wall_edges = region.vertices.size();
     out_faces.reserve(out_faces.size() + 2 * num_tris + 2 * num_wall_edges);
 
-    for (const Vec3i& t : region.triangles) {
-        out_faces.push_back({base + t.x, base + t.y, base + t.z});
+    for (const Vec3u& t : region.triangles) {
+        out_faces.push_back({CheckedU32Index(base + t.x), CheckedU32Index(base + t.y),
+                             CheckedU32Index(base + t.z)});
     }
-    for (const Vec3i& t : region.triangles) {
-        out_faces.push_back({base + N + t.x, base + N + t.z, base + N + t.y});
+    for (const Vec3u& t : region.triangles) {
+        out_faces.push_back({CheckedU32Index(base + N + t.x), CheckedU32Index(base + N + t.z),
+                             CheckedU32Index(base + N + t.y)});
     }
 
     constexpr float kMinEdgeLenSq = 1e-12f;
 
-    int offset = 0;
+    size_t offset = 0;
     for (const auto& group : region.polygon_groups) {
         for (const auto& ring : group) {
-            const int n = static_cast<int>(ring.size());
-            for (int i = 0; i < n; ++i) {
-                int j    = (i + 1) % n;
+            const size_t n = ring.size();
+            for (size_t i = 0; i < n; ++i) {
+                size_t j = (i + 1) % n;
                 float dx = ring[static_cast<size_t>(j)].x - ring[static_cast<size_t>(i)].x;
                 float dy = ring[static_cast<size_t>(j)].y - ring[static_cast<size_t>(i)].y;
                 if (dx * dx + dy * dy < kMinEdgeLenSq) continue;
 
-                int ti = base + offset + i;
-                int tj = base + offset + j;
-                int bi = base + N + offset + i;
-                int bj = base + N + offset + j;
+                uint32_t ti = CheckedU32Index(base + offset + i);
+                uint32_t tj = CheckedU32Index(base + offset + j);
+                uint32_t bi = CheckedU32Index(base + N + offset + i);
+                uint32_t bj = CheckedU32Index(base + N + offset + j);
                 out_faces.push_back({bi, bj, tj});
                 out_faces.push_back({bi, tj, ti});
             }
@@ -362,7 +372,7 @@ std::vector<Mesh> BuildVectorMeshes(const std::vector<VectorShape>& shapes,
 #endif
     for (int C = 0; C < num_channels; ++C) {
         std::vector<Vec3f> verts;
-        std::vector<Vec3i> faces;
+        std::vector<Vec3u> faces;
 
         for (const auto& run : runs_per_channel[static_cast<size_t>(C)]) {
             const auto& region = regions[run.group_idx];
@@ -412,7 +422,7 @@ std::vector<Mesh> BuildVectorMeshes(const std::vector<VectorShape>& shapes,
 
     if (has_base) {
         std::vector<Vec3f> verts;
-        std::vector<Vec3i> faces;
+        std::vector<Vec3u> faces;
         ZRange bz = ComputeBaseZ(color_layers, base_layers, lh, half_gap, cfg.double_sided);
         ExtrudeSlab(shared_region, bz.bot, bz.top, verts, faces);
 
@@ -427,7 +437,7 @@ std::vector<Mesh> BuildVectorMeshes(const std::vector<VectorShape>& shapes,
         float z_top = total_z + cfg.transparent_layer_mm;
 
         std::vector<Vec3f> verts;
-        std::vector<Vec3i> faces;
+        std::vector<Vec3u> faces;
         ExtrudeSlab(shared_region, z_bot, z_top, verts, faces);
 
         int transparent_idx                          = num_channels + (has_base ? 1 : 0);

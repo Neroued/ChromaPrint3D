@@ -138,7 +138,7 @@ All public functions throw subclasses of `ChromaPrint3D::Error` instead of bare 
 
 **Headers:** `vec3.h`, `color.h`
 
-- `Vec3i`: Integer 3-component vector (voxel coordinates, mesh indices)
+- `Vec3<T>`: Integer 3-component vector template, with `Vec3i = Vec3<int32_t>` (voxel coordinates, signed offsets) and `Vec3u = Vec3<uint32_t>` (mesh triangle indices, layout-compatible with `neroued_3mf::IndexTriangle` for zero-copy 3MF export)
 - `Vec3f`: Float 3-component vector (normalization, distance, interpolation, clamping)
 - `Rgb`: Linear sRGB color (components in [0, 1]), with Lab interconversion and gamma encode/decode
 - `Lab`: CIE L\*a\*b\* color, provides `DeltaE76` color difference computation
