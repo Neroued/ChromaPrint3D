@@ -93,10 +93,24 @@ class CanonicalPatchesStructureTest(unittest.TestCase):
         self.assertEqual(self.data["process_common"]["bottom_color_penetration_layers"], "1")
         self.assertEqual(self.data["process_common"]["top_color_penetration_layers"], "1")
 
-    def test_shell_layers_minimal(self) -> None:
-        """Minimal shells (color layers serve as visible surfaces)."""
+    def test_shell_layers_symmetric_one(self) -> None:
+        """1-layer color penetration system: bottom + top both =1, thickness=0.
+        User real-file evidence (varesa_foreground): explicit "1 layer + 0 thickness"
+        is the cleanest expression of the 1-layer color penetration intent.
+        H2C/P2S use layers=0 + thickness=N (BambuStudio takes max), but the
+        symmetric design matches CP3D's mirrored color penetration philosophy."""
         self.assertEqual(self.data["process_common"]["bottom_shell_layers"], "1")
-        self.assertEqual(self.data["process_common"]["top_shell_layers"], "0")
+        self.assertEqual(self.data["process_common"]["top_shell_layers"], "1")
+
+    def test_shell_thickness_zero(self) -> None:
+        """thickness=0 means "trust the layer count exactly" (no min coercion)."""
+        self.assertEqual(self.data["process_common"]["bottom_shell_thickness"], "0")
+        self.assertEqual(self.data["process_common"]["top_shell_thickness"], "0")
+
+    def test_surface_density_100pct(self) -> None:
+        """Solid surfaces 100% density (no gaps for color continuity)."""
+        self.assertEqual(self.data["process_common"]["bottom_surface_density"], "100%")
+        self.assertEqual(self.data["process_common"]["top_surface_density"], "100%")
 
     def test_elefant_foot_compensation_zero(self) -> None:
         self.assertEqual(self.data["process_common"]["elefant_foot_compensation"], "0")
@@ -150,6 +164,25 @@ class CanonicalPatchesStructureTest(unittest.TestCase):
                     redundant_key, section,
                     f"{section_name}.{redundant_key} is redundant (== system); should not be patched",
                 )
+
+    def test_surface_patterns_use_monotonic_for_quality(self) -> None:
+        """Surface patterns are chosen for surface-quality (mitigating zig-zag
+        direction-reversal artifacts), per user explanation + varesa real-file:
+        - bottom_surface_pattern: NOT patched (system default 'monotonic' is correct).
+        - top_surface_pattern: patched to 'monotonic' (system default 'monotonicline'
+          is replaced; varesa standard).
+        - sparse_infill_pattern: patched to 'zig-zag' (system default 'gyroid' is
+          unsuitable for multi-color planar fill; all 3 user real-files use zig-zag)."""
+        process_common = self.data["process_common"]
+        self.assertNotIn(
+            "bottom_surface_pattern", process_common,
+            "bottom_surface_pattern must NOT be patched (system default 'monotonic' = varesa standard)",
+        )
+        self.assertEqual(
+            process_common.get("top_surface_pattern"), "monotonic",
+            "top_surface_pattern must be patched to 'monotonic' (system default 'monotonicline' is replaced per varesa standard)",
+        )
+        self.assertEqual(process_common.get("sparse_infill_pattern"), "zig-zag")
 
 
 if __name__ == "__main__":

@@ -1217,14 +1217,58 @@ TEST(PatchValueAlignment, BottomColorPenetrationLayers1) {
     EXPECT_EQ(j["top_color_penetration_layers"], "1");
 }
 
-TEST(PatchValueAlignment, ShellLayers) {
-    // bottom_shell_layers=1, top_shell_layers=0 (color penetration support).
+TEST(PatchValueAlignment, ShellLayersBothOne) {
+    // Plan v13.2 update: bottom + top shell layers both = 1 (symmetric design,
+    // matches user real-file varesa_foreground; H2C/P2S use thickness instead
+    // but BambuStudio's max(layers, thickness/h) rule makes layers=1 + thickness=0
+    // the most explicit "1 layer" expression). Color penetration system:
+    //   *_color_penetration_layers=1 + *_shell_layers=1 + *_shell_thickness=0
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
     auto j      = ExportAndExtractProjectSettings(preset);
     EXPECT_EQ(j["bottom_shell_layers"], "1");
-    EXPECT_EQ(j["top_shell_layers"], "0");
+    EXPECT_EQ(j["top_shell_layers"], "1");
+}
+
+TEST(PatchValueAlignment, ShellThicknessZero) {
+    // Plan v13.2: thickness=0 means "trust shell_layers count exactly", no
+    // minimum-thickness coercion. User real-file 3MFs all use bottom_shell_thickness=0
+    // (varesa also has top_shell_thickness=0 for symmetric design).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_shell_thickness"], "0");
+    EXPECT_EQ(j["top_shell_thickness"], "0");
+}
+
+TEST(PatchValueAlignment, SurfaceDensity100pct) {
+    // Plan v13.2: solid fill density 100% on both surfaces (no gaps for color
+    // continuity). User real-file all 3 use 100%.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_surface_density"], "100%");
+    EXPECT_EQ(j["top_surface_density"], "100%");
+}
+
+TEST(PatchValueAlignment, SurfacePatternsMonotonicForQuality) {
+    // Plan v13.2 / varesa-standard: monotonic mode mitigates surface-quality
+    // issues caused by zig-zag (straight-line) print direction reversals.
+    // - bottom_surface_pattern: system default is already 'monotonic' (no patch needed).
+    // - top_surface_pattern: system default is 'monotonicline'; patch to 'monotonic'
+    //   per user varesa real-file standard.
+    // - sparse_infill_pattern: system default is 'gyroid' (unsuitable for
+    //   multi-color planar fill); patch to 'zig-zag' per all 3 user real-files.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_surface_pattern"], "monotonic");
+    EXPECT_EQ(j["top_surface_pattern"], "monotonic");
+    EXPECT_EQ(j["sparse_infill_pattern"], "zig-zag");
 }
 
 TEST(PatchValueAlignment, MinBeadWidth65pct) {
