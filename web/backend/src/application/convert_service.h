@@ -15,12 +15,16 @@
 #include <string>
 #include <vector>
 
+namespace ChromaPrint3D {
+class BambuPresetCatalog;
+}
+
 namespace chromaprint3d::backend {
 
 class ConvertService {
 public:
     ConvertService(const ServerConfig& cfg, DataRepository& data, SessionStore& sessions,
-                   TaskRuntime& tasks);
+                   TaskRuntime& tasks, const ChromaPrint3D::BambuPresetCatalog* catalog = nullptr);
 
     ServiceResult SubmitConvertRaster(const std::string& owner, const std::vector<uint8_t>& image,
                                       const std::string& image_name,
@@ -54,6 +58,7 @@ private:
     DataRepository& data_;
     SessionStore& sessions_;
     TaskRuntime& tasks_;
+    const ChromaPrint3D::BambuPresetCatalog* catalog_ = nullptr;
 };
 
 } // namespace chromaprint3d::backend

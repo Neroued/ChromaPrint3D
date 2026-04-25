@@ -6,6 +6,8 @@
 #include "chromaprint3d/pipeline.h"
 #include "chromaprint3d/version.h"
 
+#include <spdlog/spdlog.h>
+
 namespace chromaprint3d::backend {
 
 using json = nlohmann::json;
@@ -16,6 +18,21 @@ using neroued::vectorizer::VectorizerConfig;
 // Construction & session
 // ---------------------------------------------------------------------------
 
+namespace {
+
+ChromaPrint3D::BambuPresetCatalog LoadCatalogOrEmpty(const std::string& data_dir) {
+    try {
+        return ChromaPrint3D::BambuPresetCatalog::LoadFromDir(data_dir);
+    } catch (const std::exception& e) {
+        spdlog::warn("ServerFacade: BambuPresetCatalog unavailable ({}); 3MF export will fall back "
+                     "to standard mode",
+                     e.what());
+        return {};
+    }
+}
+
+} // namespace
+
 ServerFacade::ServerFacade(ServerConfig cfg)
     : cfg_(std::move(cfg)), data_(cfg_),
       sessions_(cfg_.session_ttl_seconds, cfg_.max_session_colordbs),
@@ -24,9 +41,10 @@ ServerFacade::ServerFacade(ServerConfig cfg)
              cfg_.data_dir),
       boards_(cfg_.board_cache_ttl, cfg_.data_dir, cfg_.board_geometry_cache_ttl,
               cfg_.board_geometry_cache_max),
-      color_db_svc_(data_, sessions_), task_svc_(tasks_),
-      convert_svc_(cfg_, data_, sessions_, tasks_), matting_svc_(cfg_, data_, tasks_),
-      recipe_svc_(data_, tasks_), calib_svc_(cfg_, data_, sessions_, boards_),
+      catalog_(LoadCatalogOrEmpty(cfg_.data_dir)), color_db_svc_(data_, sessions_),
+      task_svc_(tasks_), convert_svc_(cfg_, data_, sessions_, tasks_, &catalog_),
+      matting_svc_(cfg_, data_, tasks_), recipe_svc_(data_, tasks_),
+      calib_svc_(cfg_, data_, sessions_, boards_, &catalog_),
       announcement_svc_(cfg_.announcements_dir.empty() ? cfg_.data_dir : cfg_.announcements_dir) {}
 
 std::string ServerFacade::EnsureSession(const std::optional<std::string>& existing_token,
@@ -172,6 +190,34 @@ ServiceResult ServerFacade::MattingMethods() const {
         });
     }
     return ServiceResult::Success(200, {{"methods", std::move(arr)}});
+}
+
+ServiceResult ServerFacade::ListMachines() const {
+    json machines = json::array();
+    if (!catalog_.empty()) {
+        for (const auto& name : catalog_.ListMachines()) {
+            // GetMachineSummary is layer-height-agnostic: topology / nozzles
+            // come from machines.json directly, printer_model is best-effort
+            // from any cached base file. This avoids the previous reliance on
+            // a hardcoded 0.08mm + n04/n02 base file being present.
+            std::optional<ChromaPrint3D::MachineSummary> summary = catalog_.GetMachineSummary(name);
+            json m                                               = {{"name", name}};
+            if (summary) {
+                m["extruder_topology"] = summary->extruder_topology;
+                m["nozzles"]           = summary->nozzles;
+                m["printer_model"]     = summary->printer_model;
+            } else {
+                m["extruder_topology"] = "single";
+                m["nozzles"]           = json::array();
+            }
+            machines.push_back(std::move(m));
+        }
+    }
+    return ServiceResult::Success(
+        200, {
+                 {"default_machine", catalog_.empty() ? std::string{} : catalog_.DefaultMachine()},
+                 {"machines", std::move(machines)},
+             });
 }
 
 // ---------------------------------------------------------------------------

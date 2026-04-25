@@ -232,9 +232,12 @@ Multi-channel 3MF model export based on the built-in 3MF writer (OPC ZIP + 3D mo
 | `Export3mfToBuffer()` | Export ModelIR to an in-memory buffer |
 | `Export3mfFromMeshes()` | Export from pre-built Mesh vector (for caching scenarios) |
 
-The writer emits standard 3MF by default. When a valid `SlicerPreset` (`preset_json_path` is non-empty)
-is provided, it additionally injects private slicer parameter files under `Metadata/*` (currently with
-Bambu settings relationship type); if preset resolution fails, it safely falls back to standard 3MF.
+The writer emits standard 3MF by default. When a valid `SlicerPreset` (`SlicerPreset::machine_resolved()`
+is `true`) is provided, it additionally injects private slicer parameter files under `Metadata/*`
+(including BambuStudio cross-machine compatibility groups); if preset resolution fails, it safely falls
+back to standard 3MF. `SlicerPreset` is constructed from `BambuPresetCatalog::Resolve(machine, nozzle,
+layer_height)` using `data/presets/machines.json` + `data/preset_bases/<slug>_<lh>_<nozzle>.json`, with
+runtime overrides from `data/presets/chromaprint_patches.json`.
 ZIP packaging defaults to threshold-based `Store/Deflate`: small parts use Store, large parts prefer Deflate; if zlib is unavailable or compression fails, it safely falls back to Store.
 
 Mesh building (voxel meshing, vector extrusion, and pre-export preprocessing) supports OpenMP

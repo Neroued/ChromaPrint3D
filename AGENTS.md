@@ -26,6 +26,7 @@
 | 新增/修改服务启动参数 | [docs/agents/web/backend/README.md](docs/agents/web/backend/README.md) |
 | 调整图像到 3MF 转换行为 | [docs/agents/core/README.md](docs/agents/core/README.md) |
 | 调整配方匹配策略 | [docs/agents/core/README.md](docs/agents/core/README.md) + [docs/agents/tasks/tune_color_match.md](docs/agents/tasks/tune_color_match.md) |
+| 新增机型 / 同步 BambuStudio 资源 / 调整 ChromaPrint3D patch | [docs/agents/tasks/extend_machine_support.md](docs/agents/tasks/extend_machine_support.md) |
 | 新增/修改命令行工具参数 | [docs/agents/apps/README.md](docs/agents/apps/README.md) + [docs/agents/tasks/extend_cli_flag.md](docs/agents/tasks/extend_cli_flag.md) |
 | 修改前端页面与参数面板 | [docs/agents/web/frontend/README.md](docs/agents/web/frontend/README.md) |
 | 矢量化质量评估与回归检测 | [neroued_vectorizer](https://github.com/neroued/neroued_vectorizer)（已迁移） |
@@ -93,6 +94,7 @@
 | CLI 参数或默认值变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/agents/apps/README.md](docs/agents/apps/README.md)、[docs/agents/tasks/extend_cli_flag.md](docs/agents/tasks/extend_cli_flag.md) |
 | 构建/部署流程变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/deployment.md](docs/deployment.md)、[docs/agents/tasks/sync_docs_after_behavior_change.md](docs/agents/tasks/sync_docs_after_behavior_change.md) |
 | 用户可见前端行为变化 | [README.md](README.md)、[docs/development.md](docs/development.md)、[docs/agents/web/frontend/README.md](docs/agents/web/frontend/README.md) |
+| 机型 / 预设 / `data/preset_bases/` 变化 | [docs/agents/tasks/extend_machine_support.md](docs/agents/tasks/extend_machine_support.md)、[docs/development.md](docs/development.md)、[docs/agents/core/README.md](docs/agents/core/README.md) |
 | Umami 事件名 / 字段 schema 变化 | [web/frontend/src/services/analytics.ts](web/frontend/src/services/analytics.ts)（`EVENT_NAMES` / `EventPayloadMap`）、[docs/deployment.md](docs/deployment.md) §8.4 |
 | 模块入口或职责边界变化 | [docs/agents/README.md](docs/agents/README.md) 与对应模块索引 |
 

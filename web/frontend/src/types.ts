@@ -47,6 +47,7 @@ export interface ConvertRasterParams {
   generate_source_mask?: boolean
   nozzle_size?: NozzleSize
   face_orientation?: FaceOrientation
+  target_machine?: string
 }
 
 // ---- Vector convert parameters (matches backend ConvertVectorRequest) ----
@@ -72,6 +73,7 @@ export interface ConvertVectorParams {
   tessellation_tolerance_mm?: number
   nozzle_size?: NozzleSize
   face_orientation?: FaceOrientation
+  target_machine?: string
 }
 
 // Superset type for the ParamPanel v-model (all optional fields from both)
@@ -203,6 +205,7 @@ export interface GenerateBoardRequest {
   layer_height_mm?: number
   nozzle_size?: NozzleSize
   face_orientation?: FaceOrientation
+  target_machine?: string
 }
 
 export interface GenerateBoardResponse {
@@ -215,6 +218,23 @@ export interface Generate8ColorBoardRequest {
   board_index: number // 1 or 2
   nozzle_size?: NozzleSize
   face_orientation?: FaceOrientation
+  target_machine?: string
+}
+
+// ---- Machine catalog (GET /api/v1/machines) ----
+
+export type ExtruderTopology = 'single' | 'dual'
+
+export interface MachineInfo {
+  name: string
+  extruder_topology: ExtruderTopology
+  nozzles: string[]
+  printer_model?: string
+}
+
+export interface MachineCatalogResponse {
+  default_machine: string
+  machines: MachineInfo[]
 }
 
 // ---- Health response ----

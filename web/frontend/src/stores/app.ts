@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchHealth } from '../api/health'
+import { fetchMachines } from '../api/machines'
 import { getStorageItem, setStorageItem } from '../runtime/storage'
 import { detectSystemDarkMode } from '../runtime/theme'
 import type { WritableComputedRef } from 'vue'
@@ -11,6 +12,7 @@ import type {
   HealthMemory,
   ImageDimensions,
   InputType,
+  MachineInfo,
   TaskStatus,
 } from '../types'
 
@@ -35,6 +37,10 @@ export const useAppStore = defineStore('app', () => {
 
   const isDark = ref(false)
   const recipeEditorTaskId = ref<string | null>(null)
+
+  const machines = ref<MachineInfo[]>([])
+  const defaultMachine = ref('')
+  let machinesPromise: Promise<void> | null = null
 
   function setSelectedFile(file: File | null) {
     selectedFile.value = file
@@ -137,6 +143,27 @@ export const useAppStore = defineStore('app', () => {
     await setStorageItem(LOCALE_STORAGE_KEY, loc)
   }
 
+  /// Idempotent loader: subsequent calls return the same in-flight promise.
+  /// On rejection (e.g. transient network error or backend without catalog) we
+  /// reset the cached promise so the next caller can retry — otherwise a single
+  /// blip would permanently leave the UI without a machine list.
+  function ensureMachines(): Promise<void> {
+    if (machinesPromise) return machinesPromise
+    machinesPromise = fetchMachines()
+      .then((response) => {
+        machines.value = response.machines ?? []
+        defaultMachine.value = response.default_machine ?? ''
+      })
+      .catch(() => {
+        // Backend without catalog: leave arrays empty so UI hides the dropdown.
+        machines.value = []
+        defaultMachine.value = ''
+        // Allow retry on next call (subsequent mount, manual refresh, etc.).
+        machinesPromise = null
+      })
+    return machinesPromise
+  }
+
   return {
     selectedFile,
     imageDimensions,
@@ -154,6 +181,9 @@ export const useAppStore = defineStore('app', () => {
     activeAnnouncementCount,
     isDark,
     recipeEditorTaskId,
+    machines,
+    defaultMachine,
+    ensureMachines,
     setSelectedFile,
     setImageDimensions,
     setInputType,

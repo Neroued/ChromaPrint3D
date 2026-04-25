@@ -54,6 +54,8 @@ public:
     ADD_METHOD_TO(ApiV1Controller::ModelPackInfo, "/api/v1/model-pack/info", drogon::Get,
                   drogon::Options);
 
+    ADD_METHOD_TO(ApiV1Controller::Machines, "/api/v1/machines", drogon::Get, drogon::Options);
+
     ADD_METHOD_TO(ApiV1Controller::MattingMethods, "/api/v1/matting/methods", drogon::Get,
                   drogon::Options);
     ADD_METHOD_TO(ApiV1Controller::SubmitMatting, "/api/v1/matting/tasks", drogon::Post,
@@ -121,6 +123,7 @@ public:
                              const std::string& task_id);
 
     void ModelPackInfo(const drogon::HttpRequestPtr& req, Callback&& cb);
+    void Machines(const drogon::HttpRequestPtr& req, Callback&& cb);
     void MattingMethods(const drogon::HttpRequestPtr& req, Callback&& cb);
     void SubmitMatting(const drogon::HttpRequestPtr& req, Callback&& cb);
     void PostprocessMatting(const drogon::HttpRequestPtr& req, Callback&& cb,

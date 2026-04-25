@@ -3,6 +3,7 @@
 /// \file slicer_preset.h
 /// \brief Slicer preset configuration for embedding print parameters in 3MF exports.
 
+#include "bambu_preset_catalog.h"
 #include "print_profile.h"
 
 #include <string>
@@ -13,7 +14,6 @@ namespace ChromaPrint3D {
 
 namespace preset_defaults {
 constexpr const char* kBambuStudioVersion = "02.03.00.70";
-constexpr const char* kPrinterModel       = "Bambu Lab P2S";
 } // namespace preset_defaults
 
 /// Per-slot filament description used when patching slicer presets.
@@ -56,9 +56,12 @@ struct FilamentConfig {
     std::string ResolveHexColor(const std::string& color_name, int fallback_idx = 0) const;
 };
 
-/// Slicer preset loaded from an external JSON template, with runtime filament overrides.
+/// Slicer preset loaded from a multi-machine catalog, with runtime filament overrides.
 struct SlicerPreset {
-    std::string preset_json_path;
+    /// Resolved machine specification (machine name, topology, preset_base_path,
+    /// compatible_printers list, etc.). Populated by `FromProfile`.
+    MachineSpec machine;
+
     std::vector<FilamentSlot> filaments;
     std::vector<int> flush_volumes_matrix;
 
@@ -71,27 +74,35 @@ struct SlicerPreset {
     bool custom_base_layers    = false; ///< User explicitly set base_layers; skip height modifier.
     float transparent_layer_mm = 0.0f;  ///< Transparent coating for FaceDown (0 = disabled).
 
-    /// Build a SlicerPreset by selecting the best preset file from \p preset_dir
-    /// and populating filament slots from the given \p profile.
-    /// If \p config is non-null, material lookup uses its tables instead of hardcoded logic.
-    static SlicerPreset FromProfile(const std::string& preset_dir, const PrintProfile& profile,
-                                    const FilamentConfig* config = nullptr,
-                                    bool double_sided            = false);
-};
+    /// True iff `machine` was successfully resolved and `preset_base_path` exists.
+    bool machine_resolved() const { return !machine.machine_name.empty(); }
 
-/// Select the best-matching preset JSON filename within \p preset_dir
-/// for the given printer model, layer height, nozzle size, and face orientation.
-/// Returns the full path to the preset file, or empty string if none found.
-std::string FindPresetFile(const std::string& preset_dir, const std::string& printer_model,
-                           float layer_height, NozzleSize nozzle = NozzleSize::N04,
-                           FaceOrientation face = FaceOrientation::FaceUp);
+    /// Build a SlicerPreset by resolving the requested machine in \p catalog and
+    /// populating filament slots from \p profile.
+    ///
+    /// \p target_machine names the user-selected machine (e.g. "Bambu Lab P2S").
+    ///   When empty, the catalog's `default_machine` is used.
+    /// \p config supplies per-material defaults (FilamentConfig is loaded by the caller).
+    /// \p double_sided forces FaceDown layout when true.
+    ///
+    /// **Does not throw** when the machine cannot be resolved; instead logs a
+    /// `spdlog::warn` and returns a preset with `machine_resolved() == false`.
+    /// Callers are expected to gate Bambu-enhanced 3MF export on
+    /// `machine_resolved()` and fall back to the standard 3MF path otherwise
+    /// (this is what the pipeline / backend / apps already do).
+    ///
+    /// If an unresolved preset is nevertheless passed to `BuildProjectSettings`
+    /// or any `Export3mf*(..., preset, ...)` overload that embeds Bambu metadata,
+    /// those downstream functions will throw `IOError` as a defensive net.
+    static SlicerPreset FromProfile(const BambuPresetCatalog& catalog, const PrintProfile& profile,
+                                    std::string_view target_machine = {},
+                                    const FilamentConfig* config    = nullptr,
+                                    bool double_sided               = false);
+};
 
 /// Match a hex color string to the closest filament slot in the preset's filament_colour array.
 /// Returns 1-based slot index. \p filament_colours entries are hex strings like "#FFFFFF".
 int MatchColorToSlot(const std::string& hex_color,
                      const std::vector<std::string>& filament_colours);
-
-/// Read the filament_colour array from a preset JSON file.
-std::vector<std::string> ReadFilamentColours(const std::string& preset_json_path);
 
 } // namespace ChromaPrint3D

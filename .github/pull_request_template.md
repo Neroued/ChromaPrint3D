@@ -65,6 +65,7 @@ Closes #<!-- issue 编号 -->
 - [ ] 若涉及 CLI 参数或默认值变化 → 已同步 `README.md`、`docs/development.md`、`docs/agents/apps/`
 - [ ] 若涉及构建 / 部署流程变化 → 已同步 `README.md`、`docs/deployment.md`
 - [ ] 若涉及前端用户可见行为变化 → 已同步 `README.md`、`docs/agents/web/frontend/`
+- [ ] 若涉及机型 / 预设 / `data/preset_bases/` 变化 → 已同步 `docs/agents/tasks/extend_machine_support.md`、`docs/development.md`
 - [ ] 若模块入口或职责边界变化 → 已更新 `AGENTS.md` 与对应模块索引
 - [ ] 若属于高频改动场景 → 已更新对应任务手册 `docs/agents/tasks/`
 - [ ] 以上均不涉及

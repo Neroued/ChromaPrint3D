@@ -5,6 +5,7 @@
 
 #include "infrastructure/task_runtime.h"
 
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/calib.h"
 #include "chromaprint3d/print_profile.h"
 #include "chromaprint3d/slicer_preset.h"
@@ -20,8 +21,9 @@ using json = nlohmann::json;
 using namespace ChromaPrint3D;
 
 CalibrationService::CalibrationService(const ServerConfig& cfg, DataRepository& data,
-                                       SessionStore& sessions, BoardRuntimeCache& boards)
-    : cfg_(cfg), data_(data), sessions_(sessions), boards_(boards) {}
+                                       SessionStore& sessions, BoardRuntimeCache& boards,
+                                       const ChromaPrint3D::BambuPresetCatalog* catalog)
+    : cfg_(cfg), data_(data), sessions_(sessions), boards_(boards), catalog_(catalog) {}
 
 ServiceResult CalibrationService::GenerateBoard(const json& body) {
     if (!body.contains("palette") || !body["palette"].is_array()) {
@@ -53,7 +55,10 @@ ServiceResult CalibrationService::GenerateBoard(const json& body) {
                  NozzleSizeTag(nozzle), raw_face, FaceOrientationTag(face));
 
     auto presets_path = std::filesystem::path(cfg_.data_dir) / "presets";
-    bool has_preset   = std::filesystem::is_directory(presets_path);
+    const bool has_preset =
+        std::filesystem::is_directory(presets_path) && catalog_ != nullptr && !catalog_->empty();
+
+    std::string raw_machine = body.value("target_machine", std::string{});
 
     try {
         const int num_ch   = cfg.recipe.num_channels;
@@ -76,7 +81,7 @@ ServiceResult CalibrationService::GenerateBoard(const json& body) {
                 }
             }
             cfg.palette = profile.palette;
-            auto preset = SlicerPreset::FromProfile(presets_path.string(), profile, &fil_config);
+            auto preset = SlicerPreset::FromProfile(*catalog_, profile, raw_machine, &fil_config);
 
             if (cached) {
                 result = BuildResultFromMeshes(*cached, cfg.palette, preset, face);
@@ -160,7 +165,9 @@ ServiceResult CalibrationService::Generate8ColorBoard(const json& body) {
                  raw_nozzle, NozzleSizeTag(nozzle), raw_face, FaceOrientationTag(face));
 
     auto presets_path = std::filesystem::path(cfg_.data_dir) / "presets";
-    bool has_preset   = std::filesystem::is_directory(presets_path);
+    const bool has_preset =
+        std::filesystem::is_directory(presets_path) && catalog_ != nullptr && !catalog_->empty();
+    std::string raw_machine = body.value("target_machine", std::string{});
 
     try {
         CalibrationBoardResult result;
@@ -182,7 +189,7 @@ ServiceResult CalibrationService::Generate8ColorBoard(const json& body) {
                 }
                 cfg.palette = profile.palette;
                 auto preset =
-                    SlicerPreset::FromProfile(presets_path.string(), profile, &fil_config);
+                    SlicerPreset::FromProfile(*catalog_, profile, raw_machine, &fil_config);
                 return BuildResultFromMeshes(meshes_ref, cfg.palette, preset, face);
             }
             return BuildResultFromMeshes(meshes_ref, cfg.palette, face);

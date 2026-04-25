@@ -1,4 +1,5 @@
 #include "chromaprint3d/pipeline.h"
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/color_db.h"
 #include "chromaprint3d/encoding.h"
 #include "chromaprint3d/voxel.h"
@@ -284,6 +285,8 @@ MatchRasterResult MatchRaster(const ConvertRasterRequest& request, ProgressCallb
     result.nozzle_size          = request.nozzle_size;
     result.face_orientation     = request.face_orientation;
     result.preset_dir           = request.preset_dir;
+    result.target_machine       = request.target_machine;
+    result.catalog              = request.catalog;
     result.match_config         = match_cfg;
     result.model_gate           = model_gate;
     result.input_width          = img.width;
@@ -452,26 +455,29 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
         auto ns = BuildMeshNamesAndSlots(meshes.size(), model.palette, model.base_channel_idx,
                                          model.base_layers, true);
 
-        if (!mr.preset_dir.empty()) {
+        if (mr.catalog) {
             auto preset =
-                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                SlicerPreset::FromProfile(*mr.catalog, export_profile, mr.target_machine,
                                           fil_config ? &*fil_config : nullptr, mr.double_sided);
             preset.custom_base_layers   = mr.custom_base_layers;
             preset.transparent_layer_mm = transparent_mm;
             FilamentSlot t_slot;
             t_slot.type        = "PLA";
             t_slot.colour      = "#FEFEFE";
-            t_slot.settings_id = "Bambu PLA Basic @BBL P2S";
+            t_slot.settings_id = preset.machine_resolved()
+                                     ? preset.machine.filament_template
+                                     : std::string{"Bambu PLA Basic @BBL P2S"};
             preset.filaments.push_back(std::move(t_slot));
 
-            if (!preset.preset_json_path.empty()) {
+            if (preset.machine_resolved()) {
                 result.model_3mf = Export3mfFromMeshes(meshes, model.palette, ns.names, ns.slots,
                                                        preset, mr.face_orientation, model.name);
-                spdlog::info("GenerateRasterModel (transparent): preset from {}",
-                             preset.preset_json_path);
+                spdlog::info("GenerateRasterModel (transparent): preset for machine={}",
+                             preset.machine.machine_name);
             } else {
-                spdlog::warn("GenerateRasterModel (transparent): preset not found in {}",
-                             mr.preset_dir);
+                spdlog::warn(
+                    "GenerateRasterModel (transparent): machine `{}` not resolved; standard 3MF",
+                    mr.target_machine);
                 result.model_3mf =
                     Export3mfFromMeshes(meshes, model.palette, ns.names, mr.face_orientation);
             }
@@ -480,18 +486,18 @@ ConvertResult GenerateRasterModel(MatchRasterResult& mr, ProgressCallback progre
                 Export3mfFromMeshes(meshes, model.palette, ns.names, mr.face_orientation);
         }
     } else {
-        if (!mr.preset_dir.empty()) {
+        if (mr.catalog) {
             auto preset =
-                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                SlicerPreset::FromProfile(*mr.catalog, export_profile, mr.target_machine,
                                           fil_config ? &*fil_config : nullptr, mr.double_sided);
             preset.custom_base_layers = mr.custom_base_layers;
-            if (!preset.preset_json_path.empty()) {
+            if (preset.machine_resolved()) {
                 result.model_3mf = Export3mfToBuffer(model, mesh_cfg, preset, mr.face_orientation);
-                spdlog::info("GenerateRasterModel: injected slicer preset from {}",
-                             preset.preset_json_path);
+                spdlog::info("GenerateRasterModel: injected slicer preset for machine={}",
+                             preset.machine.machine_name);
             } else {
-                spdlog::warn("GenerateRasterModel: preset not found in {}, standard 3MF",
-                             mr.preset_dir);
+                spdlog::warn("GenerateRasterModel: machine `{}` not resolved; standard 3MF",
+                             mr.target_machine);
                 result.model_3mf = Export3mfToBuffer(model, mesh_cfg, mr.face_orientation);
             }
         } else {

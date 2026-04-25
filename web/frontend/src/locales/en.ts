@@ -144,6 +144,10 @@ export default {
     faceDirection: 'Face Orientation',
     faceUp: 'Face Up',
     faceDown: 'Face Down',
+    targetMachine: 'Target Machine',
+    targetMachineHint: 'Select a Bambu Lab machine',
+    targetMachineTooltip:
+      'The exported 3MF will list all compatible same-topology machines so BambuStudio retains your slicer parameters when switching printers.',
     baseLayers: 'Base Layers',
     doubleSided: 'Double-Sided',
     transparentLayer: 'Transparent Layer',
@@ -259,6 +263,10 @@ export default {
     faceDirection: 'Face Orientation',
     faceUp: 'Face Up',
     faceDown: 'Face Down',
+    targetMachine: 'Target Machine',
+    targetMachineHint: 'Select a Bambu Lab machine',
+    targetMachineTooltip:
+      'The exported 3MF will list all compatible same-topology machines so BambuStudio retains your slicer parameters when switching printers.',
     colorPlaceholder: 'Color name (e.g. White)',
     materialPlaceholder: 'Material (e.g. PLA Basic)',
     generateBoard: 'Generate Calibration Board',

@@ -1,4 +1,5 @@
 #include "chromaprint3d/pipeline.h"
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/vector_proc.h"
 #include "chromaprint3d/vector_recipe_map.h"
 #include "chromaprint3d/vector_mesh.h"
@@ -213,6 +214,8 @@ MatchVectorResult MatchVector(const ConvertVectorRequest& request, ProgressCallb
     mr.nozzle_size          = request.nozzle_size;
     mr.face_orientation     = request.face_orientation;
     mr.preset_dir           = request.preset_dir;
+    mr.target_machine       = request.target_machine;
+    mr.catalog              = request.catalog;
     mr.dbs                  = std::move(db_shared);
     mr.match_config         = match_cfg;
     mr.model_gate           = model_gate;
@@ -318,19 +321,21 @@ ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progre
         auto ns = BuildMeshNamesAndSlots(meshes.size(), profile.palette, base_ch,
                                          resolved_base_layers, true);
 
-        if (!mr.preset_dir.empty()) {
+        if (mr.catalog) {
             auto preset =
-                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                SlicerPreset::FromProfile(*mr.catalog, export_profile, mr.target_machine,
                                           fil_config ? &*fil_config : nullptr, mr.double_sided);
             preset.custom_base_layers   = mr.custom_base_layers;
             preset.transparent_layer_mm = transparent_mm;
             FilamentSlot t_slot;
             t_slot.type        = "PLA";
             t_slot.colour      = "#FEFEFE";
-            t_slot.settings_id = "Bambu PLA Basic @BBL P2S";
+            t_slot.settings_id = preset.machine_resolved()
+                                     ? preset.machine.filament_template
+                                     : std::string{"Bambu PLA Basic @BBL P2S"};
             preset.filaments.push_back(std::move(t_slot));
 
-            if (!preset.preset_json_path.empty()) {
+            if (preset.machine_resolved()) {
                 result.model_3mf = Export3mfFromMeshes(meshes, profile.palette, ns.names, ns.slots,
                                                        preset, mr.face_orientation, vimg.name);
             } else {
@@ -342,12 +347,12 @@ ConvertResult GenerateVectorModel(MatchVectorResult& mr, ProgressCallback progre
                 Export3mfFromMeshes(meshes, profile.palette, ns.names, mr.face_orientation);
         }
     } else {
-        if (!mr.preset_dir.empty()) {
+        if (mr.catalog) {
             auto preset =
-                SlicerPreset::FromProfile(mr.preset_dir, export_profile,
+                SlicerPreset::FromProfile(*mr.catalog, export_profile, mr.target_machine,
                                           fil_config ? &*fil_config : nullptr, mr.double_sided);
             preset.custom_base_layers = mr.custom_base_layers;
-            if (!preset.preset_json_path.empty()) {
+            if (preset.machine_resolved()) {
                 result.model_3mf =
                     Export3mfFromMeshes(meshes, profile.palette, base_ch, resolved_base_layers,
                                         preset, mr.face_orientation, vimg.name);

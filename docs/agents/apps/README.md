@@ -44,8 +44,18 @@ cmake --build build -j$(nproc)
 build/bin/raster_to_3mf --help
 ```
 
+## 多机型预设与 CLI
+
+`raster_to_3mf` / `svg_to_3mf` / `gen_test_preset_3mf` 支持以下与多机型预设相关的参数：
+
+- `--data-dir <PATH>`：包含 `presets/` + `preset_bases/` 的数据目录（默认无，缺省时 3MF 退化为标准模式）。
+- `--machine <NAME>`：指定 Bambu Lab 机型名（如 `Bambu Lab P2S` / `Bambu Lab H2D`）；空字符串使用 catalog 默认机型。
+
+这些工具使用 `BambuPresetCatalog::LoadFromDir(<data_dir>)` 加载机型注册表，再通过 `SlicerPreset::FromProfile(catalog, profile, machine, ...)` 解析具体预设并写出含 `print_compatible_printers` 的 3MF。详见 [docs/agents/tasks/extend_machine_support.md](../tasks/extend_machine_support.md)。
+
 ## 相关任务手册
 
 - [docs/agents/tasks/extend_cli_flag.md](../tasks/extend_cli_flag.md)
+- [docs/agents/tasks/extend_machine_support.md](../tasks/extend_machine_support.md)
 - [docs/agents/tasks/add_api_endpoint.md](../tasks/add_api_endpoint.md)（当 CLI 行为需与 API 参数保持一致时）
 

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "chromaprint3d/bambu_preset_catalog.h"
 #include "chromaprint3d/export_3mf.h"
 #include "chromaprint3d/slicer_preset.h"
 #include "chromaprint3d/voxel.h"
@@ -10,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -222,25 +224,45 @@ std::vector<Vec3f> ParseVerticesFromModelXml(const std::string& model_xml) {
     return vertices;
 }
 
-std::string GetPresetDir() {
-    const char* env = std::getenv("CHROMAPRINT3D_PRESET_DIR");
+std::string GetDataDir() {
+    const char* env = std::getenv("CHROMAPRINT3D_DATA_DIR");
     if (env) return env;
+    // Legacy env var still respected; treat its value as `<data_dir>/presets`.
+    const char* legacy = std::getenv("CHROMAPRINT3D_PRESET_DIR");
+    if (legacy) {
+        std::filesystem::path p(legacy);
+        if (p.filename() == "presets") return p.parent_path().string();
+        return legacy;
+    }
     const char* pwd = std::getenv("PWD");
-    return std::string(pwd ? pwd : ".") + "/data/presets";
+    return std::string(pwd ? pwd : ".") + "/data";
 }
 
-bool PresetFileExists() {
-    return std::filesystem::exists(GetPresetDir() + "/bambu_p2s_0.08mm_n04_faceup.json");
+bool PresetFilesExist() {
+    return std::filesystem::exists(GetDataDir() + "/preset_bases/bambu_p2s_0.08mm_n04.json") &&
+           std::filesystem::exists(GetDataDir() + "/presets/machines.json");
 }
 
-SlicerPreset MakeTestPreset() {
-    SlicerPreset preset;
-    preset.preset_json_path = GetPresetDir() + "/bambu_p2s_0.08mm_n04_faceup.json";
-    preset.filaments        = {
-        {.type = "PLA", .colour = "#C12E1F"},
-        {.type = "PLA", .colour = "#00AE42"},
-        {.type = "PLA", .colour = "#0A2989"},
-    };
+std::optional<BambuPresetCatalog> LoadCatalogOrNull() {
+    try {
+        return BambuPresetCatalog::LoadFromDir(GetDataDir());
+    } catch (const std::exception&) { return std::nullopt; }
+}
+
+SlicerPreset MakeTestPreset(const BambuPresetCatalog& catalog,
+                            FaceOrientation face = FaceOrientation::FaceUp) {
+    PrintProfile profile;
+    profile.layer_height_mm  = 0.08f;
+    profile.nozzle_size      = NozzleSize::N04;
+    profile.face_orientation = face;
+    profile.palette          = {
+        {"Red", "PLA", "#C12E1F"}, {"Green", "PLA", "#00AE42"}, {"Blue", "PLA", "#0A2989"}};
+
+    auto preset = SlicerPreset::FromProfile(catalog, profile, "Bambu Lab P2S");
+    // Ensure each slot's colour matches the test palette regardless of FilamentConfig defaults.
+    for (size_t i = 0; i < preset.filaments.size() && i < profile.palette.size(); ++i) {
+        preset.filaments[i].colour = profile.palette[i].hex_color;
+    }
     return preset;
 }
 
@@ -257,24 +279,79 @@ Mesh MakeBoxMesh() {
     return Mesh::Build(grid);
 }
 
-} // namespace
-
-TEST(SlicerPreset, FindPresetFileFindsExisting) {
-    std::string dir  = GetPresetDir();
-    std::string path = FindPresetFile(dir, "Bambu Lab P2S", 0.08f);
-    if (PresetFileExists()) {
-        ASSERT_FALSE(path.empty());
-        EXPECT_NE(path.find("bambu_p2s_0.08mm_n04_faceup.json"), std::string::npos);
+/// Build a SlicerPreset for any registered machine with N user filament slots.
+/// Used by the multi-machine variant / N-slot expansion test groups.
+SlicerPreset MakeTestPresetForMachine(const BambuPresetCatalog& catalog,
+                                      const std::string& machine_name, NozzleSize nozzle,
+                                      std::size_t N,
+                                      FaceOrientation face = FaceOrientation::FaceUp) {
+    PrintProfile profile;
+    profile.layer_height_mm  = 0.08f;
+    profile.nozzle_size      = nozzle;
+    profile.face_orientation = face;
+    profile.palette.reserve(N);
+    static const char* kPaletteHex[] = {
+        "#C12E1F", "#00AE42", "#0A2989", "#FFFFFF", "#000000", "#F4EE2A", "#EC008C", "#0086D6",
+    };
+    for (std::size_t i = 0; i < N; ++i) {
+        Channel ch;
+        ch.color     = "Slot" + std::to_string(i + 1);
+        ch.material  = "PLA";
+        ch.hex_color = kPaletteHex[i % (sizeof(kPaletteHex) / sizeof(kPaletteHex[0]))];
+        profile.palette.push_back(ch);
     }
+    auto preset = SlicerPreset::FromProfile(catalog, profile, machine_name);
+    for (size_t i = 0; i < preset.filaments.size() && i < profile.palette.size(); ++i) {
+        preset.filaments[i].colour = profile.palette[i].hex_color;
+    }
+    return preset;
 }
 
-TEST(SlicerPreset, FindPresetFileReturnsEmptyForMissing) {
-    std::string dir  = GetPresetDir();
-    std::string path = FindPresetFile(dir, "Bambu Lab P2S", 0.99f);
-    EXPECT_TRUE(path.empty());
+/// Extract `Metadata/project_settings.config` JSON from an exported 3MF buffer.
+nlohmann::json ExtractProjectSettings(const std::vector<uint8_t>& buffer) {
+    auto entries        = ParseZipEntries(buffer);
+    const ZipEntry* ent = FindEntry(entries, "Metadata/project_settings.config");
+    if (!ent) throw std::runtime_error("project_settings.config missing from 3MF");
+    return nlohmann::json::parse(EntryAsString(ent));
+}
+
+/// Helper: build a 3MF buffer from a preset, return its parsed project_settings.config JSON.
+nlohmann::json ExportAndExtractProjectSettings(const SlicerPreset& preset) {
+    std::vector<Mesh> meshes(preset.filaments.size(), MakeBoxMesh());
+    std::vector<Channel> palette(preset.filaments.size());
+    for (size_t i = 0; i < preset.filaments.size(); ++i) {
+        palette[i].color     = "Slot" + std::to_string(i + 1);
+        palette[i].material  = "PLA";
+        palette[i].hex_color = preset.filaments[i].colour;
+    }
+    auto buf = Export3mfFromMeshes(meshes, palette, -1, 0, preset);
+    return ExtractProjectSettings(buf);
+}
+
+} // namespace
+
+TEST(SlicerPreset, CatalogResolvesP2SDefault) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    EXPECT_EQ(spec->machine_name, "Bambu Lab P2S");
+    EXPECT_EQ(spec->extruder_topology, "single");
+    EXPECT_EQ(spec->printer_template, "Bambu Lab P2S 0.4 nozzle");
+    EXPECT_FALSE(spec->compatible_printers.empty());
+}
+
+TEST(SlicerPreset, CatalogReturnsNulloptForMissingNozzle) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // 0.99mm layer height has no base file; Resolve returns nullopt.
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N04, 0.99f);
+    EXPECT_FALSE(spec.has_value());
 }
 
 TEST(SlicerPreset, DoubleSidedForcesFaceDownPresetSelection) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
     PrintProfile profile;
     profile.nozzle_size      = NozzleSize::N04;
     profile.face_orientation = FaceOrientation::FaceUp;
@@ -282,17 +359,20 @@ TEST(SlicerPreset, DoubleSidedForcesFaceDownPresetSelection) {
     profile.palette.push_back(Channel{"Red", "PLA"});
 
     const SlicerPreset single_sided =
-        SlicerPreset::FromProfile(GetPresetDir(), profile, nullptr, false);
+        SlicerPreset::FromProfile(*catalog, profile, "Bambu Lab P2S", nullptr, false);
     const SlicerPreset double_sided =
-        SlicerPreset::FromProfile(GetPresetDir(), profile, nullptr, true);
+        SlicerPreset::FromProfile(*catalog, profile, "Bambu Lab P2S", nullptr, true);
 
     EXPECT_EQ(single_sided.face, FaceOrientation::FaceUp);
     EXPECT_EQ(double_sided.face, FaceOrientation::FaceDown);
+    EXPECT_TRUE(single_sided.machine_resolved());
+    EXPECT_TRUE(double_sided.machine_resolved());
 }
 
 TEST(SlicerPreset, ExportWithPresetContainsBambuMetadata) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
@@ -312,8 +392,9 @@ TEST(SlicerPreset, ExportWithPresetContainsBambuMetadata) {
 }
 
 TEST(SlicerPreset, ProjectSettingsContainsPatchedFilaments) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}};
@@ -338,8 +419,9 @@ TEST(SlicerPreset, ProjectSettingsContainsPatchedFilaments) {
 }
 
 TEST(SlicerPreset, ModelSettingsXmlContainsObjectsAndExtruders) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
@@ -359,9 +441,44 @@ TEST(SlicerPreset, ModelSettingsXmlContainsObjectsAndExtruders) {
     EXPECT_NE(model_settings.find("extruder\" value=\"2\""), std::string::npos);
 }
 
+TEST(SlicerPreset, ModelSettingsXmlEscapesUserControlledStrings) {
+    // Regression: user-controlled mesh names containing XML-special characters
+    // must be escaped before being interpolated as attribute values, otherwise
+    // BBS / 3rd-party 3MF parsers see malformed XML.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
+
+    std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
+    std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
+    // Inject the five XML-mandatory characters via the user-controlled name
+    // path. Slot 1: '&', '"', '<', '>'. Slot 2: '\''.
+    std::vector<std::string> names = {std::string("Red&\"<X>"), std::string("Green'PLA")};
+    std::vector<int> slots         = {1, 2};
+
+    std::vector<uint8_t> buffer = Export3mfFromMeshes(meshes, palette, names, slots, preset);
+    ASSERT_FALSE(buffer.empty());
+    std::vector<ZipEntry> entries = ParseZipEntries(buffer);
+    const std::string xml = EntryAsString(FindEntry(entries, "Metadata/model_settings.config"));
+    ASSERT_FALSE(xml.empty());
+
+    // Escaped sequences MUST appear.
+    EXPECT_NE(xml.find("Red&amp;&quot;&lt;X&gt;"), std::string::npos)
+        << "expected escaped slot-1 name in XML; raw output:\n"
+        << xml;
+    EXPECT_NE(xml.find("Green&apos;PLA"), std::string::npos)
+        << "expected escaped slot-2 name in XML; raw output:\n"
+        << xml;
+    // Raw user input MUST NOT appear inside attribute values.
+    EXPECT_EQ(xml.find("Red&\""), std::string::npos);
+    EXPECT_EQ(xml.find("<X>"), std::string::npos);
+    EXPECT_EQ(xml.find("Green'PLA"), std::string::npos);
+}
+
 TEST(SlicerPreset, ExplicitSlotsMappingSurvivesDroppedMesh) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes       = {MakeBoxMesh(), Mesh{}, MakeBoxMesh()};
     std::vector<std::string> names = {"ObjA", "ObjDeg", "ObjC"};
@@ -410,8 +527,9 @@ TEST(SlicerPreset, ExportWithoutPresetStillWorks) {
 }
 
 TEST(SlicerPreset, WriteToTempFile) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
 
     std::vector<Mesh> meshes     = {MakeBoxMesh(), MakeBoxMesh()};
     std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}};
@@ -617,8 +735,9 @@ TEST(LayerConfigRanges, N02NozzleUsesHalfDiameterCoarseLH) {
 }
 
 TEST(LayerConfigRanges, ExportedZipContainsLayerRangesFile) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset = MakeTestPreset(*catalog);
     preset.base_layers  = 10;
     preset.color_layers = 5;
 
@@ -756,10 +875,10 @@ TEST(TransparentLayer, BuildMeshNamesAndSlotsNoBase) {
 }
 
 TEST(TransparentLayer, ExportWithTransparentLayerMesh) {
-    if (!PresetFileExists()) { GTEST_SKIP() << "Preset file not found"; }
-    SlicerPreset preset         = MakeTestPreset();
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    SlicerPreset preset         = MakeTestPreset(*catalog, FaceOrientation::FaceDown);
     preset.transparent_layer_mm = 0.04f;
-    preset.face                 = FaceOrientation::FaceDown;
     FilamentSlot t_slot;
     t_slot.type        = "PLA";
     t_slot.colour      = "#FEFEFE";
@@ -781,4 +900,733 @@ TEST(TransparentLayer, ExportWithTransparentLayerMesh) {
     ASSERT_FALSE(model_settings.empty());
     EXPECT_NE(model_settings.find("Transparent Layer"), std::string::npos);
     EXPECT_NE(model_settings.find("extruder\" value=\"4\""), std::string::npos);
+}
+
+// ===========================================================================
+// Group 1: $variant_indexed patch application
+// ===========================================================================
+
+TEST(VariantIndexed, AppliedToP2sK2) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j.contains("outer_wall_speed"));
+    ASSERT_TRUE(j["outer_wall_speed"].is_array());
+    EXPECT_EQ(j["outer_wall_speed"].size(), 2u);
+    // chromaprint_patches.json: DD Std=50, DD HF=60 for outer_wall_speed.
+    EXPECT_EQ(j["outer_wall_speed"][0], "50");
+    EXPECT_EQ(j["outer_wall_speed"][1], "60");
+}
+
+TEST(VariantIndexed, AppliedToH2dK5IncludesTpuHf) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["outer_wall_speed"].is_array());
+    EXPECT_EQ(j["outer_wall_speed"].size(), 5u);
+    // H2D K_process=5 with print_extruder_variant=[DD Std, DD HF, DD Std, DD HF, DD TPU HF].
+    // DD TPU HF entry must be present at index 4.
+    EXPECT_EQ(j["outer_wall_speed"][4], "50"); // chromaprint_patches DD TPU HF -> 50
+}
+
+TEST(VariantIndexed, AppliedToX2dK4IncludesBowden) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab X2D", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["outer_wall_speed"].is_array());
+    EXPECT_EQ(j["outer_wall_speed"].size(), 4u);
+    // X2D K_process=4 print_extruder_variant=[DD Std, DD HF, Bowden Std, Bowden HF].
+    // Bowden Std at index 2; chromaprint_patches Bowden Std = 50.
+    EXPECT_EQ(j["outer_wall_speed"][2], "50");
+    EXPECT_EQ(j["outer_wall_speed"][3], "50"); // Bowden HF = 50
+}
+
+TEST(VariantIndexed, MissingMappingThrows) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // Build a P2S preset, then mutate the patches to remove a variant entry,
+    // and verify BuildProjectSettings throws when it encounters the missing key.
+    // We exercise this via direct dictionary surgery on a copy of the catalog's
+    // patches; since SlicerPreset.machine.patches is a shared_ptr<const>, we
+    // construct a fake patches instance and swap it into the spec.
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 3);
+    ChromaPrintPatches bad;
+    // Provide outer_wall_speed but only with DD Std (missing DD HF / DD TPU HF / Bowden).
+    bad.process_common["outer_wall_speed"] =
+        R"({"$variant_indexed":{"Direct Drive Standard":"50"}})";
+    preset.machine.patches = std::make_shared<const ChromaPrintPatches>(std::move(bad));
+
+    std::vector<Mesh> meshes(preset.filaments.size(), MakeBoxMesh());
+    std::vector<Channel> palette(preset.filaments.size());
+    for (size_t i = 0; i < palette.size(); ++i) {
+        palette[i].material  = "PLA";
+        palette[i].hex_color = "#FFFFFF";
+    }
+    EXPECT_THROW(Export3mfFromMeshes(meshes, palette, -1, 0, preset), std::exception);
+}
+
+// ===========================================================================
+// Group 2: N-slot expansion (filament_no_variant / filament_with_variant /
+//          print_with_variant) across machines
+// ===========================================================================
+
+TEST(NSlotExpand, FilamentNoVariantP2sN8) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_colour"].is_array());
+    EXPECT_EQ(j["filament_colour"].size(), 8u);
+    // Each slot should match its user palette colour (set in MakeTestPresetForMachine).
+    EXPECT_EQ(j["filament_colour"][0], "#C12E1F");
+    EXPECT_EQ(j["filament_colour"][1], "#00AE42");
+    EXPECT_EQ(j["filament_colour"][7], "#0086D6");
+    // filament_ids and filament_vendor also expand to N.
+    ASSERT_TRUE(j["filament_ids"].is_array());
+    EXPECT_EQ(j["filament_ids"].size(), 8u);
+    ASSERT_TRUE(j["filament_vendor"].is_array());
+    EXPECT_EQ(j["filament_vendor"].size(), 8u);
+}
+
+TEST(NSlotExpand, FilamentWithVariantP2sN8) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    // P2S K_process=2; N=8 -> nozzle_temperature length = 16.
+    ASSERT_TRUE(j["nozzle_temperature"].is_array());
+    EXPECT_EQ(j["nozzle_temperature"].size(), 16u);
+    ASSERT_TRUE(j["filament_max_volumetric_speed"].is_array());
+    EXPECT_EQ(j["filament_max_volumetric_speed"].size(), 16u);
+}
+
+TEST(NSlotExpand, FilamentWithVariantH2dN8) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    // H2D K_per_extruder=2 (extruder 0 = [DD Std, DD HF]); N=8 -> length = 16.
+    // Filament arrays use K_per_extruder, not K_process (=5 for H2D).
+    ASSERT_TRUE(j["nozzle_temperature"].is_array());
+    EXPECT_EQ(j["nozzle_temperature"].size(), 16u);
+    // base nozzle_temperature aligned to K_per_extruder=2: ['220','220'].
+    for (std::size_t k = 0; k < 16; ++k) { EXPECT_EQ(j["nozzle_temperature"][k], "220"); }
+    // filament_max_volumetric_speed: H2D base aligned to K_per_extruder=2 = ['25','40'].
+    ASSERT_TRUE(j["filament_max_volumetric_speed"].is_array());
+    ASSERT_EQ(j["filament_max_volumetric_speed"].size(), 16u);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][0], "25");
+    EXPECT_EQ(j["filament_max_volumetric_speed"][1], "40");
+    // Slot 2 (indices 2..3) repeats the same K_per_extruder=2 slice.
+    EXPECT_EQ(j["filament_max_volumetric_speed"][2], j["filament_max_volumetric_speed"][0]);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][3], j["filament_max_volumetric_speed"][1]);
+    // Slot 8 (indices 14..15) is the tail.
+    EXPECT_EQ(j["filament_max_volumetric_speed"][14], "25");
+    EXPECT_EQ(j["filament_max_volumetric_speed"][15], "40");
+}
+
+TEST(NSlotExpand, FilamentWithVariantA1N8) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // A1 K_process == K_filament == 1 (single direct-drive variant).
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab A1", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["nozzle_temperature"].is_array());
+    EXPECT_EQ(j["nozzle_temperature"].size(), 8u);
+    // All 8 entries should be the same (1 variant replicated 8 times).
+    for (std::size_t i = 1; i < 8; ++i) {
+        EXPECT_EQ(j["nozzle_temperature"][i], j["nozzle_temperature"][0]);
+    }
+}
+
+TEST(NSlotExpand, FilamentWithVariantX2dN8) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // X2D K_process=4, K_per_extruder=2 (extruder 0 = [DD Std, DD HF]; extruder 1 = Bowden).
+    // Filament arrays use K_per_extruder=2 (extruder 0 only).
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab X2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["nozzle_temperature"].is_array());
+    EXPECT_EQ(j["nozzle_temperature"].size(), 16u);
+    // filament_max_volumetric_speed: X2D base truncated to K_per_extruder=2 = ['21','40'].
+    ASSERT_TRUE(j["filament_max_volumetric_speed"].is_array());
+    EXPECT_EQ(j["filament_max_volumetric_speed"].size(), 16u);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][0], "21");
+    EXPECT_EQ(j["filament_max_volumetric_speed"][1], "40");
+    // Slot 2 (indices 2..3) repeats the same K_per_extruder=2 slice.
+    EXPECT_EQ(j["filament_max_volumetric_speed"][2], j["filament_max_volumetric_speed"][0]);
+    EXPECT_EQ(j["filament_max_volumetric_speed"][3], j["filament_max_volumetric_speed"][1]);
+}
+
+TEST(NSlotExpand, PrintWithVariantKeepsKProcess) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    // print_options_with_variant arrays must NOT be expanded to N×K_process.
+    ASSERT_TRUE(j["outer_wall_speed"].is_array());
+    EXPECT_EQ(j["outer_wall_speed"].size(), 5u); // K_process for H2D
+    ASSERT_TRUE(j["inner_wall_speed"].is_array());
+    EXPECT_EQ(j["inner_wall_speed"].size(), 5u);
+}
+
+TEST(NSlotExpand, ThreeKeySetsAreDisjoint) {
+    using detail::PrintWithVariantKeys;
+    using detail::FilamentWithVariantKeys;
+    const auto& a = PrintWithVariantKeys();
+    const auto& b = FilamentWithVariantKeys();
+    for (const auto& k : a) {
+        EXPECT_EQ(b.count(k), 0u) << "Key `" << k
+                                  << "` is in both Print and Filament with-variant sets";
+    }
+    for (const auto& k : b) {
+        EXPECT_EQ(a.count(k), 0u) << "Key `" << k
+                                  << "` is in both Filament and Print with-variant sets";
+    }
+}
+
+// ===========================================================================
+// Group 3: Mandatory variant meta fields
+// (extruder_variant_list / filament_extruder_variant / filament_self_index)
+// ===========================================================================
+
+TEST(VariantMeta, P2sN8FilamentSelfIndex) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_self_index"].is_array());
+    EXPECT_EQ(j["filament_self_index"].size(), 16u); // N×K_process = 8×2
+    // Pattern: ["1","1","2","2",...,"8","8"]
+    for (std::size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(j["filament_self_index"][2 * i], std::to_string(i + 1));
+        EXPECT_EQ(j["filament_self_index"][2 * i + 1], std::to_string(i + 1));
+    }
+}
+
+TEST(VariantMeta, P2sN8FilamentExtruderVariant) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_extruder_variant"].is_array());
+    EXPECT_EQ(j["filament_extruder_variant"].size(), 16u);
+    // Pattern: extruder 0's variants repeated N=8 times.
+    for (std::size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(j["filament_extruder_variant"][2 * i], "Direct Drive Standard");
+        EXPECT_EQ(j["filament_extruder_variant"][2 * i + 1], "Direct Drive High Flow");
+    }
+}
+
+TEST(VariantMeta, H2dN8FilamentSelfIndexLength) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_self_index"].is_array());
+    EXPECT_EQ(j["filament_self_index"].size(), 16u); // N×K_per_extruder = 8×2
+    // Slot 1 repeated K_per_extruder=2 times at the head.
+    EXPECT_EQ(j["filament_self_index"][0], "1");
+    EXPECT_EQ(j["filament_self_index"][1], "1");
+    // Slot 8 at the tail.
+    EXPECT_EQ(j["filament_self_index"][14], "8");
+    EXPECT_EQ(j["filament_self_index"][15], "8");
+}
+
+TEST(VariantMeta, H2dN8FilamentExtruderVariantUsesExtruder0Only) {
+    // BambuStudio's filament arrays use extruder 0's variants only
+    // (DD Std + DD HF for H2D). DD TPU HF is in extruder 1 of H2D
+    // (extruder_variant_list[1]) and lives ONLY in print_extruder_variant
+    // (K_process), NOT in filament_extruder_variant (K_per_extruder).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_extruder_variant"].is_array());
+    EXPECT_EQ(j["filament_extruder_variant"].size(), 16u); // N×K_per_extruder
+    // Pattern: [DD Std, DD HF] × 8
+    for (std::size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(j["filament_extruder_variant"][2 * i], "Direct Drive Standard");
+        EXPECT_EQ(j["filament_extruder_variant"][2 * i + 1], "Direct Drive High Flow");
+    }
+    // Critically: NO entry should contain TPU HF (it's extruder 1 only).
+    for (const auto& v : j["filament_extruder_variant"]) {
+        EXPECT_NE(v.get<std::string>(), "Direct Drive TPU High Flow");
+    }
+}
+
+TEST(VariantMeta, X2dN8FilamentSelfIndexLength) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab X2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_self_index"].is_array());
+    EXPECT_EQ(j["filament_self_index"].size(), 16u); // N×K_per_extruder=8×2
+}
+
+TEST(VariantMeta, X2dN8FilamentExtruderVariantUsesExtruder0Only) {
+    // X2D extruder 0 = DD Std + DD HF; extruder 1 = Bowden Std + Bowden HF.
+    // filament_extruder_variant uses ONLY extruder 0's variants.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab X2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["filament_extruder_variant"].is_array());
+    EXPECT_EQ(j["filament_extruder_variant"].size(), 16u);
+    for (std::size_t i = 0; i < 8; ++i) {
+        EXPECT_EQ(j["filament_extruder_variant"][2 * i], "Direct Drive Standard");
+        EXPECT_EQ(j["filament_extruder_variant"][2 * i + 1], "Direct Drive High Flow");
+    }
+    // No entry should contain Bowden (it's extruder 1 only).
+    for (const auto& v : j["filament_extruder_variant"]) {
+        const std::string& s = v.get_ref<const std::string&>();
+        EXPECT_EQ(s.find("Bowden"), std::string::npos)
+            << "Bowden variant must NOT appear in filament_extruder_variant: " << s;
+    }
+}
+
+// ===========================================================================
+// Group 5: print_extruder_variant preserves all variants (K_process)
+// ===========================================================================
+
+TEST(PrintExtruderVariant, H2dPreservesTpuHf) {
+    // print_extruder_variant retains K_process (5 for H2D),
+    // including DD TPU HF on extruder 1.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["print_extruder_variant"].is_array());
+    EXPECT_EQ(j["print_extruder_variant"].size(), 5u);
+    EXPECT_EQ(j["print_extruder_variant"][4], "Direct Drive TPU High Flow");
+}
+
+TEST(PrintExtruderVariant, X2dPreservesBowden) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab X2D", NozzleSize::N04, 8);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["print_extruder_variant"].is_array());
+    EXPECT_EQ(j["print_extruder_variant"].size(), 4u);
+    EXPECT_EQ(j["print_extruder_variant"][2], "Bowden Standard");
+    EXPECT_EQ(j["print_extruder_variant"][3], "Bowden High Flow");
+}
+
+// ===========================================================================
+// Group 6: Patch value alignment with H2C primary machine real-file values
+// (chromaprint_patches.json field audit)
+// ===========================================================================
+
+TEST(PatchValueAlignment, OuterWallSpeedDdStd50) {
+    // All machines: outer_wall_speed[0] (DD Std) = 50 (slow speed for color edges).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["outer_wall_speed"].is_array());
+    EXPECT_EQ(j["outer_wall_speed"][0], "50");
+}
+
+TEST(PatchValueAlignment, SparseInfillSpeedH2cDdHf100) {
+    // H2C primary machine: sparse_infill_speed.DD HF = 100 (not P2S's 150).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["sparse_infill_speed"].is_array());
+    EXPECT_EQ(j["sparse_infill_speed"].size(), 4u); // K_process=4 for H2C
+    EXPECT_EQ(j["sparse_infill_speed"][0], "50");   // DD Std
+    EXPECT_EQ(j["sparse_infill_speed"][1], "100");  // DD HF (H2C value)
+}
+
+TEST(PatchValueAlignment, BottomColorPenetrationLayers1) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_color_penetration_layers"], "1");
+    EXPECT_EQ(j["top_color_penetration_layers"], "1");
+}
+
+TEST(PatchValueAlignment, ShellLayersBothOne) {
+    // Bottom + top shell layers both = 1 (symmetric design, matches user
+    // real-file `varesa_foreground`; H2C/P2S use thickness instead but
+    // BambuStudio's max(layers, thickness/h) rule makes layers=1 + thickness=0
+    // the most explicit "1 layer" expression). Color penetration system:
+    //   *_color_penetration_layers=1 + *_shell_layers=1 + *_shell_thickness=0
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_shell_layers"], "1");
+    EXPECT_EQ(j["top_shell_layers"], "1");
+}
+
+TEST(PatchValueAlignment, ShellThicknessZero) {
+    // thickness=0 means "trust shell_layers count exactly", no minimum-thickness
+    // coercion. User real-file 3MFs all use bottom_shell_thickness=0 (varesa
+    // also has top_shell_thickness=0 for symmetric design).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_shell_thickness"], "0");
+    EXPECT_EQ(j["top_shell_thickness"], "0");
+}
+
+TEST(PatchValueAlignment, SurfaceDensity100pct) {
+    // Solid fill density 100% on both surfaces (no gaps for color continuity).
+    // User real-file all 3 use 100%.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_surface_density"], "100%");
+    EXPECT_EQ(j["top_surface_density"], "100%");
+}
+
+TEST(PatchValueAlignment, SurfacePatternsMonotonicForQuality) {
+    // varesa-standard: monotonic mode mitigates surface-quality issues caused
+    // by zig-zag (straight-line) print direction reversals.
+    // - bottom_surface_pattern: system default is already 'monotonic' (no patch needed).
+    // - top_surface_pattern: system default is 'monotonicline'; patch to 'monotonic'
+    //   per user varesa real-file standard.
+    // - sparse_infill_pattern: system default is 'gyroid' (unsuitable for
+    //   multi-color planar fill); patch to 'zig-zag' per all 3 user real-files.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["bottom_surface_pattern"], "monotonic");
+    EXPECT_EQ(j["top_surface_pattern"], "monotonic");
+    EXPECT_EQ(j["sparse_infill_pattern"], "zig-zag");
+}
+
+TEST(PatchValueAlignment, MinBeadWidth65pct) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["min_bead_width"], "65%");
+}
+
+TEST(PatchValueAlignment, InitialLayerFlowRatio12) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["initial_layer_flow_ratio"], "1.2");
+}
+
+TEST(PatchValueAlignment, ElefantFootCompensationZero) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_EQ(j["elefant_foot_compensation"], "0");
+}
+
+// ===========================================================================
+// Group 7: Metadata field cleanup (mirrors BambuStudio user real-file output)
+// ===========================================================================
+
+TEST(MetadataCleanup, NoCompatibleExpressionGroupFields) {
+    // BambuStudio's `add_if_some_non_empty` (PresetBundle.cpp:264) only writes
+    // these when non-empty; user real-file 3MFs omit them. CP3D should not
+    // write empty arrays.
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_FALSE(j.contains("compatible_machine_expression_group"))
+        << "compatible_machine_expression_group should not be written (BambuStudio omits)";
+    EXPECT_FALSE(j.contains("compatible_process_expression_group"))
+        << "compatible_process_expression_group should not be written";
+}
+
+TEST(MetadataCleanup, NoIsCustomDefinedField) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    EXPECT_FALSE(j.contains("is_custom_defined"))
+        << "is_custom_defined should not be written (absent in real-file 3MFs)";
+}
+
+TEST(MetadataCleanup, InheritsGroupHeadIsProcessTemplate) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    ASSERT_TRUE(j["inherits_group"].is_array());
+    EXPECT_EQ(j["inherits_group"][0], "0.08mm High Quality @BBL P2S");
+    // Tail entries (printer + N filaments) should be empty.
+    for (std::size_t i = 1; i < j["inherits_group"].size(); ++i) {
+        EXPECT_EQ(j["inherits_group"][i], "");
+    }
+}
+
+// ===========================================================================
+// Group 4: Error / formatting guardrails
+// ===========================================================================
+
+TEST(Patches, UnknownFieldFiltered) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    // Inject a patch with an unknown scalar key. BuildProjectSettings should
+    // accept it (treat as scalar passthrough) without throwing - regression
+    // protection against future strict-mode regressions.
+    auto patches = std::make_shared<ChromaPrintPatches>(*preset.machine.patches);
+    patches->process_common["chromaprint3d_unknown_test_field"] = "\"sentinel\"";
+    preset.machine.patches                                      = patches;
+    auto j = ExportAndExtractProjectSettings(preset);
+    EXPECT_TRUE(j.contains("chromaprint3d_unknown_test_field"));
+    EXPECT_EQ(j["chromaprint3d_unknown_test_field"], "sentinel");
+}
+
+TEST(CompatiblePrinters, P2sN02ElementFormatStrict) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N02, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    ASSERT_FALSE(spec->compatible_printers.empty());
+    // Every element MUST end in " 0.2 nozzle" (not 0.4) and start with "Bambu Lab ".
+    for (const auto& s : spec->compatible_printers) {
+        EXPECT_TRUE(s.rfind("Bambu Lab ", 0) == 0) << "Bad prefix: " << s;
+        const std::string suffix = " 0.2 nozzle";
+        EXPECT_TRUE(s.size() >= suffix.size() &&
+                    std::equal(suffix.rbegin(), suffix.rend(), s.rbegin()))
+            << "Bad suffix: " << s;
+    }
+}
+
+TEST(PrinterModel, P2sMetadataPlate) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    std::vector<Mesh> meshes(3, MakeBoxMesh());
+    std::vector<Channel> palette = {{"Red", "PLA"}, {"Green", "PLA"}, {"Blue", "PLA"}};
+    auto buf                     = Export3mfFromMeshes(meshes, palette, -1, 0, preset);
+    auto entries                 = ParseZipEntries(buf);
+    auto* ent                    = FindEntry(entries, "Metadata/model_settings.config");
+    ASSERT_NE(ent, nullptr);
+    auto xml = EntryAsString(ent);
+    // BuildModelSettings emits printer_model_id metadata when printer_model is set.
+    EXPECT_NE(xml.find("printer_model_id"), std::string::npos);
+    // P2S printer_model = "Bambu Lab P2S" (from base file _chromaprint3d_meta).
+    EXPECT_NE(xml.find("Bambu Lab P2S"), std::string::npos);
+}
+
+TEST(ExpandFilament, MismatchedLengthThrows) {
+    // Synthesize a base_dict with a deliberately-bad length for a
+    // filament-with-variant key, and verify ExpandFilamentWithVariantToN throws
+    // (silent skip path removed; mismatched length now throws).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // Use H2D so K_process=5; BUT pass a base file whose
+    // filament_max_volumetric_speed is already aligned to 5. The on-disk file
+    // is correct, so we cannot easily induce a mismatch through the public
+    // API without a custom base. Instead exercise the throw path via a unit
+    // test on the BuildProjectSettings flow with a P2S preset whose JSON has
+    // been mutated. We use a temporary file approach: copy the base, edit
+    // nozzle_temperature to a wrong length, point the preset at it.
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+
+    auto tmp_path = std::filesystem::temp_directory_path() / "chromaprint3d_bad_base.json";
+    {
+        std::ifstream ifs(spec->preset_base_path);
+        nlohmann::json bd = nlohmann::json::parse(ifs);
+        // Force nozzle_temperature to length 3 (P2S K_process = 2; 3 != 2 and 3 != N×2).
+        bd["nozzle_temperature"] = nlohmann::json::array({"210", "220", "230"});
+        std::ofstream ofs(tmp_path);
+        ofs << bd.dump();
+    }
+
+    SlicerPreset bad = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 4);
+    bad.machine.preset_base_path = tmp_path;
+
+    std::vector<Mesh> meshes(4, MakeBoxMesh());
+    std::vector<Channel> palette(4, Channel{"Slot", "PLA", "#FFFFFF"});
+    EXPECT_THROW(Export3mfFromMeshes(meshes, palette, -1, 0, bad), std::exception);
+
+    std::filesystem::remove(tmp_path);
+}
+
+// ===========================================================================
+// Group: FlushMatrixGeneration
+//
+// Verifies that BuildProjectSettings emits a fully-populated
+// `flush_volumes_matrix` (and supporting fields) so BambuStudio does NOT
+// fall back to the degenerate `8×8=280` default that causes color bleed.
+// ===========================================================================
+
+TEST(FlushMatrixGeneration, P2sN3MatrixSizeAndDiagonalZero) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+
+    // P2S = 1 physical nozzle → 3*3*1 = 9 entries.
+    ASSERT_TRUE(j.contains("flush_volumes_matrix"));
+    ASSERT_TRUE(j["flush_volumes_matrix"].is_array());
+    const std::size_t nozzle_count = j["flush_multiplier"].size();
+    EXPECT_EQ(nozzle_count, 1u);
+    EXPECT_EQ(j["flush_volumes_matrix"].size(), 3u * 3u * nozzle_count);
+
+    // Diagonal entries = 0 (same-color switch).
+    const auto& matrix = j["flush_volumes_matrix"];
+    constexpr int N    = 3;
+    for (std::size_t n = 0; n < nozzle_count; ++n) {
+        for (int i = 0; i < N; ++i) {
+            std::size_t idx = n * N * N + i * N + i;
+            EXPECT_EQ(matrix[idx].get<std::string>(), "0")
+                << "diagonal at nozzle=" << n << " filament=" << i;
+        }
+    }
+}
+
+// Helper: derive "machine facts" from the exported project_settings.config
+// rather than hardcoding nozzle counts in tests. This keeps tests valid as
+// catalog/base files evolve.
+struct MachineFacts {
+    std::size_t nozzle_count;       // = flush_multiplier.size()
+    std::size_t filament_count;     // = N (preset.filaments.size())
+    std::size_t expected_matrix_sz; // = N * N * nozzle_count
+};
+
+MachineFacts ExtractMachineFacts(const nlohmann::json& project_settings, std::size_t N) {
+    const std::size_t nozzle_count = project_settings["flush_multiplier"].size();
+    return {nozzle_count, N, N * N * nozzle_count};
+}
+
+TEST(FlushMatrixGeneration, H2cN5MatrixShapeFromFacts) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 5;
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    auto facts  = ExtractMachineFacts(j, N);
+
+    EXPECT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
+
+    // Diagonal entries on each nozzle slab must be zero.
+    const auto& matrix = j["flush_volumes_matrix"];
+    for (std::size_t n = 0; n < facts.nozzle_count; ++n) {
+        for (std::size_t i = 0; i < N; ++i) {
+            std::size_t idx = n * N * N + i * N + i;
+            EXPECT_EQ(matrix[idx].get<std::string>(), "0") << "nozzle=" << n << " i=" << i;
+        }
+    }
+}
+
+TEST(FlushMatrixGeneration, FlushVolumesVectorAndMultiplier) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 5;
+    // H2C exercises nozzle_count > 1 in the multiplier.
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    auto facts  = ExtractMachineFacts(j, N);
+
+    ASSERT_TRUE(j["flush_volumes_vector"].is_array());
+    EXPECT_EQ(j["flush_volumes_vector"].size(), 2u * N); // 2 × N (push/pull)
+    for (const auto& v : j["flush_volumes_vector"]) { EXPECT_EQ(v.get<std::string>(), "140"); }
+
+    ASSERT_TRUE(j["flush_multiplier"].is_array());
+    EXPECT_EQ(j["flush_multiplier"].size(), facts.nozzle_count);
+    for (const auto& v : j["flush_multiplier"]) { EXPECT_EQ(v.get<std::string>(), "1"); }
+}
+
+TEST(FlushMatrixGeneration, H2cN8MatrixShapeFromFacts) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 8; // typical heavy multi-color project
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, N);
+    auto j      = ExportAndExtractProjectSettings(preset);
+    auto facts  = ExtractMachineFacts(j, N);
+    EXPECT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
+}
+
+TEST(FlushMatrixGeneration, SideChannelDefaults) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, 3);
+    auto j      = ExportAndExtractProjectSettings(preset);
+
+    // Mirrors varesa baseline.
+    EXPECT_EQ(j.value("flush_into_objects", ""), "0");
+    EXPECT_EQ(j.value("flush_into_infill", ""), "0");
+    EXPECT_EQ(j.value("flush_into_support", ""), "1");
+    EXPECT_EQ(j.value("prime_volume_mode", ""), "Default");
+    EXPECT_EQ(j.value("role_base_wipe_speed", ""), "1");
+}
+
+TEST(FlushMatrixGeneration, UserOverrideTakesPriority) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    constexpr std::size_t N = 2;
+    auto preset   = MakeTestPresetForMachine(*catalog, "Bambu Lab P2S", NozzleSize::N04, N);
+    auto baseline = ExportAndExtractProjectSettings(preset);
+    auto facts    = ExtractMachineFacts(baseline, N);
+    // Manually supply a flat override array sized to whatever the catalog
+    // says this machine produces.
+    std::vector<int> override_matrix(facts.expected_matrix_sz, 999);
+    for (std::size_t n = 0; n < facts.nozzle_count; ++n) {
+        for (std::size_t i = 0; i < N; ++i) { override_matrix[n * N * N + i * N + i] = 0; }
+    }
+    preset.flush_volumes_matrix = override_matrix;
+    auto j                      = ExportAndExtractProjectSettings(preset);
+
+    ASSERT_EQ(j["flush_volumes_matrix"].size(), facts.expected_matrix_sz);
+    // First off-diagonal entry should reflect the user override (999), not
+    // the HSV-formula auto-computed value.
+    const std::size_t off_diag_idx = 1; // (i=0, j=1) in nozzle 0
+    EXPECT_EQ(j["flush_volumes_matrix"][off_diag_idx].get<std::string>(), "999")
+        << "user-supplied override must win over auto-generated values";
+}
+
+TEST(FlushMatrixGeneration, NotAll280Sentinel) {
+    // Regression for the bug fixed by this change: previously the matrix
+    // was empty on export → BBS filled it with the 280-fallback (luminance
+    // formula yields different non-280 values for any non-trivial palette).
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, 4);
+    // Override colors to a high-contrast quad.
+    const char* colors[] = {"#000000", "#FFFFFF", "#C12E1F", "#0086D6"};
+    for (size_t i = 0; i < preset.filaments.size() && i < 4; ++i) {
+        preset.filaments[i].colour = colors[i];
+    }
+    auto j = ExportAndExtractProjectSettings(preset);
+
+    int count_280 = 0;
+    for (const auto& v : j["flush_volumes_matrix"]) {
+        if (v.get<std::string>() == "280") ++count_280;
+    }
+    // BBS fallback would yield 280 on every off-diagonal entry (24 of 32);
+    // our generator should produce far fewer (typically zero) such entries
+    // because the HSV formula and dataset return different values per pair.
+    EXPECT_LT(count_280, 5) << "matrix has too many 280 entries — looks like BBS fallback";
+}
+
+// Replaces the dataset-specific test that was deleted with the
+// FlushVolPredictor removal: now we just verify the matrix entry for a
+// high-contrast pair lands somewhere in the expected ballpark of the HSV
+// formula (≈ 560 mm³ for black→white before any min-flush addition).
+TEST(FlushMatrixGeneration, BlackWhitePairUsesHsvFormula) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto preset = MakeTestPresetForMachine(*catalog, "Bambu Lab H2C", NozzleSize::N04, 2);
+    preset.filaments[0].colour = "#000000";
+    preset.filaments[1].colour = "#FFFFFF";
+    auto j                     = ExportAndExtractProjectSettings(preset);
+    // Layout for N=2, nozzle 0: [0]=black→black=0, [1]=black→white, ...
+    // HSV formula: ~560 mm³ + min_flush_volume (= nozzle_volume[0] = 130).
+    int v = std::stoi(j["flush_volumes_matrix"][1].get<std::string>());
+    EXPECT_GE(v, 560); // floor: HSV formula alone
+    EXPECT_LE(v, 900); // clamp: kMaxFlushVolume
 }

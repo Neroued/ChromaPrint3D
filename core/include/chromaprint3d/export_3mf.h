@@ -28,7 +28,7 @@ std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshC
                                        FaceOrientation face_orientation = FaceOrientation::FaceUp);
 
 /// Export a ModelIR to an in-memory 3MF buffer with preset-compatible signature.
-/// When preset_json_path is available, private slicer metadata attachments are injected;
+/// When preset.machine_resolved() is true, private slicer metadata attachments are injected;
 /// otherwise the export safely falls back to standard 3MF.
 std::vector<uint8_t> Export3mfToBuffer(const ModelIR& model_ir, const BuildMeshConfig& cfg,
                                        const SlicerPreset& preset,
@@ -42,7 +42,7 @@ Export3mfFromMeshes(const std::vector<Mesh>& meshes, const std::vector<Channel>&
                     FaceOrientation face_orientation = FaceOrientation::FaceUp);
 
 /// Export pre-built meshes with preset-compatible signature.
-/// When preset_json_path is available, private slicer metadata attachments are injected;
+/// When preset.machine_resolved() is true, private slicer metadata attachments are injected;
 /// otherwise the export safely falls back to standard 3MF.
 std::vector<uint8_t> Export3mfFromMeshes(const std::vector<Mesh>& meshes,
                                          const std::vector<Channel>& palette, int base_channel_idx,

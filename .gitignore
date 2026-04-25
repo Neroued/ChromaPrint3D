@@ -61,3 +61,11 @@ announcements/*.local.yml
 announcements/*.local.json
 
 test_data/
+
+# BambuStudio upstream source (locally cloned by maintainers for preset base generation;
+# not tracked in this repo or CI). See data/preset_bases/ for the pre-generated artifacts.
+/BambuStudio/
+
+# ChromaPrint3D-models repo (locally cloned model weights, not tracked in
+# this repo or CI). See data/models/models.json for runtime download URLs.
+/ChromaPrint3D-models/

@@ -21,6 +21,8 @@
 
 namespace ChromaPrint3D {
 
+class BambuPresetCatalog;
+
 // ── Raster (bitmap) conversion pipeline ──────────────────────────────────────
 
 /// Request parameters for raster-image-to-3D model conversion.
@@ -88,7 +90,13 @@ struct ConvertRasterRequest {
     std::string preview_path;          ///< Output path for preview PNG (empty = don't write).
     std::string source_mask_path;      ///< Output path for source mask PNG (empty = don't write).
 
-    std::string preset_dir; ///< Directory containing preset JSON files (empty = no preset).
+    std::string preset_dir; ///< Directory containing filaments.json (empty = no preset).
+
+    /// Target machine name (e.g. "Bambu Lab P2S"). Empty -> catalog default.
+    std::string target_machine;
+    /// Non-owning pointer to the long-lived BambuPresetCatalog. When null,
+    /// the pipeline skips slicer-preset embedding and falls back to standard 3MF.
+    const BambuPresetCatalog* catalog = nullptr;
 
     NozzleSize nozzle_size           = NozzleSize::N04;
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
@@ -163,6 +171,8 @@ struct MatchRasterResult {
     NozzleSize nozzle_size           = NozzleSize::N04;
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
     std::string preset_dir;
+    std::string target_machine;
+    const BambuPresetCatalog* catalog = nullptr;
 
     std::vector<std::shared_ptr<const ColorDB>> dbs;
     MatchConfig match_config;
@@ -234,7 +244,13 @@ struct ConvertVectorRequest {
     bool generate_preview     = true;
     bool generate_source_mask = true; ///< Generate source mask image for vector matching source.
 
-    std::string preset_dir; ///< Directory containing preset JSON files (empty = no preset).
+    std::string preset_dir; ///< Directory containing filaments.json (empty = no preset).
+
+    /// Target machine name (e.g. "Bambu Lab P2S"). Empty -> catalog default.
+    std::string target_machine;
+    /// Non-owning pointer to the long-lived BambuPresetCatalog. When null,
+    /// the pipeline skips slicer-preset embedding and falls back to standard 3MF.
+    const BambuPresetCatalog* catalog = nullptr;
 
     NozzleSize nozzle_size           = NozzleSize::N04;
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
@@ -256,6 +272,8 @@ struct MatchVectorResult {
     NozzleSize nozzle_size           = NozzleSize::N04;
     FaceOrientation face_orientation = FaceOrientation::FaceUp;
     std::string preset_dir;
+    std::string target_machine;
+    const BambuPresetCatalog* catalog = nullptr;
 
     std::vector<std::shared_ptr<const ColorDB>> dbs;
     MatchConfig match_config;

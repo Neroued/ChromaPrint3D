@@ -29,6 +29,7 @@ const RASTER_FIELDS: Array<keyof ConvertRasterParams> = [
   'generate_source_mask',
   'nozzle_size',
   'face_orientation',
+  'target_machine',
 ]
 
 const VECTOR_FIELDS: Array<keyof ConvertVectorParams> = [
@@ -52,6 +53,7 @@ const VECTOR_FIELDS: Array<keyof ConvertVectorParams> = [
   'tessellation_tolerance_mm',
   'nozzle_size',
   'face_orientation',
+  'target_machine',
 ]
 
 function copyDefined<T extends object, K extends keyof T>(

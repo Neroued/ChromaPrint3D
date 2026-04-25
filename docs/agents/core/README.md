@@ -14,6 +14,7 @@
   - 几何与导出：`geo/`、`vecgeo/`
   - 转换编排：`pipeline/`
   - 校准：`calib/`
+  - 冲刷体积计算：`flush/`
 
 ## 常见改动落点
 
@@ -27,6 +28,7 @@
 | 修改体素/网格生成 | `core/src/geo/geo.cpp`、`core/src/vecgeo/vector_mesh_builder.cpp` |
 | 修改 3MF 导出 | `core/src/geo/export_3mf.cpp` |
 | 修改 Bambu 预设与耗材元数据 | `core/src/geo/bambu_metadata.cpp` |
+| 修改冲刷体积矩阵生成（多色切换冲刷量） | `core/src/flush/flush_calculator.cpp`、`core/include/chromaprint3d/flush_calculator.h`、`core/src/geo/bambu_metadata.cpp::InjectFlushVolumes` |
 | 修改 SVG 几何提取与遮挡裁剪 | `core/src/imgproc/vector_proc.cpp`、`core/src/imgproc/occlusion.cpp`、`core/src/imgproc/gradient.cpp` |
 | 修改端到端转换编排 | `core/src/pipeline/pipeline.cpp`、`core/src/pipeline/vector_pipeline.cpp` |
 | 修改前向色彩模型（Beer-Lambert 预测） | `core/src/model/forward_color_model.cpp`、`core/include/chromaprint3d/forward_color_model.h` |
@@ -34,9 +36,13 @@
 
 ## Bambu Studio 预设体系
 
-`core/include/chromaprint3d/common.h` 定义了 `NozzleSize`（N02/N04）和 `FaceOrientation`（FaceUp/FaceDown）枚举。`PrintProfile` 携带这两个字段，通过 `SlicerPreset::FromProfile` 选择 4 种预设 JSON 之一（`data/presets/bambu_p2s_0.08mm_{n02|n04}_{faceup|facedown}.json`）。同时，`face_orientation` 也会联动 3MF 导出几何：`FaceDown` 时模型整体绕 Y 轴旋转 180°，`FaceUp` 保持原方向。
+`core/include/chromaprint3d/common.h` 定义了 `NozzleSize`（N02/N04）和 `FaceOrientation`（FaceUp/FaceDown）枚举。`PrintProfile` 携带这两个字段。多机型预设体系由 `BambuPresetCatalog`（`core/include/chromaprint3d/bambu_preset_catalog.h`）统一管理：从 `data/presets/machines.json` + `data/presets/chromaprint_patches.json` + `data/preset_bases/*.json` 加载，`SlicerPreset::FromProfile(catalog, profile, target_machine, ...)` 依据机型名、喷嘴、层高解析出 `MachineSpec`，其中 `compatible_printers` 会列出同拓扑同 nozzle 的全部机型，Bambu Studio 切换机型时可保留切片参数（`is_compatible_with_printer` 返回 true 不替换 process preset）。`face_orientation` 也会联动 3MF 导出几何：`FaceDown` 时模型整体绕 Y 轴旋转 180°，`FaceUp` 保持原方向。
 
-颜色匹配逻辑在 `bambu_metadata.cpp` 中：`MatchColorToSlot` 基于 RGB 欧氏距离将每个 mesh 颜色匹配到预设 `filament_colour` 数组中最近的槽位。预设中的耗材丝信息（颜色、类型、温度等）完整保留到 3MF 输出中。导出翻转逻辑位于 `export_3mf.cpp`，与 `flip_y`（坐标系适配）解耦。
+`SlicerPreset::FromProfile` 在机型未注册或 base file 缺失时**不**抛错，仅 `spdlog::warn` 并返回 `machine_resolved() == false` 的 preset；调用方（pipeline / 后端 / apps）需以 `machine_resolved()` 为门控决定是否走 Bambu 增强 3MF 路径，否则退化到标准 3MF。若把未解析 preset 直接传给 `BuildProjectSettings` 或 `Export3mf*(..., preset, ...)`，下游会作为防御网兜抛 `IOError`。
+
+UI 列举机型走 `BambuPresetCatalog::GetMachineSummary()`（layer-height 无关），从 `MachineRecord` 直接读 topology / nozzles + 从 `base_printer_model_cache_` 取一个 `<slug>_*` 命中。`Resolve` 仍是导出/构建链路的入口（需要具体 base file 路径）。
+
+颜色匹配逻辑在 `bambu_metadata.cpp` 中：`MatchColorToSlot` 基于 RGB 欧氏距离将每个 mesh 颜色匹配到预设 `filament_colour` 数组中最近的槽位。`BuildProjectSettings` 运行时叠加 `chromaprint_patches.json`（含 `$variant_indexed` 多变体項）、按 N×K_process 扩展 filament 数组、生成 BambuStudio 必填的 3 个 variant 元字段（`extruder_variant_list`/`filament_extruder_variant`/`filament_self_index`）。导出翻转逻辑位于 `export_3mf.cpp`，与 `flip_y`（坐标系适配）解耦。
 
 ## 输入输出契约（高频）
 
