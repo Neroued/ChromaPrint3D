@@ -1,3 +1,4 @@
+#include "chromaprint3d/color.h"
 #include "chromaprint3d/error.h"
 #include "chromaprint3d/export_3mf.h"
 #include "chromaprint3d/mesh.h"
@@ -29,16 +30,19 @@ namespace {
 
 // ── Hex color normalization ─────────────────────────────────────────────────
 
+// Parse RGB or RGBA hex into a `neroued_3mf::Color` (which carries alpha).
+// RGB-only path delegates to `SrgbU8::FromHex` (the unified RGB-only parser);
+// 8-digit RGBA is parsed inline since `SrgbU8::FromHex` strictly rejects RGBA
+// to keep alpha handling explicit.
 neroued_3mf::Color ParseHexColor(const std::string& hex) {
-    if ((hex.size() == 7 || hex.size() == 9) && hex[0] == '#') {
+    if (hex.size() == 9 && hex[0] == '#') {
         unsigned long val = std::strtoul(hex.c_str() + 1, nullptr, 16);
-        if (hex.size() == 9) {
-            return {static_cast<uint8_t>((val >> 24) & 0xFF),
-                    static_cast<uint8_t>((val >> 16) & 0xFF),
-                    static_cast<uint8_t>((val >> 8) & 0xFF), static_cast<uint8_t>(val & 0xFF)};
-        }
-        return {static_cast<uint8_t>((val >> 16) & 0xFF), static_cast<uint8_t>((val >> 8) & 0xFF),
-                static_cast<uint8_t>(val & 0xFF), 255};
+        return {static_cast<uint8_t>((val >> 24) & 0xFF),
+                static_cast<uint8_t>((val >> 16) & 0xFF),
+                static_cast<uint8_t>((val >> 8) & 0xFF), static_cast<uint8_t>(val & 0xFF)};
+    }
+    if (auto rgb = SrgbU8::FromHex(hex); rgb) {
+        return {rgb->r, rgb->g, rgb->b, 255};
     }
     return {255, 255, 255, 255};
 }

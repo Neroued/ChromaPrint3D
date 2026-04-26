@@ -31,9 +31,9 @@ from modeling.core.math_utils import (
     softplus_inv,
 )
 from modeling.core.color_space import (
-    lab_grad_from_linear_batch,
-    linear_rgb_to_opencv_lab,
-    linear_rgb_to_opencv_lab_batch,
+    lab_d65_grad_from_linear_batch,
+    linear_rgb_to_lab_d65,
+    linear_rgb_to_lab_d65,
     linear_to_srgb,
 )
 from modeling.core.io_utils import load_json, normalize_label, parse_layer_order, resolve_db_paths
@@ -552,11 +552,11 @@ def compute_loss_and_grad(
             dE_arr[idx] = dE; dK_arr[idx] = dK; dC0_arr[idx] = dC0_
             dGamma_arr[idx] = dGamma_; dDelta_arr[idx] = dDelta_
 
-    pred_lab = linear_rgb_to_opencv_lab_batch(pred_linear)
+    pred_lab = linear_rgb_to_lab_d65(pred_linear)
     diff = pred_lab - target_lab
     total_loss = float(np.mean(np.sum(diff * diff, axis=1)))
     dL_dLab = (2.0 / float(count)) * diff
-    dL_dC = lab_grad_from_linear_batch(pred_linear, dL_dLab, config.lab_eps)
+    dL_dC = lab_d65_grad_from_linear_batch(pred_linear, dL_dLab, config.lab_eps)
     grad_E = np.sum(dE_arr * dL_dC[:, None, :], axis=0)
     grad_K = np.sum(dK_arr * dL_dC[:, None, :], axis=0)
     grad_C0 = np.sum(dC0_arr * dL_dC[:, None, :], axis=0)
@@ -647,7 +647,7 @@ def compute_eval_stats(pred_lab: np.ndarray, target_lab: np.ndarray) -> Dict[str
 
 def evaluate_entries(entries, E, k, c0, gamma, delta, config, prepared=None):
     pred_linear, target_lab = predict_linear_entries(entries, E, k, c0, gamma, delta, config, prepared)
-    pred_lab = linear_rgb_to_opencv_lab_batch(pred_linear)
+    pred_lab = linear_rgb_to_lab_d65(pred_linear)
     return compute_eval_stats(pred_lab, target_lab)
 
 

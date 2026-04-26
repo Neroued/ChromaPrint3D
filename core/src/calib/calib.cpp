@@ -1,4 +1,5 @@
 #include "chromaprint3d/calib.h"
+#include "chromaprint3d/color/image.h"
 #include "chromaprint3d/voxel.h"
 #include "chromaprint3d/mesh.h"
 #include "chromaprint3d/export_3mf.h"
@@ -185,7 +186,7 @@ static ColorDB BuildColorDBFromColorRegion(const cv::Mat& input, const Calibrati
     }
     if (recipe_count == 0) { throw InputError("Recipe count is zero"); }
 
-    const cv::Mat lab = detail::BgrToLab(bgr);
+    const cv::Mat lab = BgrToLab(bgr);
     if (lab.empty() || lab.type() != CV_32FC3) {
         throw InputError("Failed to convert color region to Lab");
     }

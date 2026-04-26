@@ -202,14 +202,9 @@ ServiceResult RecipeEditorService::RecipeEditorPredict(const std::string& owner,
 
     ChromaPrint3D::Lab predicted = model->PredictLab(stage_recipe, cfg);
 
-    uint8_t r8, g8, b8;
-    predicted.ToRgb().ToRgb255(r8, g8, b8);
-    char hex[8];
-    std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", r8, g8, b8);
-
     return ServiceResult::Success(
         200, {{"predicted_lab", {{"L", predicted.l()}, {"a", predicted.a()}, {"b", predicted.b()}}},
-              {"hex", std::string(hex)},
+              {"hex", predicted.ToHex()},
               {"from_model", true}});
 }
 

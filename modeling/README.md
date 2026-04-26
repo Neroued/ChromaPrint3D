@@ -505,7 +505,7 @@ python -m modeling.eval.plot_stage_a_diagnostics \
 
 ```python
 from modeling.core.forward_model import load_stage_forward_model, predict_linear_batch
-from modeling.core.color_space import linear_rgb_to_opencv_lab_batch
+from modeling.core.color_space import linear_rgb_to_lab_d65
 import numpy as np
 
 # 加载模型
@@ -527,10 +527,21 @@ linear_rgb = predict_linear_batch(
     substrate_idx=0,
 )
 
-# 转为 Lab
-lab = linear_rgb_to_opencv_lab_batch(linear_rgb)
+# 转为项目 D65 Lab（取代旧的 OpenCV linear_rgb_to_opencv_lab_batch）
+lab = linear_rgb_to_lab_d65(linear_rgb)
 print(lab)
 ```
+
+**Lab 数学说明**：本仓库统一使用项目 D65 Lab（`(6/29)^3` 阈值、D65 白点、解析 cbrt），与 C++ `chromaprint3d/color/types.h::Rgb::ToLab()` 字节级一致。
+
+- **运行时和新生成数据**（modelpack、新 ColorDB、Stage A/B 拟合输出）使用 project D65 Lab。
+- **历史 ColorDB**（`data/dbs/**/*.json` 的 `entries[*].lab`）来源于 OpenCV `cvtColor(BGR2Lab)`，与项目 D65 之间存在亚 ΔE 漂移（mean ~0.15 / p99 ~0.30 / max ~0.7），用户已确认可接受。本仓库**不**批量重建历史 ColorDB，**不**在 modelpack 内写入 `lab_math` 元字段，**不**在 C++ 加载路径加任何兼容校验。
+- 未来逐步重建的 ColorDB 自然走 project D65。
+
+Stage B 训练用 project D65 梯度 helper（取代旧的 OpenCV 语义）：
+
+- `lab_d65_jacobian(linear_rgb, eps)` — 单像素 3×3 雅可比
+- `lab_d65_grad_from_linear_batch(linear_rgb, dL_dLab, eps)` — batch 链式梯度
 
 ---
 

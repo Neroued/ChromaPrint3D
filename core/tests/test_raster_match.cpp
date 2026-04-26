@@ -25,11 +25,11 @@ ColorDB MakeTwoColorDb() {
     db.palette          = {Channel{"White", "PLA"}, Channel{"Black", "PLA"}};
 
     Entry white;
-    white.lab    = Lab::FromRgb(Rgb::FromRgb255(255, 255, 255));
+    white.lab    = Lab::FromRgb(SrgbU8(255, 255, 255).ToRgb());
     white.recipe = {0, 0, 0, 0, 0};
 
     Entry black;
-    black.lab    = Lab::FromRgb(Rgb::FromRgb255(0, 0, 0));
+    black.lab    = Lab::FromRgb(SrgbU8(0, 0, 0).ToRgb());
     black.recipe = {1, 1, 1, 1, 1};
 
     db.entries = {white, black};
@@ -85,9 +85,9 @@ TEST(RasterMatch, SlicPathRespectsTransparentMaskPixels) {
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
-        Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(0, 0, 0),
-        Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(0, 0, 0),
-        Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(0, 0, 0),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
     };
     const std::vector<uint8_t> mask = {255, 255, 255, 255, 0, 255};
     RasterProcResult img            = MakeRaster(pixels, 3, 2, mask);
@@ -115,10 +115,10 @@ TEST(RasterMatch, SlicTargetSuperpixelsOneFallsBackToPerPixelMatching) {
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
-        Rgb::FromRgb255(255, 255, 255),
-        Rgb::FromRgb255(0, 0, 0),
-        Rgb::FromRgb255(255, 255, 255),
-        Rgb::FromRgb255(0, 0, 0),
+        SrgbU8(255, 255, 255).ToRgb(),
+        SrgbU8(0, 0, 0).ToRgb(),
+        SrgbU8(255, 255, 255).ToRgb(),
+        SrgbU8(0, 0, 0).ToRgb(),
     };
     const std::vector<uint8_t> mask = {255, 255, 255, 255};
     RasterProcResult img            = MakeRaster(pixels, 2, 2, mask);
@@ -138,10 +138,10 @@ TEST(RasterMatch, KMeansAndSlicBothProduceValidClusterStats) {
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
-        Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(255, 255, 255),
-        Rgb::FromRgb255(0, 0, 0),       Rgb::FromRgb255(0, 0, 0),
-        Rgb::FromRgb255(255, 255, 255), Rgb::FromRgb255(255, 255, 255),
-        Rgb::FromRgb255(0, 0, 0),       Rgb::FromRgb255(0, 0, 0),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(255, 255, 255).ToRgb(),
+        SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(0, 0, 0).ToRgb(),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(255, 255, 255).ToRgb(),
+        SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(0, 0, 0).ToRgb(),
     };
     const std::vector<uint8_t> mask(8, 255);
     RasterProcResult img = MakeRaster(pixels, 4, 2, mask);

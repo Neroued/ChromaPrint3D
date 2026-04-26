@@ -513,8 +513,10 @@ def forward(micro_layers, E, k, C0, micro_thickness_mm):
 ## 10. 工程注意事项（常见坑与建议默认值）
 
 - **颜色空间一致性（最重要）**：
-  - `color_db.json` 的 `entries[].lab` 来自 OpenCV 的 `cvtColor(BGR->Lab)`；如果你用它做损失，请确保“预测值 → Lab”的变换与其一致，否则会引入系统偏差
-  - 如果你用 `modeling/colorchecker_tool.py` 走 D50/Lab_d50，同时又用 OpenCV Lab 做组合板损失，务必明确两者不是同一个 Lab 定义；建议全链路统一一种定义
+  - **当前重构后的统一约定**：仓库内运行时代码、新生成的 modelpack、新拟合的 Stage A/B 参数、新生成的 ColorDB 一律使用**项目 D65 Lab**（`(6/29)^3` 阈值、D65 白点、解析 cbrt）。Python 入口为 `modeling.core.color_space.linear_rgb_to_lab_d65`；C++ 入口为 `chromaprint3d::Rgb::ToLab()`。两端字节级一致。
+  - **历史 ColorDB 例外**：`data/dbs/**/*.json` 与 `modeling/dbs/**/*.json` 中已有的 `entries[].lab` 仍来自 OpenCV `cvtColor(BGR2Lab)` 量化路径。与新项目 D65 之间存在亚 ΔE76 漂移（mean ~0.15 / p99 ~0.30 / max ~0.7）。用户已确认在当前场景可接受，**不**批量重建。
+  - **新拟合数据请用 project D65**：Stage A/B 训练入口 `step2_fit_stage_a.py` / `step3_fit_stage_b.py` 已迁移到 `linear_rgb_to_lab_d65` + `lab_d65_jacobian` / `lab_d65_grad_from_linear_batch`；`modeling/colorchecker_tool.py` 已改为显式 BGR→sRGB→linear→D65 Lab 三步管道。
+  - **不引入兼容标记**：modelpack（`data/model_packs/*.msgpack`）内**不**含 `lab_math` 元字段，C++ `model_package.cpp::LoadFromMsgpack` **不**做任何 Lab 数学版本校验。代码侧 Lab 数学更新时必须同步重新生成 modelpack（见 `docs/development.md` §5.11）。
 - **模型输出范围**：
   - 只要 \(\mathbf{E}\in[0,1]^3\)、\(\mathbf{T}\in(0,1)^3\)、\(\mathbf{C}^{(0)}\in[0,1]^3\)，递推本质是逐通道的凸组合，\(\hat{\mathbf{C}}\) 会自然落在 \([0,1]^3\)，无需额外 clamp
 - **数值稳定**：

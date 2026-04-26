@@ -21,20 +21,9 @@ namespace ChromaPrint3D {
 
 namespace {
 
-struct RgbHash {
-    size_t operator()(const Rgb& c) const {
-        auto h = std::hash<float>{}(c.x);
-        h ^= std::hash<float>{}(c.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<float>{}(c.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        return h;
-    }
-};
-
-struct RgbEqual {
-    bool operator()(const Rgb& a, const Rgb& b) const {
-        return a.x == b.x && a.y == b.y && a.z == b.z;
-    }
-};
+// `std::hash<Rgb>` is provided by `chromaprint3d/color/types.h`; default
+// `operator==` is auto-generated. The previous local RgbHash/RgbEqual
+// helpers were duplicates and have been deleted in this refactor.
 
 struct CachedMatch {
     std::vector<uint8_t> recipe;
@@ -60,7 +49,7 @@ VectorRecipeMap MatchVectorCore(const VectorProcResult& result,
     std::vector<int> shape_to_unique_idx(result.shapes.size(), -1);
     std::vector<Rgb> unique_colors;
     unique_colors.reserve(result.shapes.size());
-    std::unordered_map<Rgb, int, RgbHash, RgbEqual> unique_index_by_color;
+    std::unordered_map<Rgb, int> unique_index_by_color;
     unique_index_by_color.reserve(result.shapes.size());
 
     std::size_t solid_shape_count = 0;

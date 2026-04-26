@@ -118,8 +118,21 @@ def load_mask(mask_path: Path, shape_hw: tuple[int, int]) -> Optional[np.ndarray
 
 
 def bgr_to_lab_float(bgr: np.ndarray) -> np.ndarray:
-    bgr_f = bgr.astype(np.float32) / 255.0
-    return cv2.cvtColor(bgr_f, cv2.COLOR_BGR2Lab)
+    """uint8 BGR (H, W, 3) → project D65 Lab (H, W, 3) float32.
+
+    Replaces the previous `cv2.cvtColor(BGR2Lab)` call with the
+    project-D65 Lab pipeline via `modeling.core.color_space`.
+    """
+    from modeling.core.color_space import linear_rgb_to_lab_d65, srgb_to_linear
+
+    bgr_arr = np.asarray(bgr)
+    if bgr_arr.dtype != np.uint8:
+        bgr_arr = np.clip(bgr_arr, 0, 255).astype(np.uint8)
+    h, w = bgr_arr.shape[:2]
+    rgb = bgr_arr[..., ::-1].astype(np.float32) / 255.0
+    linear = np.asarray(srgb_to_linear(rgb.reshape(-1, 3)), dtype=np.float32)
+    lab = linear_rgb_to_lab_d65(linear)
+    return lab.reshape(h, w, 3).astype(np.float32)
 
 
 def ciede2000(lab1: np.ndarray, lab2: np.ndarray) -> np.ndarray:

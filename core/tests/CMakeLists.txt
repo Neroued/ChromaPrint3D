@@ -9,6 +9,9 @@ FetchContent_MakeAvailable(googletest)
 set(TEST_SOURCES
     test_vec3.cpp
     test_color.cpp
+    test_color_types.cpp
+    test_color_parse.cpp
+    test_color_image.cpp
     test_kdtree.cpp
     test_color_db.cpp
     test_recipe_convert.cpp

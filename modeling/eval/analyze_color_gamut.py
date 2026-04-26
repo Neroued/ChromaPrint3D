@@ -96,11 +96,16 @@ def load_model_pack(
 # ── sRGB Reference Gamut ─────────────────────────────────────────────────
 
 def _srgb_reference_lab(steps: int) -> np.ndarray:
+    """Uniform sRGB-cube reference Lab (project D65). Replaces the previous
+    `cv2.cvtColor(BGR2Lab)` path. Inputs are sRGB float [0,1] (gamma-encoded);
+    we decode to linear RGB then map through analytic project-D65 Lab."""
+    from modeling.core.color_space import linear_rgb_to_lab_d65, srgb_to_linear
+
     vals = np.linspace(0.0, 1.0, steps, dtype=np.float32)
     r, g, b = np.meshgrid(vals, vals, vals, indexing="ij")
-    rgb = np.stack([r.ravel(), g.ravel(), b.ravel()], axis=1)
-    bgr = rgb[:, ::-1].reshape(-1, 1, 3)
-    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2Lab).reshape(-1, 3)
+    srgb = np.stack([r.ravel(), g.ravel(), b.ravel()], axis=1)
+    linear = np.asarray(srgb_to_linear(srgb), dtype=np.float32)
+    lab = linear_rgb_to_lab_d65(linear)
     return lab.astype(np.float64)
 
 
@@ -319,9 +324,31 @@ def print_incremental(
 # ── Visualization ────────────────────────────────────────────────────────
 
 def _lab_to_rgb(lab: np.ndarray) -> np.ndarray:
-    lab32 = lab.astype(np.float32).reshape(-1, 1, 3)
-    bgr = cv2.cvtColor(lab32, cv2.COLOR_Lab2BGR)
-    return np.clip(bgr[:, 0, ::-1], 0, 1)
+    """Project D65 Lab → sRGB (gamma-encoded) clipped to [0,1] for matplotlib.
+    Replaces the OpenCV `cvtColor(Lab2BGR)` path."""
+    from modeling.core.color_space import (
+        _RGB_TO_XYZ,
+        _WHITE_D65,
+        linear_to_srgb,
+    )
+
+    lab32 = lab.astype(np.float32).reshape(-1, 3)
+    delta = 6.0 / 29.0
+    fy = (lab32[:, 0] + 16.0) / 116.0
+    fx = fy + lab32[:, 1] / 500.0
+    fz = fy - lab32[:, 2] / 200.0
+
+    def _f_inv(t: np.ndarray) -> np.ndarray:
+        return np.where(t > delta, t ** 3, 3.0 * delta * delta * (t - 4.0 / 29.0))
+
+    xyz = np.stack([_WHITE_D65[0] * _f_inv(fx),
+                    _WHITE_D65[1] * _f_inv(fy),
+                    _WHITE_D65[2] * _f_inv(fz)], axis=1)
+    rgb_to_xyz_inv = np.linalg.inv(_RGB_TO_XYZ).astype(np.float32)
+    linear_rgb = xyz @ rgb_to_xyz_inv.T
+    linear_rgb = np.clip(linear_rgb, 0.0, 1.0)
+    srgb = np.asarray(linear_to_srgb(linear_rgb), dtype=np.float32)
+    return np.clip(srgb, 0.0, 1.0)
 
 
 def plot_all(

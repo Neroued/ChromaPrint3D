@@ -52,14 +52,13 @@ TEST(Color, DeltaE76KnownValue) {
     EXPECT_NEAR(de, 5.0f, 1e-5f);
 }
 
-TEST(Color, Rgb255RoundTrip) {
-    uint8_t r = 128, g = 64, b = 200;
-    Rgb rgb = Rgb::FromRgb255(r, g, b);
-    uint8_t r2, g2, b2;
-    rgb.ToRgb255(r2, g2, b2);
-    EXPECT_EQ(r2, r);
-    EXPECT_EQ(g2, g);
-    EXPECT_EQ(b2, b);
+TEST(Color, SrgbU8RgbRoundTrip) {
+    SrgbU8 src{128, 64, 200};
+    Rgb rgb     = src.ToRgb();
+    SrgbU8 back = SrgbU8::FromRgb(rgb);
+    EXPECT_EQ(back.r, src.r);
+    EXPECT_EQ(back.g, src.g);
+    EXPECT_EQ(back.b, src.b);
 }
 
 TEST(Color, RgbArithmetic) {

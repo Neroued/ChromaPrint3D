@@ -28,15 +28,7 @@ namespace {
 constexpr int kMaxUniqueRecipes = 2048;
 constexpr int kMaxRegionMapDim  = 1024;
 
-std::string LabToHex(const ChromaPrint3D::Lab& lab) {
-    auto rgb   = lab.ToRgb();
-    uint8_t r8 = 0, g8 = 0, b8 = 0;
-    rgb.ToRgb255(r8, g8, b8);
-    std::ostringstream hex;
-    hex << '#' << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(r8)
-        << std::setw(2) << static_cast<int>(g8) << std::setw(2) << static_cast<int>(b8);
-    return hex.str();
-}
+// LabToHex helper removed — use ChromaPrint3D::Lab::ToHex() directly.
 
 cv::Mat CompositeForeground(const cv::Mat& bgr, const cv::Mat& mask) {
     cv::Mat bgra;
@@ -796,7 +788,7 @@ TaskRuntime::QueryRecipeAlternatives(const std::string& owner, const std::string
 
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& c : candidates) {
-        std::string hex = LabToHex(c.predicted_color);
+        std::string hex = c.predicted_color.ToHex();
 
         nlohmann::json obj = {{"recipe", c.recipe},
                               {"predicted_lab",
@@ -1675,7 +1667,7 @@ TaskRuntime::GetRecipeEditorSummaryLocked(const TaskRecord& rec) const {
                                               {{"L", reg.mapped_color.l()},
                                                {"a", reg.mapped_color.a()},
                                                {"b", reg.mapped_color.b()}}},
-                                             {"hex", LabToHex(reg.mapped_color)},
+                                             {"hex", reg.mapped_color.ToHex()},
                                              {"from_model", reg.from_model}};
                 unique_recipes_arr.push_back(std::move(recipe_obj));
             } else {
@@ -1751,7 +1743,7 @@ TaskRuntime::GetRecipeEditorSummaryLocked(const TaskRecord& rec) const {
                                           {{"L", entry.matched_color.l()},
                                            {"a", entry.matched_color.a()},
                                            {"b", entry.matched_color.b()}}},
-                                         {"hex", LabToHex(entry.matched_color)},
+                                         {"hex", entry.matched_color.ToHex()},
                                          {"from_model", entry.from_model}};
             unique_recipes_arr.push_back(std::move(recipe_obj));
         } else {
