@@ -42,6 +42,15 @@ struct MachineSpec {
     /// Path to `data/preset_bases/<slug>_<lh>_<nozzle>.json`.
     std::filesystem::path preset_base_path;
 
+    /// Physical print bed size in millimetres, parsed from the base preset's
+    /// `printable_area` field (axis-aligned rectangle whose third corner is
+    /// `"<W>x<H>"`). Used by 3MF export to centre the model on the machine's
+    /// actual bed instead of a hardcoded 256x256.
+    /// Falls back to 256x256 if `printable_area` is missing or unparseable
+    /// (logged as a warning at catalog load time).
+    float bed_size_x_mm = 256.0f;
+    float bed_size_y_mm = 256.0f;
+
     /// Shared (cheap) snapshot of the catalog's patch overlay; populated by
     /// `BambuPresetCatalog::Resolve`. Held by `shared_ptr` so we avoid copying
     /// the (small but non-trivial) ChromaPrintPatches per MachineSpec while
@@ -139,12 +148,22 @@ private:
         std::make_shared<const ChromaPrintPatches>()};
     std::string default_machine_;
 
-    /// Cache of `printer_model` keyed by base filename stem `<slug>_<lh>mm_<nozzle>`
-    /// (e.g. `bambu_p2s_0.08mm_n04`). Populated once at LoadFromDir; consumed
-    /// by Resolve to avoid re-parsing base JSON on every export call.
-    /// Reads from `_chromaprint3d_meta.printer_model` first, falling back to
-    /// the top-level `printer_model` field.
-    std::unordered_map<std::string, std::string> base_printer_model_cache_;
+    /// Fields read from a `<slug>_<lh>mm_<nozzle>.json` base file at
+    /// LoadFromDir time. Cached here so Resolve does not re-parse the JSON on
+    /// every export call.
+    struct BasePresetMeta {
+        /// `_chromaprint3d_meta.printer_model` (preferred) or top-level
+        /// `printer_model`. May be empty if neither is present.
+        std::string printer_model;
+        /// Parsed from `printable_area[2]` ("<W>x<H>"). Falls back to 256x256
+        /// when the field is missing or cannot be parsed.
+        float bed_size_x_mm = 256.0f;
+        float bed_size_y_mm = 256.0f;
+    };
+
+    /// Cache keyed by base filename stem `<slug>_<lh>mm_<nozzle>`
+    /// (e.g. `bambu_p2s_0.08mm_n04`). Populated once at LoadFromDir.
+    std::unordered_map<std::string, BasePresetMeta> base_meta_cache_;
 };
 
 } // namespace ChromaPrint3D

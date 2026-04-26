@@ -224,6 +224,15 @@ python3 -m pytest scripts/tests/test_chromaprint_patches_schema.py -v
 2. 确认目标机型 `<machine> <nozzle> nozzle` 在数组中。
 3. 如果不在：检查 `machines.json` 中两台机型的 `extruder_topology` 是否一致（catalog 仅在同 topology 内联合）。
 
+### 问题：3MF 在切片器中模型偏离打印板中心 / 启动日志出现 `printable_area` warning
+
+**原因**：`MachineSpec.bed_size_x_mm / bed_size_y_mm` 来自 base preset JSON 的 `printable_area[2]`（如 `"256x256"`、`"350x320"`）。字段缺失或解析失败时 `BambuPresetCatalog` 会 fallback 到 256×256 并 `spdlog::warn`，不致命但模型会按 256² 居中，对实际板尺寸 ≠ 256² 的机型（A1 mini=180²、H2x=330–350×320）会偏。
+
+**排查**：
+1. 检查 `data/preset_bases/<slug>_*.json` 是否含 `printable_area`（应是 `["0x0", "Wx0", "WxH", "0xH"]` 4 元素数组）。
+2. 若上游 BambuStudio 字段消失或格式变更，重新跑 `scripts/build_preset_bases.py` 重新合并继承链；上游 `"0x256 "` 类的尾随空格已由 catalog parser 容错。
+3. 若需要新增非矩形板的机型（含 `bed_exclude_area` 大区域排除），目前 catalog 只读 `printable_area`，几何中心仍用 `(W/2, H/2)`；如需更精细中心计算需扩展 `BambuPresetCatalog::Resolve` + `BuildBambuDocument`。
+
 ### 已解决：H2D × TPU 精度问题
 
 **背景**：早期担心 H2D `filament_max_volumetric_speed` 在 DD TPU HF slot 用 i%2 fallback 到 DD Std 值，可能不准（non-divisor pattern fallback）。
@@ -238,6 +247,6 @@ python3 -m pytest scripts/tests/test_chromaprint_patches_schema.py -v
 - `scripts/build_preset_bases.py`：base 文件生成脚本
 - `scripts/tests/test_build_preset_bases.py`：base 生成与 schema 单测
 - `scripts/tests/test_chromaprint_patches_schema.py`：patch JSON schema 单测
-- `core/src/geo/bambu_preset_catalog.cpp`：catalog 加载实现（`LoadFromDir` 一次性扫描 base 缓存 `printer_model`）
+- `core/src/geo/bambu_preset_catalog.cpp`：catalog 加载实现（`LoadFromDir` 一次性扫描 base 缓存 `BasePresetMeta` = `printer_model` + `bed_size_x/y_mm`）
 - `core/src/geo/bambu_metadata.cpp`：BuildProjectSettings + 字段集合常量
 - `core/include/chromaprint3d/bambu_preset_catalog.h`：公开 API
