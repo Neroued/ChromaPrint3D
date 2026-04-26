@@ -1,5 +1,6 @@
 #include "detail/dither.h"
 #include "detail/candidate_select.h"
+#include "detail/match_target.h"
 #include "detail/match_utils.h"
 
 #include <spdlog/spdlog.h>
@@ -8,6 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <vector>
 
 namespace ChromaPrint3D {
@@ -17,6 +19,53 @@ namespace {
 
 constexpr float kBlueNoiseLScale  = 8.0f;
 constexpr float kBlueNoiseABScale = 6.0f;
+
+// Blue-noise bias vector applied to the typed target color. For Lab the L*
+// component receives a stronger nudge than the a*/b* components (matching
+// human luminance sensitivity); for linear RGB all three channels share the
+// same small scale.
+template <typename T>
+inline T BlueNoiseBias(const T& src, float bias) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "BlueNoiseBias supports only Lab or Rgb target types");
+    if constexpr (std::is_same_v<T, Lab>) {
+        return Lab(src.l() + bias * kBlueNoiseLScale, src.a() + bias * kBlueNoiseABScale,
+                   src.b() + bias * kBlueNoiseABScale);
+    } else {
+        return Rgb(src.r() + bias * 0.05f, src.g() + bias * 0.05f, src.b() + bias * 0.05f);
+    }
+}
+
+// Add the Floyd-Steinberg quantization error (in the matching color space)
+// to a typed target color.
+template <typename T>
+inline T ApplyError(const T& src, const Vec3f& err, float strength) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "ApplyError supports only Lab or Rgb target types");
+    if constexpr (std::is_same_v<T, Lab>) {
+        return Lab(src.l() + err.x * strength, src.a() + err.y * strength,
+                   src.b() + err.z * strength);
+    } else {
+        return Rgb(src.r() + err.x * strength, src.g() + err.y * strength,
+                   src.b() + err.z * strength);
+    }
+}
+
+// Compute the quantization error in the matching color space (typed target
+// minus the matched candidate, projected back to the same space).
+template <typename T>
+inline Vec3f QuantError(const T& original, const Lab& matched_lab) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "QuantError supports only Lab or Rgb target types");
+    if constexpr (std::is_same_v<T, Lab>) {
+        return Vec3f(original.l() - matched_lab.l(), original.a() - matched_lab.a(),
+                     original.b() - matched_lab.b());
+    } else {
+        const Rgb matched_rgb = matched_lab.ToRgb();
+        return Vec3f(original.r() - matched_rgb.r(), original.g() - matched_rgb.g(),
+                     original.b() - matched_rgb.b());
+    }
+}
 
 inline void AccumulateStats(DitherStats& stats, const CandidateDecision& decision) {
     ++stats.total_queries;
@@ -34,8 +83,9 @@ inline void AccumulateStats(DitherStats& stats, const CandidateDecision& decisio
 
 } // namespace
 
+template <typename T>
 void MatchWithBlueNoiseDither(RecipeMap& result, const cv::Mat& target, const cv::Mat& mask,
-                              bool use_lab, const std::vector<PreparedDB>& prepared_dbs,
+                              const std::vector<PreparedDB>& prepared_dbs,
                               const PrintProfile& profile, const MatchConfig& cfg,
                               const PreparedModel* prepared_model, bool model_only, float strength,
                               DitherStats& stats) {
@@ -67,19 +117,11 @@ void MatchWithBlueNoiseDither(RecipeMap& result, const cv::Mat& target, const cv
                 static_cast<float>(kBlueNoise[r % kBlueNoiseSize][c % kBlueNoiseSize]) / 255.0f;
             const float bias = (noise - 0.5f) * strength;
 
-            cv::Vec3f adjusted = target.at<cv::Vec3f>(r, c);
-            if (use_lab) {
-                adjusted[0] += bias * kBlueNoiseLScale;
-                adjusted[1] += bias * kBlueNoiseABScale;
-                adjusted[2] += bias * kBlueNoiseABScale;
-            } else {
-                adjusted[0] += bias * 0.05f;
-                adjusted[1] += bias * 0.05f;
-                adjusted[2] += bias * 0.05f;
-            }
+            const T original = MakeTarget<T>(target.at<cv::Vec3f>(r, c));
+            const T adjusted = BlueNoiseBias<T>(original, bias);
 
-            const CandidateDecision decision = SelectCandidate(
-                adjusted, use_lab, prepared_dbs, profile, cfg, prepared_model, model_only);
+            const CandidateDecision decision = SelectCandidate<T>(adjusted, prepared_dbs, profile,
+                                                                  cfg, prepared_model, model_only);
             if (!decision.selected.valid) { continue; }
 
             result.mapped_color[idx] = decision.selected.mapped_lab;
@@ -108,8 +150,9 @@ void MatchWithBlueNoiseDither(RecipeMap& result, const cv::Mat& target, const cv
     stats.sum_model_de  = local_sum_mdl;
 }
 
+template <typename T>
 void MatchWithFloydSteinberg(RecipeMap& result, const cv::Mat& target, const cv::Mat& mask,
-                             bool use_lab, const std::vector<PreparedDB>& prepared_dbs,
+                             const std::vector<PreparedDB>& prepared_dbs,
                              const PrintProfile& profile, const MatchConfig& cfg,
                              const PreparedModel* prepared_model, bool model_only, float strength,
                              DitherStats& stats) {
@@ -134,15 +177,12 @@ void MatchWithFloydSteinberg(RecipeMap& result, const cv::Mat& target, const cv:
 
             if (has_mask && mask_row[c] == 0) { continue; }
 
-            const cv::Vec3f original = target.at<cv::Vec3f>(r, c);
+            const T original = MakeTarget<T>(target.at<cv::Vec3f>(r, c));
+            const T adjusted =
+                ApplyError<T>(original, error_cur[static_cast<std::size_t>(c)], strength);
 
-            cv::Vec3f adjusted;
-            adjusted[0] = original[0] + error_cur[static_cast<std::size_t>(c)].x * strength;
-            adjusted[1] = original[1] + error_cur[static_cast<std::size_t>(c)].y * strength;
-            adjusted[2] = original[2] + error_cur[static_cast<std::size_t>(c)].z * strength;
-
-            const CandidateDecision decision = SelectCandidate(
-                adjusted, use_lab, prepared_dbs, profile, cfg, prepared_model, model_only);
+            const CandidateDecision decision = SelectCandidate<T>(adjusted, prepared_dbs, profile,
+                                                                  cfg, prepared_model, model_only);
             if (!decision.selected.valid) { continue; }
 
             result.mapped_color[idx] = decision.selected.mapped_lab;
@@ -150,26 +190,12 @@ void MatchWithFloydSteinberg(RecipeMap& result, const cv::Mat& target, const cv:
             WriteSourceMask(result, idx, decision.selected.from_model);
             AccumulateStats(stats, decision);
 
-            // Compute quantization error in the matching color space.
-            // Use original target (not adjusted) to prevent error amplification.
-            Lab original_lab = use_lab ? Lab(original[0], original[1], original[2])
-                                       : Rgb(original[0], original[1], original[2]).ToLab();
-            Lab matched_lab  = decision.selected.mapped_lab;
-            Vec3f quant_error(original_lab.l() - matched_lab.l(),
-                              original_lab.a() - matched_lab.a(),
-                              original_lab.b() - matched_lab.b());
+            // Error is computed against the *original* (un-adjusted) target
+            // to prevent error amplification across pixels.
+            const Vec3f quant_error = QuantError<T>(original, decision.selected.mapped_lab);
 
-            // When matching in RGB space, convert error back to the working space.
-            if (!use_lab) {
-                Rgb original_rgb(original[0], original[1], original[2]);
-                Rgb matched_rgb = matched_lab.ToRgb();
-                quant_error =
-                    Vec3f(original_rgb.r() - matched_rgb.r(), original_rgb.g() - matched_rgb.g(),
-                          original_rgb.b() - matched_rgb.b());
-            }
-
-            // Floyd-Steinberg distribution: right 7/16, bottom-left 3/16, bottom 5/16, bottom-right
-            // 1/16
+            // Floyd-Steinberg distribution: right 7/16, bottom-left 3/16,
+            // bottom 5/16, bottom-right 1/16.
             auto distribute = [&](int dc, int dr, float weight) {
                 const int nc = c + dc;
                 const int nr = r + dr;
@@ -190,6 +216,26 @@ void MatchWithFloydSteinberg(RecipeMap& result, const cv::Mat& target, const cv:
         std::swap(error_cur, error_next);
     }
 }
+
+// ── Explicit instantiations ─────────────────────────────────────────────────
+
+template void MatchWithBlueNoiseDither<Lab>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                            const std::vector<PreparedDB>&, const PrintProfile&,
+                                            const MatchConfig&, const PreparedModel*, bool, float,
+                                            DitherStats&);
+template void MatchWithBlueNoiseDither<Rgb>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                            const std::vector<PreparedDB>&, const PrintProfile&,
+                                            const MatchConfig&, const PreparedModel*, bool, float,
+                                            DitherStats&);
+
+template void MatchWithFloydSteinberg<Lab>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                           const std::vector<PreparedDB>&, const PrintProfile&,
+                                           const MatchConfig&, const PreparedModel*, bool, float,
+                                           DitherStats&);
+template void MatchWithFloydSteinberg<Rgb>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                           const std::vector<PreparedDB>&, const PrintProfile&,
+                                           const MatchConfig&, const PreparedModel*, bool, float,
+                                           DitherStats&);
 
 } // namespace detail
 } // namespace ChromaPrint3D

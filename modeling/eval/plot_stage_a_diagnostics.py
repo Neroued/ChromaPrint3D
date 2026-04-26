@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from modeling.core.color_space import linear_rgb_to_lab_d65 as _shared_linear_rgb_to_lab_d65
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -103,42 +104,17 @@ def sanitize_filename(value: str) -> str:
     return "".join(safe).strip("_") or "unknown"
 
 
-def linear_rgb_to_xyz(linear_rgb: np.ndarray) -> np.ndarray:
-    rgb_to_xyz = np.array(
-        [
-            [0.4124564, 0.3575761, 0.1804375],
-            [0.2126729, 0.7151522, 0.0721750],
-            [0.0193339, 0.1191920, 0.9503041],
-        ],
-        dtype=np.float32,
-    )
-    return rgb_to_xyz @ linear_rgb
-
-
-def xyz_to_lab(xyz: np.ndarray, white: np.ndarray) -> np.ndarray:
-    delta = 6.0 / 29.0
-    delta_cubed = delta ** 3
-    scale = 1.0 / (3.0 * delta * delta)
-
-    xyz_n = xyz / white
-    f = np.where(
-        xyz_n > delta_cubed,
-        np.cbrt(xyz_n),
-        xyz_n * scale + 4.0 / 29.0,
-    )
-
-    l = 116.0 * f[1] - 16.0
-    a = 500.0 * (f[0] - f[1])
-    b = 200.0 * (f[1] - f[2])
-    return np.array([l, a, b], dtype=np.float32)
-
-
 def linear_rgb_to_lab_d65(linear_rgb: np.ndarray) -> np.ndarray:
-    white_d65 = np.array([0.95047, 1.0, 1.08883], dtype=np.float32)
-    linear = np.clip(np.asarray(linear_rgb, dtype=np.float32), 0.0, 1.0)
-    xyz_d65 = linear_rgb_to_xyz(linear)
-    lab = xyz_to_lab(xyz_d65, white_d65)
-    return np.array([round(float(v), 2) for v in lab], dtype=np.float32)
+    """Project D65 Lab for diagnostic plotting.
+
+    Thin wrapper around `modeling.core.color_space.linear_rgb_to_lab_d65` that
+    returns a length-3 float32 array rounded to 2 decimals (matching the
+    historical signature of this script). Caller-side input range expectations
+    are unchanged: `linear_rgb` should already be clamped to [0, 1].
+    """
+    lab = _shared_linear_rgb_to_lab_d65(np.asarray(linear_rgb, dtype=np.float32))
+    return np.array([round(float(v), 2) for v in np.asarray(lab).reshape(-1)],
+                    dtype=np.float32)
 
 
 def load_json(path: Path) -> Dict[str, object]:

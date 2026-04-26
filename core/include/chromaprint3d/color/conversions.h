@@ -150,9 +150,9 @@ inline Hsv RgbToHsvAlg(float r, float g, float b) {
 inline void HsvToRgbAlg(float h, float s, float v, float& r, float& g, float& b) {
     h = std::fmod(h, 360.0f);
     if (h < 0.0f) h += 360.0f;
-    const float c  = v * s;
-    const float x  = c * (1.0f - std::abs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
-    const float m  = v - c;
+    const float c = v * s;
+    const float x = c * (1.0f - std::abs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+    const float m = v - c;
     float r0 = 0, g0 = 0, b0 = 0;
     if (h < 60.0f) {
         r0 = c;
@@ -180,9 +180,7 @@ inline void HsvToRgbAlg(float h, float s, float v, float& r, float& g, float& b)
 
 } // namespace detail
 
-inline Hsv Hsv::FromRgb(const Rgb& rgb) {
-    return detail::RgbToHsvAlg(rgb.r(), rgb.g(), rgb.b());
-}
+inline Hsv Hsv::FromRgb(const Rgb& rgb) { return detail::RgbToHsvAlg(rgb.r(), rgb.g(), rgb.b()); }
 
 inline Hsv Hsv::FromSrgbU8(const SrgbU8& c) {
     return detail::RgbToHsvAlg(c.r / 255.0f, c.g / 255.0f, c.b / 255.0f);
@@ -197,6 +195,7 @@ inline Rgb Hsv::ToRgb() const {
 // ── ToHex helpers ───────────────────────────────────────────────────────────
 
 inline std::string Rgb::ToHex() const { return SrgbU8::ToHex(SrgbU8::FromRgb(*this)); }
+
 inline std::string Lab::ToHex() const { return SrgbU8::ToHex(SrgbU8::FromRgb(ToRgb())); }
 
 } // namespace ChromaPrint3D

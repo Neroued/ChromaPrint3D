@@ -47,8 +47,7 @@ bool ParseHexByte(char hi, char lo, std::uint8_t& out) {
 
 std::string TrimAscii(std::string_view value) {
     std::size_t begin = 0;
-    while (begin < value.size() &&
-           std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
+    while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
         ++begin;
     }
     std::size_t end = value.size();
@@ -67,15 +66,12 @@ std::string NormalizeKeyImpl(std::string_view literal) {
 
 const std::unordered_map<std::string, SrgbU8>& NamedColorTableImpl() {
     static const std::unordered_map<std::string, SrgbU8> table = {
-        {"white", {255, 255, 255}},     {"black", {0, 0, 0}},
-        {"red", {255, 0, 0}},           {"green", {0, 255, 0}},
-        {"blue", {0, 0, 255}},          {"yellow", {255, 255, 0}},
-        {"cyan", {0, 255, 255}},        {"magenta", {255, 0, 255}},
-        {"orange", {255, 165, 0}},      {"purple", {128, 0, 128}},
-        {"pink", {255, 192, 203}},      {"gray", {128, 128, 128}},
-        {"grey", {128, 128, 128}},      {"brown", {165, 42, 42}},
-        {"gold", {255, 215, 0}},        {"silver", {192, 192, 192}},
-        {"bambugreen", {34, 139, 34}},
+        {"white", {255, 255, 255}},  {"black", {0, 0, 0}},          {"red", {255, 0, 0}},
+        {"green", {0, 255, 0}},      {"blue", {0, 0, 255}},         {"yellow", {255, 255, 0}},
+        {"cyan", {0, 255, 255}},     {"magenta", {255, 0, 255}},    {"orange", {255, 165, 0}},
+        {"purple", {128, 0, 128}},   {"pink", {255, 192, 203}},     {"gray", {128, 128, 128}},
+        {"grey", {128, 128, 128}},   {"brown", {165, 42, 42}},      {"gold", {255, 215, 0}},
+        {"silver", {192, 192, 192}}, {"bambugreen", {34, 139, 34}},
     };
     return table;
 }
@@ -101,12 +97,10 @@ std::optional<SrgbU8> SrgbU8::FromHex(std::string_view hex) {
     // must go through `neroued_3mf::Color::FromHex`.
     if (s.size() == 3) {
         std::uint8_t rn = 0, gn = 0, bn = 0;
-        if (!ParseHexNibble(s[0], rn) || !ParseHexNibble(s[1], gn) ||
-            !ParseHexNibble(s[2], bn)) {
+        if (!ParseHexNibble(s[0], rn) || !ParseHexNibble(s[1], gn) || !ParseHexNibble(s[2], bn)) {
             return std::nullopt;
         }
-        return SrgbU8{static_cast<std::uint8_t>(rn * 17),
-                      static_cast<std::uint8_t>(gn * 17),
+        return SrgbU8{static_cast<std::uint8_t>(rn * 17), static_cast<std::uint8_t>(gn * 17),
                       static_cast<std::uint8_t>(bn * 17)};
     }
 
@@ -139,11 +133,10 @@ std::optional<SrgbU8> NamedColorLookup(std::string_view name) {
 }
 
 SrgbU8 HashFallbackColor(std::string_view key) {
-    const std::uint32_t h =
-        static_cast<std::uint32_t>(std::hash<std::string_view>{}(key));
-    std::uint8_t b = static_cast<std::uint8_t>(64u + (h & 0x7Fu));
-    std::uint8_t g = static_cast<std::uint8_t>(64u + ((h >> 8) & 0x7Fu));
-    std::uint8_t r = static_cast<std::uint8_t>(64u + ((h >> 16) & 0x7Fu));
+    const std::uint32_t h = static_cast<std::uint32_t>(std::hash<std::string_view>{}(key));
+    std::uint8_t b        = static_cast<std::uint8_t>(64u + (h & 0x7Fu));
+    std::uint8_t g        = static_cast<std::uint8_t>(64u + ((h >> 8) & 0x7Fu));
+    std::uint8_t r        = static_cast<std::uint8_t>(64u + ((h >> 16) & 0x7Fu));
     if (std::max({r, g, b}) - std::min({r, g, b}) < 16) {
         r = static_cast<std::uint8_t>(std::min<int>(255, r + 48));
     }

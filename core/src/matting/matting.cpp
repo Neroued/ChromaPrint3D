@@ -77,6 +77,7 @@ MattingModelConfig MattingModelConfig::LoadFromJson(const std::string& json_path
 
 ThresholdMattingProvider::ThresholdMattingProvider(float distance_threshold)
     : distance_threshold_(distance_threshold) {}
+
 // Default value lives in the header (matting.h) — see project D65 Lab note.
 
 std::string ThresholdMattingProvider::Name() const { return "opencv-threshold"; }

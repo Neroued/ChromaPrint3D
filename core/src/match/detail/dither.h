@@ -95,17 +95,40 @@ struct DitherStats {
     double sum_model_de = 0.0;
 };
 
+/// Blue-noise ordered dithering. The matching color space is encoded in the
+/// type of `T` (`Lab` or `Rgb`). The `target` cv::Mat must store CV_32FC3
+/// pixels in the corresponding space.
+template <typename T>
 void MatchWithBlueNoiseDither(RecipeMap& result, const cv::Mat& target, const cv::Mat& mask,
-                              bool use_lab, const std::vector<PreparedDB>& prepared_dbs,
+                              const std::vector<PreparedDB>& prepared_dbs,
                               const PrintProfile& profile, const MatchConfig& cfg,
                               const PreparedModel* prepared_model, bool model_only, float strength,
                               DitherStats& stats);
 
+template <typename T>
 void MatchWithFloydSteinberg(RecipeMap& result, const cv::Mat& target, const cv::Mat& mask,
-                             bool use_lab, const std::vector<PreparedDB>& prepared_dbs,
+                             const std::vector<PreparedDB>& prepared_dbs,
                              const PrintProfile& profile, const MatchConfig& cfg,
                              const PreparedModel* prepared_model, bool model_only, float strength,
                              DitherStats& stats);
+
+extern template void MatchWithBlueNoiseDither<Lab>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                                   const std::vector<PreparedDB>&,
+                                                   const PrintProfile&, const MatchConfig&,
+                                                   const PreparedModel*, bool, float, DitherStats&);
+extern template void MatchWithBlueNoiseDither<Rgb>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                                   const std::vector<PreparedDB>&,
+                                                   const PrintProfile&, const MatchConfig&,
+                                                   const PreparedModel*, bool, float, DitherStats&);
+
+extern template void MatchWithFloydSteinberg<Lab>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                                  const std::vector<PreparedDB>&,
+                                                  const PrintProfile&, const MatchConfig&,
+                                                  const PreparedModel*, bool, float, DitherStats&);
+extern template void MatchWithFloydSteinberg<Rgb>(RecipeMap&, const cv::Mat&, const cv::Mat&,
+                                                  const std::vector<PreparedDB>&,
+                                                  const PrintProfile&, const MatchConfig&,
+                                                  const PreparedModel*, bool, float, DitherStats&);
 
 } // namespace detail
 } // namespace ChromaPrint3D

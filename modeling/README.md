@@ -104,9 +104,11 @@
 | 阶段 | 拟合参数 | 数据来源 | 损失空间 |
 |------|----------|----------|----------|
 | **Stage A** | E, k（仅单色） | 单色阶梯色板 (1_single_stage.json) | linear RGB |
-| **Stage B** | E, k, γ, δ, C₀ | 多色组合实测 (ColorDB) | OpenCV Lab |
+| **Stage B** | E, k, γ, δ, C₀ | 多色组合实测 (ColorDB) | 项目 D65 Lab |
 
 Stage A 提供初始估计，Stage B 在此基础上联合优化所有参数。Stage B 采用 Lab 空间损失是因为 Lab 更接近人眼感知的颜色差异。
+
+> **历史拟合数据说明**：颜色统一重构之前，Stage B 的损失空间是 OpenCV Lab，部分历史模型包（如 `data/models/forward/bambulab_pla_stage_B.json`）的 `meta.loss_space` 字段值仍为 `"opencv_lab"`；这些参数文件未重训，但运行时 / 拟合 / 前端均已统一到项目 D65 Lab，新拟合的输出 `loss_space` 标记为 `"project_d65_lab"`。
 
 ---
 
@@ -118,7 +120,7 @@ modeling/
 ├── README.md                   # 本文档
 │
 ├── core/                       # 核心可复用模块 (7个)
-│   ├── color_space.py          # 色彩空间转换 (sRGB/linear/XYZ/Lab/OpenCV Lab)
+│   ├── color_space.py          # 色彩空间转换 (sRGB/linear/XYZ/项目 D65 Lab)
 │   ├── math_utils.py           # 数学工具 (sigmoid/softplus/logit 等)
 │   ├── adam.py                 # 通用 Adam 优化器
 │   ├── io_utils.py             # JSON 读取、标签标准化、路径解析
@@ -311,7 +313,7 @@ python -m modeling.pipeline.step3_fit_stage_b \
 1. **Stage 1 (辅助参数预热)：** 冻结 E, k，仅训练 γ、δ、C₀（`--stage1-steps` 步）
 2. **Stage 2 (联合优化)：** 解冻所有参数，联合训练（`--steps` 步）
 
-损失函数在 OpenCV Lab 空间计算，同时加入正则化项：
+损失函数在项目 D65 Lab 空间计算，同时加入正则化项：
 - `--lambda-reg`：防止 E, k 偏离 Stage A 过远
 - `--lambda-c0`：防止 C₀ 偏离锚定值过远（默认 2.0，建议范围 1.0~5.0；锚定值来自 Stage A 实测基板颜色）
 - `--lambda-neighbor`：约束邻层交互 δ 的 L2 范数
@@ -493,7 +495,7 @@ python -m modeling.eval.plot_stage_a_diagnostics \
 
 | 模块 | 主要导出 | 功能 |
 |------|----------|------|
-| **color_space.py** | `srgb_to_linear`, `linear_to_srgb`, `linear_rgb_to_lab_d65`, `linear_rgb_to_opencv_lab_batch`, `lab_grad_from_linear_batch` | 统一的色彩空间转换：sRGB ↔ linear RGB → XYZ → Lab D65 / OpenCV Lab，支持批量和梯度计算 |
+| **color_space.py** | `srgb_to_linear`, `linear_to_srgb`, `linear_rgb_to_lab_d65`（接受 `(3,)` 或 `(N,3)`）, `linear_rgb_to_lab_d65_rounded_list`, `lab_d65_jacobian`, `lab_d65_grad_from_linear_batch` | 项目 D65 Lab 色彩空间转换：sRGB ↔ linear RGB → XYZ → Lab D65（与 C++ `Rgb::ToLab` 完全一致），支持批量和梯度计算 |
 | **math_utils.py** | `sigmoid`, `softplus`, `softplus_grad`, `logit`, `softplus_inv`, `round_list` | 激活函数及其逆函数、数值工具 |
 | **adam.py** | `adam_optimize(params, loss_fn, ...)` | 通用 Adam 优化器，接受命名参数字典和用户定义的损失+梯度函数 |
 | **io_utils.py** | `load_json`, `normalize_label`, `parse_layer_order`, `resolve_db_paths` | JSON 读取、标签规范化（去空格+小写+仅字母数字）、路径解析 |
@@ -527,7 +529,7 @@ linear_rgb = predict_linear_batch(
     substrate_idx=0,
 )
 
-# 转为项目 D65 Lab（取代旧的 OpenCV linear_rgb_to_opencv_lab_batch）
+# 项目 D65 Lab（与 C++ `Rgb::ToLab` 一致；颜色统一重构后已移除旧的 `linear_rgb_to_opencv_lab` 系列）
 lab = linear_rgb_to_lab_d65(linear_rgb)
 print(lab)
 ```

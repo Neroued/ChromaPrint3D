@@ -1,4 +1,5 @@
 #include "detail/candidate_select.h"
+#include "detail/match_target.h"
 #include "detail/match_utils.h"
 #include "detail/recipe_convert.h"
 #include "chromaprint3d/error.h"
@@ -12,40 +13,31 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
 namespace ChromaPrint3D {
 namespace detail {
 
+using detail::AsLab;
 using detail::BuildChannelKey;
 using detail::Dist2;
 using detail::NearlyEqual;
 using detail::NormalizeChannelKeyString;
+using detail::ScoreDist2;
 
-namespace {
-
-Lab TargetToLab(const cv::Vec3f& target_color, bool use_lab) {
-    if (use_lab) { return Lab(target_color[0], target_color[1], target_color[2]); }
-    return Rgb(target_color[0], target_color[1], target_color[2]).ToLab();
-}
-
-float ScoreDist2(const Lab& candidate_lab, const cv::Vec3f& target_color, bool use_lab) {
-    if (use_lab) {
-        return Dist2(candidate_lab, Lab(target_color[0], target_color[1], target_color[2]));
-    }
-    return Dist2(candidate_lab.ToRgb(), Rgb(target_color[0], target_color[1], target_color[2]));
-}
-
-} // namespace
-
-CandidateResult FindBestDbCandidate(const cv::Vec3f& target_color, bool use_lab,
+template <typename T>
+CandidateResult FindBestDbCandidate(const T& target_color,
                                     const std::vector<PreparedDB>& prepared_dbs,
                                     const PrintProfile& profile, const MatchConfig& cfg) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "FindBestDbCandidate supports only Lab or Rgb target types");
+
     CandidateResult best;
     const std::size_t k  = static_cast<std::size_t>(std::max(1, cfg.k_candidates));
     const bool use_top_k = cfg.k_candidates > 1;
-    const Lab target_lab = TargetToLab(target_color, use_lab);
+    const Lab target_lab = AsLab(target_color);
 
     for (const PreparedDB& prepared_db : prepared_dbs) {
         const ColorDB* search_db =
@@ -53,13 +45,11 @@ CandidateResult FindBestDbCandidate(const cv::Vec3f& target_color, bool use_lab,
         if (search_db->entries.empty()) { continue; }
 
         if (!use_top_k) {
-            const Entry& entry = use_lab ? search_db->NearestEntry(target_lab)
-                                         : search_db->NearestEntry(Rgb(
-                                               target_color[0], target_color[1], target_color[2]));
+            const Entry& entry = search_db->NearestEntry(target_color);
             std::vector<uint8_t> mapped_recipe;
             if (!ConvertRecipeToProfile(entry, prepared_db, profile, mapped_recipe)) { continue; }
 
-            const float score_d2 = ScoreDist2(entry.lab, target_color, use_lab);
+            const float score_d2 = ScoreDist2(entry.lab, target_color);
             if (!best.valid || score_d2 < best.score_dist2) {
                 best.valid       = true;
                 best.mapped_lab  = entry.lab;
@@ -71,42 +61,19 @@ CandidateResult FindBestDbCandidate(const cv::Vec3f& target_color, bool use_lab,
             continue;
         }
 
-        if (use_lab) {
-            auto candidates = search_db->NearestEntries(target_lab, k);
-            for (const Entry* entry : candidates) {
-                if (!entry) { continue; }
-                std::vector<uint8_t> mapped_recipe;
-                if (!ConvertRecipeToProfile(*entry, prepared_db, profile, mapped_recipe)) {
-                    continue;
-                }
-                const float score_d2 = ScoreDist2(entry->lab, target_color, true);
-                if (!best.valid || score_d2 < best.score_dist2) {
-                    best.valid       = true;
-                    best.mapped_lab  = entry->lab;
-                    best.recipe      = std::move(mapped_recipe);
-                    best.score_dist2 = score_d2;
-                    best.lab_dist2   = Dist2(entry->lab, target_lab);
-                    best.from_model  = false;
-                }
-            }
-        } else {
-            const Rgb target_rgb(target_color[0], target_color[1], target_color[2]);
-            auto candidates = search_db->NearestEntries(target_rgb, k);
-            for (const Entry* entry : candidates) {
-                if (!entry) { continue; }
-                std::vector<uint8_t> mapped_recipe;
-                if (!ConvertRecipeToProfile(*entry, prepared_db, profile, mapped_recipe)) {
-                    continue;
-                }
-                const float score_d2 = ScoreDist2(entry->lab, target_color, false);
-                if (!best.valid || score_d2 < best.score_dist2) {
-                    best.valid       = true;
-                    best.mapped_lab  = entry->lab;
-                    best.recipe      = std::move(mapped_recipe);
-                    best.score_dist2 = score_d2;
-                    best.lab_dist2   = Dist2(entry->lab, target_lab);
-                    best.from_model  = false;
-                }
+        auto candidates = search_db->NearestEntries(target_color, k);
+        for (const Entry* entry : candidates) {
+            if (!entry) { continue; }
+            std::vector<uint8_t> mapped_recipe;
+            if (!ConvertRecipeToProfile(*entry, prepared_db, profile, mapped_recipe)) { continue; }
+            const float score_d2 = ScoreDist2(entry->lab, target_color);
+            if (!best.valid || score_d2 < best.score_dist2) {
+                best.valid       = true;
+                best.mapped_lab  = entry->lab;
+                best.recipe      = std::move(mapped_recipe);
+                best.score_dist2 = score_d2;
+                best.lab_dist2   = Dist2(entry->lab, target_lab);
+                best.from_model  = false;
             }
         }
     }
@@ -242,21 +209,23 @@ build_trees:
     return prepared;
 }
 
-CandidateResult FindBestModelCandidate(const cv::Vec3f& target_color, bool use_lab,
-                                       const PreparedModel& model) {
+template <typename T>
+CandidateResult FindBestModelCandidate(const T& target_color, const PreparedModel& model) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "FindBestModelCandidate supports only Lab or Rgb target types");
+
     CandidateResult best;
     if (model.NumCandidates() == 0) { return best; }
 
-    const Lab target_lab = TargetToLab(target_color, use_lab);
+    const Lab target_lab = AsLab(target_color);
     std::size_t idx      = 0;
     float score_d2       = 0.0f;
-    if (use_lab) {
-        const auto neighbor = model.lab_tree.Nearest(target_lab);
+    if constexpr (std::is_same_v<T, Lab>) {
+        const auto neighbor = model.lab_tree.Nearest(target_color);
         idx                 = static_cast<std::size_t>(neighbor.index);
         score_d2            = neighbor.dist2;
     } else {
-        const Rgb target_rgb(target_color[0], target_color[1], target_color[2]);
-        const auto neighbor = model.rgb_tree.Nearest(target_rgb);
+        const auto neighbor = model.rgb_tree.Nearest(target_color);
         idx                 = static_cast<std::size_t>(neighbor.index);
         score_d2            = neighbor.dist2;
     }
@@ -273,17 +242,21 @@ CandidateResult FindBestModelCandidate(const cv::Vec3f& target_color, bool use_l
     return best;
 }
 
-CandidateDecision SelectCandidate(const cv::Vec3f& target_color, bool use_lab,
+template <typename T>
+CandidateDecision SelectCandidate(const T& target_color,
                                   const std::vector<PreparedDB>& prepared_dbs,
                                   const PrintProfile& profile, const MatchConfig& cfg,
                                   const PreparedModel* prepared_model, bool model_only) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "SelectCandidate supports only Lab or Rgb target types");
+
     CandidateDecision decision;
     if (model_only) {
         if (!prepared_model) {
             throw ConfigError("Model-only matching requested but model package is unavailable");
         }
         decision.model_queried     = true;
-        CandidateResult model_best = FindBestModelCandidate(target_color, use_lab, *prepared_model);
+        CandidateResult model_best = FindBestModelCandidate<T>(target_color, *prepared_model);
         if (!model_best.valid) { throw MatchError("No valid model candidate in model-only mode"); }
         decision.model_de = std::sqrt(std::max(0.0f, model_best.lab_dist2));
         decision.db_de    = 0.0f;
@@ -291,14 +264,12 @@ CandidateDecision SelectCandidate(const cv::Vec3f& target_color, bool use_lab,
         return decision;
     }
 
-    CandidateResult db_best =
-        FindBestDbCandidate(target_color, use_lab, prepared_dbs, profile, cfg);
+    CandidateResult db_best = FindBestDbCandidate<T>(target_color, prepared_dbs, profile, cfg);
 
     if (!db_best.valid) {
         if (prepared_model) {
-            decision.model_queried = true;
-            CandidateResult model_best =
-                FindBestModelCandidate(target_color, use_lab, *prepared_model);
+            decision.model_queried     = true;
+            CandidateResult model_best = FindBestModelCandidate<T>(target_color, *prepared_model);
             if (model_best.valid) {
                 decision.model_de = std::sqrt(std::max(0.0f, model_best.lab_dist2));
                 decision.db_de    = 0.0f;
@@ -317,7 +288,7 @@ CandidateDecision SelectCandidate(const cv::Vec3f& target_color, bool use_lab,
     if (decision.db_de <= prepared_model->threshold) { return decision; }
 
     decision.model_queried     = true;
-    CandidateResult model_best = FindBestModelCandidate(target_color, use_lab, *prepared_model);
+    CandidateResult model_best = FindBestModelCandidate<T>(target_color, *prepared_model);
     if (!model_best.valid) { return decision; }
     decision.model_de = std::sqrt(std::max(0.0f, model_best.lab_dist2));
 
@@ -347,6 +318,23 @@ void WriteSourceMask(RecipeMap& result, std::size_t pixel_idx, bool from_model) 
     }
     result.source_mask[pixel_idx] = from_model ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0);
 }
+
+// ── Explicit instantiations ─────────────────────────────────────────────────
+
+template CandidateResult FindBestDbCandidate<Lab>(const Lab&, const std::vector<PreparedDB>&,
+                                                  const PrintProfile&, const MatchConfig&);
+template CandidateResult FindBestDbCandidate<Rgb>(const Rgb&, const std::vector<PreparedDB>&,
+                                                  const PrintProfile&, const MatchConfig&);
+
+template CandidateResult FindBestModelCandidate<Lab>(const Lab&, const PreparedModel&);
+template CandidateResult FindBestModelCandidate<Rgb>(const Rgb&, const PreparedModel&);
+
+template CandidateDecision SelectCandidate<Lab>(const Lab&, const std::vector<PreparedDB>&,
+                                                const PrintProfile&, const MatchConfig&,
+                                                const PreparedModel*, bool);
+template CandidateDecision SelectCandidate<Rgb>(const Rgb&, const std::vector<PreparedDB>&,
+                                                const PrintProfile&, const MatchConfig&,
+                                                const PreparedModel*, bool);
 
 } // namespace detail
 } // namespace ChromaPrint3D

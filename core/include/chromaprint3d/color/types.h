@@ -49,30 +49,35 @@ struct Rgb {
     constexpr Rgb(float r, float g, float b) : r_(r), g_(g), b_(b) {}
 
     constexpr float r() const { return r_; }
+
     constexpr float g() const { return g_; }
+
     constexpr float b() const { return b_; }
 
     float& r() { return r_; }
+
     float& g() { return g_; }
+
     float& b() { return b_; }
 
     /// Explicit boundary helpers for crossing into Vec3f-shaped APIs.
     constexpr Vec3f AsVec3f() const { return Vec3f(r_, g_, b_); }
+
     static constexpr Rgb FromVec3f(const Vec3f& v) { return Rgb(v.x, v.y, v.z); }
 
     /// Subscript: 0 = r, 1 = g, 2 = b. Required by kdt::HasSubscript so
     /// `kdt::KDTree<Entry, 3, RgbProj, ...>` can index components without
     /// going through `AsVec3f`.
-    constexpr float operator[](int i) const {
-        return i == 0 ? r_ : (i == 1 ? g_ : b_);
-    }
-    float& operator[](int i) {
-        return i == 0 ? r_ : (i == 1 ? g_ : b_);
-    }
+    constexpr float operator[](int i) const { return i == 0 ? r_ : (i == 1 ? g_ : b_); }
+
+    float& operator[](int i) { return i == 0 ? r_ : (i == 1 ? g_ : b_); }
 
     Rgb operator+(const Rgb& o) const { return {r_ + o.r_, g_ + o.g_, b_ + o.b_}; }
+
     Rgb operator-(const Rgb& o) const { return {r_ - o.r_, g_ - o.g_, b_ - o.b_}; }
+
     Rgb operator*(float s) const { return {r_ * s, g_ * s, b_ * s}; }
+
     Rgb operator/(float s) const { return {r_ / s, g_ / s, b_ / s}; }
 
     Rgb& operator+=(const Rgb& o) {
@@ -81,18 +86,21 @@ struct Rgb {
         b_ += o.b_;
         return *this;
     }
+
     Rgb& operator-=(const Rgb& o) {
         r_ -= o.r_;
         g_ -= o.g_;
         b_ -= o.b_;
         return *this;
     }
+
     Rgb& operator*=(float s) {
         r_ *= s;
         g_ *= s;
         b_ *= s;
         return *this;
     }
+
     Rgb& operator/=(float s) {
         r_ /= s;
         g_ /= s;
@@ -106,6 +114,7 @@ struct Rgb {
         auto c = [lo, hi](float x) { return std::max(lo, std::min(x, hi)); };
         return {c(v.r_), c(v.g_), c(v.b_)};
     }
+
     static Rgb Clamp01(const Rgb& v) { return Clamp(v, 0.0f, 1.0f); }
 
     static Rgb Lerp(const Rgb& a, const Rgb& b, float t) { return a + (b - a) * t; }
@@ -140,27 +149,32 @@ struct Lab {
     constexpr Lab(float l, float a, float b) : l_(l), a_(a), b_(b) {}
 
     constexpr float l() const { return l_; }
+
     constexpr float a() const { return a_; }
+
     constexpr float b() const { return b_; }
 
     float& l() { return l_; }
+
     float& a() { return a_; }
+
     float& b() { return b_; }
 
     constexpr Vec3f AsVec3f() const { return Vec3f(l_, a_, b_); }
+
     static constexpr Lab FromVec3f(const Vec3f& v) { return Lab(v.x, v.y, v.z); }
 
     /// Subscript: 0 = L*, 1 = a*, 2 = b*. Required by kdt::HasSubscript.
-    constexpr float operator[](int i) const {
-        return i == 0 ? l_ : (i == 1 ? a_ : b_);
-    }
-    float& operator[](int i) {
-        return i == 0 ? l_ : (i == 1 ? a_ : b_);
-    }
+    constexpr float operator[](int i) const { return i == 0 ? l_ : (i == 1 ? a_ : b_); }
+
+    float& operator[](int i) { return i == 0 ? l_ : (i == 1 ? a_ : b_); }
 
     Lab operator+(const Lab& o) const { return {l_ + o.l_, a_ + o.a_, b_ + o.b_}; }
+
     Lab operator-(const Lab& o) const { return {l_ - o.l_, a_ - o.a_, b_ - o.b_}; }
+
     Lab operator*(float s) const { return {l_ * s, a_ * s, b_ * s}; }
+
     Lab operator/(float s) const { return {l_ / s, a_ / s, b_ / s}; }
 
     Lab& operator+=(const Lab& o) {
@@ -169,18 +183,21 @@ struct Lab {
         b_ += o.b_;
         return *this;
     }
+
     Lab& operator-=(const Lab& o) {
         l_ -= o.l_;
         a_ -= o.a_;
         b_ -= o.b_;
         return *this;
     }
+
     Lab& operator*=(float s) {
         l_ *= s;
         a_ *= s;
         b_ *= s;
         return *this;
     }
+
     Lab& operator/=(float s) {
         l_ /= s;
         a_ /= s;
@@ -221,6 +238,7 @@ struct SrgbU8 {
     std::uint8_t b = 0;
 
     constexpr SrgbU8() = default;
+
     constexpr SrgbU8(std::uint8_t r_, std::uint8_t g_, std::uint8_t b_) : r(r_), g(g_), b(b_) {}
 
     bool operator==(const SrgbU8&) const = default;
@@ -240,6 +258,7 @@ struct SrgbU8 {
 
     /// Format as `#RRGGBB` (uppercase).
     static std::string ToHex(const SrgbU8& c);
+
     std::string ToHex() const { return ToHex(*this); }
 };
 
@@ -259,10 +278,13 @@ struct Hsv {
     float v_ = 0.0f;
 
     constexpr Hsv() = default;
+
     constexpr Hsv(float h, float s, float v) : h_(h), s_(s), v_(v) {}
 
     constexpr float h() const { return h_; }
+
     constexpr float s() const { return s_; }
+
     constexpr float v() const { return v_; }
 
     bool operator==(const Hsv&) const = default;

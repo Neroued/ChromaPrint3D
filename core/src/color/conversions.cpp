@@ -37,7 +37,7 @@ const SrgbToLinearLutInit& Lut() {
 float SrgbToLinearByte(std::uint8_t v) { return Lut().table[v]; }
 
 std::uint8_t LinearToSrgbByte(float linear) {
-    if (!(linear > 0.0f)) return 0;     // catches NaN / negative
+    if (!(linear > 0.0f)) return 0; // catches NaN / negative
     if (linear >= 1.0f) return 255;
     const float srgb = LinearToSrgb(linear);
     int rounded      = static_cast<int>(std::round(srgb * 255.0f));

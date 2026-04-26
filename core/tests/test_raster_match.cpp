@@ -85,9 +85,8 @@ TEST(RasterMatch, SlicPathRespectsTransparentMaskPixels) {
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
-        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
-        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
-        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(255, 255, 255).ToRgb(),
+        SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
     };
     const std::vector<uint8_t> mask = {255, 255, 255, 255, 0, 255};
     RasterProcResult img            = MakeRaster(pixels, 3, 2, mask);
@@ -138,9 +137,8 @@ TEST(RasterMatch, KMeansAndSlicBothProduceValidClusterStats) {
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
 
     const std::vector<Rgb> pixels = {
-        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(255, 255, 255).ToRgb(),
-        SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(0, 0, 0).ToRgb(),
-        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(255, 255, 255).ToRgb(),
+        SrgbU8(255, 255, 255).ToRgb(), SrgbU8(255, 255, 255).ToRgb(), SrgbU8(0, 0, 0).ToRgb(),
+        SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(255, 255, 255).ToRgb(), SrgbU8(255, 255, 255).ToRgb(),
         SrgbU8(0, 0, 0).ToRgb(),       SrgbU8(0, 0, 0).ToRgb(),
     };
     const std::vector<uint8_t> mask(8, 255);

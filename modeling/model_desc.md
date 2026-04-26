@@ -348,9 +348,9 @@ def forward(micro_layers, E, k, C0, micro_thickness_mm):
 现有工具提示：
 
 - 工作区里已有 `modeling/colorchecker_tool.py` 可以用四角点透视变换后采样色块并输出 Lab（D50/D65 两种版本）。
-- ChromaPrint3D 的 `build_colordb` 默认在 OpenCV Lab 工作空间里对每个 patch 做均值（已做 ROI inset），输出到 `color_db.json`。
+- ChromaPrint3D 历史版本的 `build_colordb` 在 OpenCV Lab 工作空间里对每个 patch 做均值（已做 ROI inset），输出到 `color_db.json`；其结果作为历史 ColorDB 数据来源保留。颜色统一重构后，**新生成的 ColorDB / 模型包 / 拟合输出**均改为统一的项目 D65 Lab（与 C++ `Rgb::ToLab` 字节级一致）。
 
-> 关键是“整条链一致”：你用哪个 Lab 定义、用哪个白点/色彩适配，就保持一致；如果不同来源混用，误差会变成系统偏差。
+> 关键是“整条链一致”：你用哪个 Lab 定义、用哪个白点/色彩适配，就保持一致；如果不同来源混用，误差会变成系统偏差。仓库当前的运行时 / 拟合 / 前端均统一到项目 D65 Lab；少量历史 ColorDB JSON 的 `entries[*].lab` 字段沿用原 OpenCV Lab 数值（与项目 D65 之间存在亚 ΔE 漂移），不批量重训。
 
 ### Stage A：只用单色阶梯拟合 \((\mathbf{E}_i,\mathbf{k}_i)\)
 

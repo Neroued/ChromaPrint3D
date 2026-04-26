@@ -122,9 +122,14 @@ def linear_rgb_to_lab_d65(linear_rgb: np.ndarray) -> np.ndarray:
     used by Stage A/B fitting, model-package builders, and the ColorChecker
     calibration pipeline. Matches the C++ `Rgb::ToLab()` definition in
     `core/include/chromaprint3d/color/types.h`.
+
+    Input range contract: components must already lie in `[0, 1]`. Out-of-range
+    inputs are **undefined** — there is no implicit clamp here, mirroring the
+    C++ `Rgb::ToLab()` behaviour. Callers that may produce values outside this
+    range (e.g. CCM application, dither error accumulation) must apply
+    `np.clip(..., 0.0, 1.0)` themselves before calling this function.
     """
     arr = np.asarray(linear_rgb, dtype=np.float32)
-    arr = np.clip(arr, 0.0, 1.0)
     xyz_d65 = linear_rgb_to_xyz(arr)
     return xyz_to_lab(xyz_d65, _WHITE_D65)
 

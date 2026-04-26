@@ -988,7 +988,7 @@ def main() -> int:
             "fitting_method": "stage_B",
             "optimizer": {"name": "adam", "lr": args.lr, "stage1_steps": stage1_steps,
                          "stage2_steps": int(args.steps), "tol": args.tol},
-            "loss_space": "opencv_lab",
+            "loss_space": "project_d65_lab",
             "micro_layer_height_mm": config.micro_layer_height,
             "height_ref_mm": config.height_ref_mm,
             "enable_height_scale": bool(enable_height_scale),

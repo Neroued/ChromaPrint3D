@@ -21,19 +21,14 @@
 
 namespace ChromaPrint3D {
 
-// ── cv::Vec3f ↔ Rgb / Lab boundary helpers ──────────────────────────────────
-
-/// `cv::Vec3f` (BGR convention) — only meaningful at OpenCV API boundaries.
-/// Use `Rgb::FromVec3f` / `rgb.AsVec3f()` for channel-agnostic geometry code.
-inline Rgb CvVecToRgb(const cv::Vec3f& v) { return Rgb(v[0], v[1], v[2]); }
-
-inline cv::Vec3f RgbToCvVec(const Rgb& rgb) { return cv::Vec3f(rgb.r(), rgb.g(), rgb.b()); }
-
-inline Lab CvVecToLab(const cv::Vec3f& v) { return Lab(v[0], v[1], v[2]); }
-
-inline cv::Vec3f LabToCvVec(const Lab& lab) { return cv::Vec3f(lab.l(), lab.a(), lab.b()); }
-
 // ── Image-level entries (defined in core/src/color/image.cpp) ───────────────
+//
+// Per-pixel `cv::Vec3f` ↔ `Rgb` / `Lab` conversion helpers were intentionally
+// removed: their channel-order semantics were ambiguous (BGR vs RGB depending
+// on which `cv::Mat` the pixel came from). Call sites should construct the
+// strong type explicitly at the OpenCV boundary, e.g.
+//   `Rgb r(v[0], v[1], v[2]);` or `Lab lab(v[0], v[1], v[2]);`
+// where the channel order of `v` is locally known.
 
 /// 8UC3 BGR (gamma-encoded, OpenCV convention) → 32FC3 Lab (project D65).
 ///

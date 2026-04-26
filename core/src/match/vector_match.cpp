@@ -44,6 +44,7 @@ VectorRecipeMap MatchVectorCore(const VectorProcResult& result,
 
     if (result.shapes.empty()) { return map; }
 
+    // Single point of color-space dispatch; the matcher detail API is typed.
     const bool use_lab = (cfg.color_space == ColorSpace::Lab);
 
     std::vector<int> shape_to_unique_idx(result.shapes.size(), -1);
@@ -91,14 +92,18 @@ VectorRecipeMap MatchVectorCore(const VectorProcResult& result,
         if (has_parallel_error.load(std::memory_order_relaxed)) { continue; }
 
         try {
-            const Rgb& color     = unique_colors[static_cast<std::size_t>(i)];
-            const Lab target_lab = Lab::FromRgb(color);
-            const cv::Vec3f target_color =
-                use_lab ? cv::Vec3f(target_lab.l(), target_lab.a(), target_lab.b())
-                        : cv::Vec3f(color.r(), color.g(), color.b());
-            const detail::CandidateDecision decision = detail::SelectCandidate(
-                target_color, use_lab, prepared_dbs, profile, cfg,
-                prepared_model ? &prepared_model.value() : nullptr, model_only);
+            const Rgb& color = unique_colors[static_cast<std::size_t>(i)];
+            detail::CandidateDecision decision;
+            if (use_lab) {
+                const Lab target_lab = Lab::FromRgb(color);
+                decision             = detail::SelectCandidate<Lab>(
+                    target_lab, prepared_dbs, profile, cfg,
+                    prepared_model ? &prepared_model.value() : nullptr, model_only);
+            } else {
+                decision = detail::SelectCandidate<Rgb>(
+                    color, prepared_dbs, profile, cfg,
+                    prepared_model ? &prepared_model.value() : nullptr, model_only);
+            }
             if (!decision.selected.valid) {
                 throw MatchError("No valid match candidate after DB/model selection");
             }

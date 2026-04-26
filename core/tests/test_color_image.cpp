@@ -15,6 +15,7 @@
 #include <opencv2/core.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -35,9 +36,9 @@ TEST(ColorImage, BgrToLabMatchesScalarReference) {
     std::vector<Lab> reference;
     reference.reserve(kN);
     for (int i = 0; i < kN; ++i) {
-        const std::uint8_t b = static_cast<std::uint8_t>(byte(rng));
-        const std::uint8_t g = static_cast<std::uint8_t>(byte(rng));
-        const std::uint8_t r = static_cast<std::uint8_t>(byte(rng));
+        const std::uint8_t b       = static_cast<std::uint8_t>(byte(rng));
+        const std::uint8_t g       = static_cast<std::uint8_t>(byte(rng));
+        const std::uint8_t r       = static_cast<std::uint8_t>(byte(rng));
         bgr_u8.at<cv::Vec3b>(0, i) = cv::Vec3b(b, g, r);
         // Note: SrgbU8 is RGB-ordered.
         reference.push_back(SrgbU8{r, g, b}.ToRgb().ToLab());
@@ -115,6 +116,52 @@ TEST(ColorImage, BgrToLinearRgbRoundTrip) {
     }
 }
 
+// ── BgrToLab: throughput micro-benchmark (no perf assertion) ────────────────
+//
+// Produces a `ms_per_megapixel` GoogleTest property so CI perf regressions
+// can be tracked manually without coupling the test to absolute hardware
+// numbers. Intentionally non-asserting per the color-unification plan §6.
+TEST(ColorImage, BgrToLabThroughputBenchmark) {
+    constexpr int kWidth      = 1024;
+    constexpr int kHeight     = 1024;
+    constexpr int kIterations = 3;
+
+    std::mt19937 rng(0xB1A551CC);
+    std::uniform_int_distribution<int> byte(0, 255);
+
+    cv::Mat bgr_u8(kHeight, kWidth, CV_8UC3);
+    for (int r = 0; r < kHeight; ++r) {
+        cv::Vec3b* row = bgr_u8.ptr<cv::Vec3b>(r);
+        for (int c = 0; c < kWidth; ++c) {
+            row[c] = cv::Vec3b(static_cast<std::uint8_t>(byte(rng)),
+                               static_cast<std::uint8_t>(byte(rng)),
+                               static_cast<std::uint8_t>(byte(rng)));
+        }
+    }
+
+    // Warm-up so cold-cache effects don't dominate the first iteration.
+    cv::Mat warm = BgrToLab(bgr_u8);
+    ASSERT_EQ(warm.type(), CV_32FC3);
+
+    using clock_t = std::chrono::steady_clock;
+    const auto t0 = clock_t::now();
+    for (int i = 0; i < kIterations; ++i) {
+        cv::Mat lab = BgrToLab(bgr_u8);
+        // Touch the result so the optimiser cannot drop the call.
+        ASSERT_EQ(lab.type(), CV_32FC3);
+    }
+    const auto t1         = clock_t::now();
+    const double total_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    const double mp_total = static_cast<double>(kIterations) * static_cast<double>(kWidth) *
+                            static_cast<double>(kHeight) / 1.0e6;
+    const double ms_per_megapixel = (mp_total > 0.0) ? (total_ms / mp_total) : 0.0;
+
+    // Record-only — no threshold assertion; CI watchers diff this property.
+    ::testing::Test::RecordProperty("ms_per_megapixel", std::to_string(ms_per_megapixel));
+    ::testing::Test::RecordProperty("iterations", std::to_string(kIterations));
+    ::testing::Test::RecordProperty("megapixels_total", std::to_string(mp_total));
+}
+
 // ── LabToBgr: round-trip with BgrToLab ──────────────────────────────────────
 
 TEST(ColorImage, LabToBgrFromBgrToLabRoundTrip) {
@@ -124,9 +171,9 @@ TEST(ColorImage, LabToBgrFromBgrToLabRoundTrip) {
     constexpr int kN = 256;
     cv::Mat bgr_u8(1, kN, CV_8UC3);
     for (int i = 0; i < kN; ++i) {
-        bgr_u8.at<cv::Vec3b>(0, i) = cv::Vec3b(static_cast<std::uint8_t>(byte(rng)),
-                                                static_cast<std::uint8_t>(byte(rng)),
-                                                static_cast<std::uint8_t>(byte(rng)));
+        bgr_u8.at<cv::Vec3b>(0, i) =
+            cv::Vec3b(static_cast<std::uint8_t>(byte(rng)), static_cast<std::uint8_t>(byte(rng)),
+                      static_cast<std::uint8_t>(byte(rng)));
     }
 
     cv::Mat lab  = BgrToLab(bgr_u8);

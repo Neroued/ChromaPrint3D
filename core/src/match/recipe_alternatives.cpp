@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <numbers>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -180,17 +181,20 @@ std::vector<RecipeCandidate> CollectAndRank(const Lab& target_color, std::vector
             std::make_move_iterator(candidates.begin() + static_cast<std::ptrdiff_t>(end))};
 }
 
-void SearchDBs(const Lab& target_color, const std::vector<detail::PreparedDB>& prepared_dbs,
-               const PrintProfile& profile, bool use_lab, int search_k,
-               std::vector<RawCandidate>& raw, std::unordered_set<std::string>& seen) {
+// Internal templated DB / model scan. Dispatch is done once at the public
+// entry by translating the user-facing `target_color: Lab` into the typed
+// search key `T = Lab` or `T = Rgb`.
+template <typename T>
+void SearchDBsTyped(const T& target_color, const std::vector<detail::PreparedDB>& prepared_dbs,
+                    const PrintProfile& profile, int search_k, std::vector<RawCandidate>& raw,
+                    std::unordered_set<std::string>& seen) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "SearchDBsTyped supports only Lab or Rgb target types");
     for (const auto& pdb : prepared_dbs) {
         const ColorDB* search_db = pdb.filtered_db ? pdb.filtered_db.get() : pdb.db;
         if (!search_db || search_db->entries.empty()) { continue; }
 
-        auto entries =
-            use_lab ? search_db->NearestEntries(target_color, static_cast<std::size_t>(search_k))
-                    : search_db->NearestEntries(target_color.ToRgb(),
-                                                static_cast<std::size_t>(search_k));
+        auto entries = search_db->NearestEntries(target_color, static_cast<std::size_t>(search_k));
 
         for (const Entry* entry : entries) {
             if (!entry) { continue; }
@@ -206,18 +210,20 @@ void SearchDBs(const Lab& target_color, const std::vector<detail::PreparedDB>& p
     }
 }
 
-void SearchModel(const Lab& target_color, const detail::PreparedModel& model, bool use_lab,
-                 int search_k, std::vector<RawCandidate>& raw,
-                 std::unordered_set<std::string>& seen) {
+template <typename T>
+void SearchModelTyped(const T& target_color, const detail::PreparedModel& model, int search_k,
+                      std::vector<RawCandidate>& raw, std::unordered_set<std::string>& seen) {
+    static_assert(std::is_same_v<T, Lab> || std::is_same_v<T, Rgb>,
+                  "SearchModelTyped supports only Lab or Rgb target types");
     const std::size_t model_k = static_cast<std::size_t>(search_k);
     const std::size_t n       = std::min(model_k, model.NumCandidates());
 
     using NeighborT = kdt::Neighbor<std::size_t, float>;
     std::vector<NeighborT> neighbors;
-    if (use_lab) {
+    if constexpr (std::is_same_v<T, Lab>) {
         model.lab_tree.KNearest(target_color, n, neighbors);
     } else {
-        model.rgb_tree.KNearest(target_color.ToRgb(), n, neighbors);
+        model.rgb_tree.KNearest(target_color, n, neighbors);
     }
 
     for (const auto& neighbor : neighbors) {
@@ -234,6 +240,26 @@ void SearchModel(const Lab& target_color, const detail::PreparedModel& model, bo
     }
 }
 
+void SearchDBs(const Lab& target_color, const std::vector<detail::PreparedDB>& prepared_dbs,
+               const PrintProfile& profile, ColorSpace color_space, int search_k,
+               std::vector<RawCandidate>& raw, std::unordered_set<std::string>& seen) {
+    if (color_space == ColorSpace::Lab) {
+        SearchDBsTyped<Lab>(target_color, prepared_dbs, profile, search_k, raw, seen);
+    } else {
+        SearchDBsTyped<Rgb>(target_color.ToRgb(), prepared_dbs, profile, search_k, raw, seen);
+    }
+}
+
+void SearchModel(const Lab& target_color, const detail::PreparedModel& model,
+                 ColorSpace color_space, int search_k, std::vector<RawCandidate>& raw,
+                 std::unordered_set<std::string>& seen) {
+    if (color_space == ColorSpace::Lab) {
+        SearchModelTyped<Lab>(target_color, model, search_k, raw, seen);
+    } else {
+        SearchModelTyped<Rgb>(target_color.ToRgb(), model, search_k, raw, seen);
+    }
+}
+
 } // namespace
 
 // ── RecipeSearchCache ────────────────────────────────────────────────────────
@@ -242,7 +268,7 @@ struct RecipeSearchCache::Impl {
     std::vector<detail::PreparedDB> prepared_dbs;
     std::optional<detail::PreparedModel> prepared_model;
     PrintProfile profile;
-    bool use_lab = true;
+    ColorSpace color_space = ColorSpace::Lab;
 };
 
 RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB> dbs,
@@ -254,7 +280,7 @@ RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB> dbs,
     impl->prepared_dbs   = detail::PrepareDBs(dbs, profile);
     impl->prepared_model = detail::PrepareModel(model_package, model_gate, profile);
     impl->profile        = profile;
-    impl->use_lab        = (match_cfg.color_space == ColorSpace::Lab);
+    impl->color_space    = match_cfg.color_space;
 
     spdlog::info("RecipeSearchCache::Build: color_layers={}, dbs={}, model={}",
                  profile.color_layers, impl->prepared_dbs.size(),
@@ -285,7 +311,7 @@ RecipeSearchCache RecipeSearchCache::Build(std::span<const ColorDB* const> db_pt
     impl->prepared_dbs   = detail::PrepareDBs(db_ptrs, profile);
     impl->prepared_model = detail::PrepareModel(model_package, model_gate, profile);
     impl->profile        = profile;
-    impl->use_lab        = (match_cfg.color_space == ColorSpace::Lab);
+    impl->color_space    = match_cfg.color_space;
 
     spdlog::info("RecipeSearchCache::Build(ptrs): color_layers={}, dbs={}, model={}",
                  profile.color_layers, impl->prepared_dbs.size(),
@@ -315,8 +341,8 @@ FindAlternativeRecipes(const Lab& target_color, std::span<const ColorDB> dbs,
                        int max_candidates, int offset, const ModelPackage* model_package,
                        const ModelGateConfig& model_gate) {
 
-    const int search_k = std::max(50, (max_candidates + offset) * 3);
-    const bool use_lab = (match_cfg.color_space == ColorSpace::Lab);
+    const int search_k           = std::max(50, (max_candidates + offset) * 3);
+    const ColorSpace color_space = match_cfg.color_space;
 
     auto prepared_dbs = detail::PrepareDBs(dbs, profile);
 
@@ -324,11 +350,11 @@ FindAlternativeRecipes(const Lab& target_color, std::span<const ColorDB> dbs,
     std::unordered_set<std::string> seen;
     raw.reserve(static_cast<std::size_t>(search_k) * 2);
 
-    SearchDBs(target_color, prepared_dbs, profile, use_lab, search_k, raw, seen);
+    SearchDBs(target_color, prepared_dbs, profile, color_space, search_k, raw, seen);
 
     auto prepared_model = detail::PrepareModel(model_package, model_gate, profile);
     if (prepared_model) {
-        SearchModel(target_color, *prepared_model, use_lab, search_k, raw, seen);
+        SearchModel(target_color, *prepared_model, color_space, search_k, raw, seen);
     }
 
     return CollectAndRank(target_color, raw, max_candidates, offset);
@@ -347,10 +373,10 @@ std::vector<RecipeCandidate> FindAlternativeRecipes(const Lab& target_color,
     std::unordered_set<std::string> seen;
     raw.reserve(static_cast<std::size_t>(search_k) * 2);
 
-    SearchDBs(target_color, impl.prepared_dbs, impl.profile, impl.use_lab, search_k, raw, seen);
+    SearchDBs(target_color, impl.prepared_dbs, impl.profile, impl.color_space, search_k, raw, seen);
 
     if (impl.prepared_model) {
-        SearchModel(target_color, *impl.prepared_model, impl.use_lab, search_k, raw, seen);
+        SearchModel(target_color, *impl.prepared_model, impl.color_space, search_k, raw, seen);
     }
 
     return CollectAndRank(target_color, raw, max_candidates, offset);

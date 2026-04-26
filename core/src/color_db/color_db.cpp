@@ -106,8 +106,7 @@ static ColorDB DBFromJson(const json& j) {
             }
 
             Entry entry;
-            entry.lab = Lab(lab.at(0).get<float>(), lab.at(1).get<float>(),
-                            lab.at(2).get<float>());
+            entry.lab = Lab(lab.at(0).get<float>(), lab.at(1).get<float>(), lab.at(2).get<float>());
 
             const auto& recipe = item.at("recipe");
             if (!recipe.is_array()) { throw FormatError("recipe must be an array"); }

@@ -37,13 +37,10 @@ namespace {
 neroued_3mf::Color ParseHexColor(const std::string& hex) {
     if (hex.size() == 9 && hex[0] == '#') {
         unsigned long val = std::strtoul(hex.c_str() + 1, nullptr, 16);
-        return {static_cast<uint8_t>((val >> 24) & 0xFF),
-                static_cast<uint8_t>((val >> 16) & 0xFF),
+        return {static_cast<uint8_t>((val >> 24) & 0xFF), static_cast<uint8_t>((val >> 16) & 0xFF),
                 static_cast<uint8_t>((val >> 8) & 0xFF), static_cast<uint8_t>(val & 0xFF)};
     }
-    if (auto rgb = SrgbU8::FromHex(hex); rgb) {
-        return {rgb->r, rgb->g, rgb->b, 255};
-    }
+    if (auto rgb = SrgbU8::FromHex(hex); rgb) { return {rgb->r, rgb->g, rgb->b, 255}; }
     return {255, 255, 255, 255};
 }
 

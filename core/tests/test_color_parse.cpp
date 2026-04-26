@@ -53,13 +53,9 @@ TEST(ColorParse, FromHexLowercaseAccepted) {
 
 // ── 8-payload (RGBA) inputs MUST be rejected (point #4 strict contract) ─────
 
-TEST(ColorParse, FromHexRejectsHashRGBA) {
-    EXPECT_FALSE(SrgbU8::FromHex("#FF000080").has_value());
-}
+TEST(ColorParse, FromHexRejectsHashRGBA) { EXPECT_FALSE(SrgbU8::FromHex("#FF000080").has_value()); }
 
-TEST(ColorParse, FromHexRejectsBareRGBA) {
-    EXPECT_FALSE(SrgbU8::FromHex("FF000080").has_value());
-}
+TEST(ColorParse, FromHexRejectsBareRGBA) { EXPECT_FALSE(SrgbU8::FromHex("FF000080").has_value()); }
 
 TEST(ColorParse, FromHexRejectsHexPrefixedRGBA) {
     EXPECT_FALSE(SrgbU8::FromHex("0xFF000080").has_value());
@@ -171,7 +167,7 @@ TEST(ColorParse, ResolveColorLiteralFuzzyMatch) {
 }
 
 TEST(ColorParse, ResolveColorLiteralUnknownGetsHashFallback) {
-    SrgbU8 r = ResolveColorLiteral("totally-unknown-color");
+    SrgbU8 r        = ResolveColorLiteral("totally-unknown-color");
     SrgbU8 expected = HashFallbackColor("totallyunknowncolor");
     EXPECT_EQ(r, expected);
 }

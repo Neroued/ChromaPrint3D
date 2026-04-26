@@ -54,19 +54,16 @@ const cv::Matx33f& BgrToXyzD65Matrix() {
     //   Y = 0.2126729 R + 0.7151522 G + 0.0721750 B
     //   Z = 0.0193339 R + 0.1191920 G + 0.9503041 B
     // BGR-column form swaps columns 0 and 2:
-    static const cv::Matx33f kM(
-        0.1804375f, 0.3575761f, 0.4124564f,  // X = .B + .G + .R
-        0.0721750f, 0.7151522f, 0.2126729f,  // Y = .B + .G + .R
-        0.9503041f, 0.1191920f, 0.0193339f); // Z = .B + .G + .R
+    static const cv::Matx33f kM(0.1804375f, 0.3575761f, 0.4124564f,  // X = .B + .G + .R
+                                0.0721750f, 0.7151522f, 0.2126729f,  // Y = .B + .G + .R
+                                0.9503041f, 0.1191920f, 0.0193339f); // Z = .B + .G + .R
     return kM;
 }
 
 // XYZ → linear RGB matrix (RGB column-order, used for LabToBgr / LinearRgbToBgr).
 const cv::Matx33f& XyzToRgbD65Matrix() {
-    static const cv::Matx33f kM(
-        3.2404542f, -1.5371385f, -0.4985314f,
-        -0.9692660f, 1.8760108f, 0.0415560f,
-        0.0556434f, -0.2040259f, 1.0572252f);
+    static const cv::Matx33f kM(3.2404542f, -1.5371385f, -0.4985314f, -0.9692660f, 1.8760108f,
+                                0.0415560f, 0.0556434f, -0.2040259f, 1.0572252f);
     return kM;
 }
 
@@ -212,9 +209,8 @@ cv::Mat LabToBgr(const cv::Mat& lab_f) {
                 const Lab lab(src[c][0], src[c][1], src[c][2]);
                 const Rgb rgb     = lab.ToRgb();
                 const Rgb clamped = Rgb::Clamp01(rgb);
-                dst[c]            = cv::Vec3b(LinearToSrgbByte(clamped.b()),
-                                              LinearToSrgbByte(clamped.g()),
-                                              LinearToSrgbByte(clamped.r()));
+                dst[c] = cv::Vec3b(LinearToSrgbByte(clamped.b()), LinearToSrgbByte(clamped.g()),
+                                   LinearToSrgbByte(clamped.r()));
             }
         }
     });

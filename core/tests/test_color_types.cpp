@@ -58,7 +58,7 @@ TEST(ColorTypes, SrgbU8FieldAccess) {
 
 TEST(ColorTypes, RgbAsVec3fAndBack) {
     Rgb r(0.25f, 0.5f, 0.75f);
-    Vec3f v   = r.AsVec3f();
+    Vec3f v = r.AsVec3f();
     EXPECT_FLOAT_EQ(v.x, 0.25f);
     EXPECT_FLOAT_EQ(v.y, 0.5f);
     EXPECT_FLOAT_EQ(v.z, 0.75f);
@@ -190,7 +190,7 @@ TEST(ColorTypes, HsvLinearAndSrgbU8DifferOnMidGrey) {
 }
 
 TEST(ColorTypes, HsvRoundTripLinear) {
-    Hsv h = Hsv::FromRgb(Rgb(0.3f, 0.6f, 0.2f));
+    Hsv h   = Hsv::FromRgb(Rgb(0.3f, 0.6f, 0.2f));
     Rgb rgb = h.ToRgb();
     EXPECT_NEAR(rgb.r(), 0.3f, 1e-4f);
     EXPECT_NEAR(rgb.g(), 0.6f, 1e-4f);

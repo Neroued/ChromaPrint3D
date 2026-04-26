@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Select representative recipes using k-center coverage in OpenCV Lab space.
+Select representative recipes using k-center coverage in project-D65 Lab space.
 
 Example:
   python -m modeling.pipeline.step4_select_recipes \
