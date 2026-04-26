@@ -28,6 +28,7 @@ COPY data/dbs/        /app/data/dbs/
 COPY data/recipes/    /app/data/recipes/
 COPY data/models/     /app/data/models/
 COPY data/presets/    /app/data/presets/
+COPY data/preset_bases/ /app/data/preset_bases/
 COPY data/model_packs/ /app/data/model_packs/
 
 RUN chown -R chromaprint3d:chromaprint3d /app
