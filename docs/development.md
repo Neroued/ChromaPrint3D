@@ -272,7 +272,7 @@ npm run dev
 | `transparent_layer_mm` | float | `0` | `0`, `0.04`, `0.08` | 透明镀层厚度（mm）。仅在 `face_orientation=facedown` 且 `double_sided=false` 时可用。启用后在打印模型最底层追加一层透明材料网格 |
 | `gradient_pixel_mm` | float | `0` | `>=0` | 渐变色区域栅格化分辨率（mm/px）。`0`=自动（3×`tessellation_tolerance_mm`）。SVG 中的渐变填充会被栅格化并拆分为纯色子区域参与颜色匹配与 3MF 生成 |
 
-组合后由 `BambuPresetCatalog` 从 `data/presets/machines.json` + `data/preset_bases/<slug>_<lh>_<nozzle>.json` 解析出实际预设。`target_machine` 参数（可选，默认=catalog 默认机型）决定选哪台机型；catalog 并会在 `print_compatible_printers` 列出同拓扑同 nozzle 的全部机型，Bambu Studio 切换机型时可保留切片参数（`is_compatible_with_printer` 返回 true 不替换预设）。`data/presets/chromaprint_patches.json` 指定 ChromaPrint3D 需要覆盖的字段（`$variant_indexed` 合并多变体）。模型颜色自动匹配到预设中最接近的耗材丝槽位（RGB 欧氏距离）。此外，`face_orientation=facedown` 会在导出阶段将模型几何整体绕 Y 轴旋转 180°，`faceup` 则保持原方向。后端同时还提供 `GET /api/v1/machines` 返回 catalog 清单（机型名、拓扑、可用 nozzle）供前端下拉使用。
+组合后由 `BambuPresetCatalog` 从 `data/presets/machines.json` + `data/preset_bases/<slug>_<lh>_<nozzle>.json` 解析出实际预设。`target_machine` 参数（可选，默认=catalog 默认机型）决定选哪台机型；catalog 并会在 `print_compatible_printers` 列出同拓扑同 nozzle 的全部机型，Bambu Studio 切换机型时可保留切片参数（`is_compatible_with_printer` 返回 true 不替换预设）。`data/presets/chromaprint_patches.json` 指定 ChromaPrint3D 需要覆盖的字段（`$variant_indexed` 合并多变体）。模型颜色自动匹配到预设中最接近的耗材丝槽位（RGB 欧氏距离）。此外，`face_orientation=facedown` 会在导出阶段将模型几何整体绕 Y 轴旋转 180°，`faceup` 则保持原方向。导出 3MF 时模型按目标机型的实际打印板尺寸自动居中：catalog 在加载 base preset 时从 `printable_area` 字段解析 `bed_size_x_mm / bed_size_y_mm`（缺失或解析失败 fallback 到 256×256），`BuildBambuDocument` 据此把模型几何中心对齐到 `(W/2, H/2)`，避免在 A1 mini（180²）/ H2x（330–350×320）等非 256² 板上偏离板中心。后端同时还提供 `GET /api/v1/machines` 返回 catalog 清单（机型名、拓扑、可用 nozzle）供前端下拉使用。
 
 注意：`face_orientation` 与 `flip_y` 语义不同。`flip_y` 用于图像/坐标系方向适配（预处理与体素构建阶段），`face_orientation` 用于最终导出几何朝向控制。
 

@@ -349,6 +349,54 @@ TEST(SlicerPreset, CatalogReturnsNulloptForMissingNozzle) {
     EXPECT_FALSE(spec.has_value());
 }
 
+// ===========================================================================
+// Bed size parsed from preset_base printable_area; consumed by
+// `BuildBambuDocument` to centre the model on each machine's actual print bed
+// (was previously hardcoded to 256x256, mis-centering A1 mini / H2x machines).
+// ===========================================================================
+
+TEST(BedSize, P2sIsDefault256x256) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    auto spec = catalog->Resolve("Bambu Lab P2S", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    EXPECT_FLOAT_EQ(spec->bed_size_x_mm, 256.0f);
+    EXPECT_FLOAT_EQ(spec->bed_size_y_mm, 256.0f);
+}
+
+TEST(BedSize, A1MiniIs180x180) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // A1 mini's bed is 180x180; the previous hardcoded 128x128 centre would
+    // push the model 38mm past the bed edge.
+    auto spec = catalog->Resolve("Bambu Lab A1 mini", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    EXPECT_FLOAT_EQ(spec->bed_size_x_mm, 180.0f);
+    EXPECT_FLOAT_EQ(spec->bed_size_y_mm, 180.0f);
+}
+
+TEST(BedSize, H2dIsRectangular350x320) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // H2D / H2D Pro have a non-square 350x320 bed.
+    auto spec = catalog->Resolve("Bambu Lab H2D", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    EXPECT_FLOAT_EQ(spec->bed_size_x_mm, 350.0f);
+    EXPECT_FLOAT_EQ(spec->bed_size_y_mm, 320.0f);
+}
+
+TEST(BedSize, X2dToleratesTrailingSpaceInPrintableArea) {
+    auto catalog = LoadCatalogOrNull();
+    if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";
+    // X2D's printable_area ships as ["0x0","256x0","256x256","0x256 "] from
+    // upstream BambuStudio (note trailing space on the last corner). The
+    // parser must still extract 256x256 from the third corner.
+    auto spec = catalog->Resolve("Bambu Lab X2D", NozzleSize::N04, 0.08f);
+    ASSERT_TRUE(spec.has_value());
+    EXPECT_FLOAT_EQ(spec->bed_size_x_mm, 256.0f);
+    EXPECT_FLOAT_EQ(spec->bed_size_y_mm, 256.0f);
+}
+
 TEST(SlicerPreset, DoubleSidedForcesFaceDownPresetSelection) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";

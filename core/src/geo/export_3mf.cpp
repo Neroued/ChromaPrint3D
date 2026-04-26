@@ -248,7 +248,9 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
     builder.AddMetadata("BambuStudio:3mfVersion", "1");
     builder.AddNamespace("BambuStudio", "http://schemas.bambulab.com/package/2021");
 
-    // Compute bed centering transform before enabling production
+    // Compute bed centering transform before enabling production. Bed size is
+    // taken from the resolved MachineSpec (parsed from the base preset's
+    // `printable_area`); falls back to 256x256 when the field is missing.
     float min_x = std::numeric_limits<float>::infinity();
     float max_x = -std::numeric_limits<float>::infinity();
     float min_y = std::numeric_limits<float>::infinity();
@@ -262,14 +264,14 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
             if (v.y > max_y) max_y = v.y;
         }
     }
-    constexpr float kBedCenterX = 128.0f;
-    constexpr float kBedCenterY = 128.0f;
-    float center_tx             = 0.0f;
-    float center_ty             = 0.0f;
+    const float bed_center_x = preset.machine.bed_size_x_mm * 0.5f;
+    const float bed_center_y = preset.machine.bed_size_y_mm * 0.5f;
+    float center_tx          = 0.0f;
+    float center_ty          = 0.0f;
     if (std::isfinite(min_x) && std::isfinite(max_x) && std::isfinite(min_y) &&
         std::isfinite(max_y)) {
-        center_tx = kBedCenterX - (min_x + max_x) * 0.5f;
-        center_ty = kBedCenterY - (min_y + max_y) * 0.5f;
+        center_tx = bed_center_x - (min_x + max_x) * 0.5f;
+        center_ty = bed_center_y - (min_y + max_y) * 0.5f;
     }
 
     builder.EnableProduction(neroued_3mf::Transform::Translation(center_tx, center_ty, 0));

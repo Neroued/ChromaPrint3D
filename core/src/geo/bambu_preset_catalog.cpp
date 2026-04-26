@@ -5,12 +5,15 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace ChromaPrint3D {
 
@@ -53,6 +56,37 @@ ChromaPrintPatches::JsonSection LoadSection(const nlohmann::json& obj) {
         out.emplace(it.key(), EncodeJsonValue(it.value()));
     }
     return out;
+}
+
+/// Parse a base preset's `printable_area[2]` ("<W>x<H>") to (width, height) in
+/// millimetres. The third corner of the axis-aligned rectangle defined by
+/// `printable_area = ["0x0", "Wx0", "WxH", "0xH"]` directly carries the bed
+/// dimensions. Returns std::nullopt if the field is missing, malformed, or
+/// non-positive. Tolerates trailing whitespace (some upstream BambuStudio
+/// printer profiles ship `"0x256 "` for X2D).
+std::optional<std::pair<float, float>> ParsePrintableAreaSize(const nlohmann::json& base) {
+    if (!base.contains("printable_area")) return std::nullopt;
+    const auto& pa = base["printable_area"];
+    if (!pa.is_array() || pa.size() < 3) return std::nullopt;
+    if (!pa[2].is_string()) return std::nullopt;
+
+    std::string s = pa[2].get<std::string>();
+    auto is_space = [](char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; };
+    while (!s.empty() && is_space(s.front())) s.erase(s.begin());
+    while (!s.empty() && is_space(s.back())) s.pop_back();
+    if (s.empty()) return std::nullopt;
+
+    const auto x_pos = s.find('x');
+    if (x_pos == std::string::npos || x_pos == 0 || x_pos + 1 >= s.size()) { return std::nullopt; }
+
+    try {
+        const float w = std::stof(s.substr(0, x_pos));
+        const float h = std::stof(s.substr(x_pos + 1));
+        if (!std::isfinite(w) || !std::isfinite(h) || w <= 0.0f || h <= 0.0f) {
+            return std::nullopt;
+        }
+        return std::make_pair(w, h);
+    } catch (const std::exception&) { return std::nullopt; }
 }
 
 } // namespace
@@ -186,9 +220,11 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         throw IOError("preset_bases directory not found at " + bases_dir.string());
     }
 
-    // One-shot scan of base files to populate the printer_model cache.
-    // Reads `_chromaprint3d_meta.printer_model` first, falling back to top-level
-    // `printer_model` field. Avoids re-parsing on every Resolve call.
+    // One-shot scan of base files to populate the per-base meta cache
+    // (printer_model + bed size). Avoids re-parsing JSON on every Resolve call.
+    // Reads printer_model from `_chromaprint3d_meta.printer_model` first,
+    // falling back to top-level `printer_model`. Reads bed size from
+    // `printable_area[2]` ("<W>x<H>"); falls back to 256x256 when missing.
     std::size_t cache_misses = 0;
     for (const auto& entry : std::filesystem::directory_iterator(bases_dir)) {
         if (!entry.is_regular_file()) continue;
@@ -202,23 +238,35 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
         }
         try {
             nlohmann::json bd = nlohmann::json::parse(bif);
-            std::string pm;
+            BasePresetMeta meta;
+
             if (bd.contains("_chromaprint3d_meta") && bd["_chromaprint3d_meta"].is_object()) {
-                const auto& meta = bd["_chromaprint3d_meta"];
-                if (meta.contains("printer_model") && meta["printer_model"].is_string()) {
-                    pm = meta["printer_model"].get<std::string>();
+                const auto& m = bd["_chromaprint3d_meta"];
+                if (m.contains("printer_model") && m["printer_model"].is_string()) {
+                    meta.printer_model = m["printer_model"].get<std::string>();
                 }
             }
-            if (pm.empty() && bd.contains("printer_model") && bd["printer_model"].is_string()) {
-                pm = bd["printer_model"].get<std::string>();
+            if (meta.printer_model.empty() && bd.contains("printer_model") &&
+                bd["printer_model"].is_string()) {
+                meta.printer_model = bd["printer_model"].get<std::string>();
             }
-            if (!pm.empty()) {
-                cat.base_printer_model_cache_.emplace(stem, std::move(pm));
+
+            if (auto bed = ParsePrintableAreaSize(bd); bed) {
+                meta.bed_size_x_mm = bed->first;
+                meta.bed_size_y_mm = bed->second;
             } else {
+                spdlog::warn("BambuPresetCatalog: base file {} has missing or unparseable "
+                             "printable_area; falling back to 256x256",
+                             path.string());
+            }
+
+            if (meta.printer_model.empty()) {
                 ++cache_misses;
                 spdlog::warn("BambuPresetCatalog: base file {} has no printer_model",
                              path.string());
             }
+
+            cat.base_meta_cache_.emplace(stem, std::move(meta));
         } catch (const std::exception& e) {
             ++cache_misses;
             spdlog::warn("BambuPresetCatalog: failed to parse base file {}: {}", path.string(),
@@ -227,8 +275,8 @@ BambuPresetCatalog BambuPresetCatalog::LoadFromDir(const std::filesystem::path& 
     }
 
     spdlog::info("BambuPresetCatalog loaded: {} machines, default = {}, cached {} base "
-                 "printer_model entries ({} misses)",
-                 cat.machines_.size(), cat.default_machine_, cat.base_printer_model_cache_.size(),
+                 "meta entries ({} misses)",
+                 cat.machines_.size(), cat.default_machine_, cat.base_meta_cache_.size(),
                  cache_misses);
     return cat;
 }
@@ -299,11 +347,16 @@ std::optional<MachineSpec> BambuPresetCatalog::Resolve(std::string_view machine_
     // Share the catalog's patches with this MachineSpec (shared_ptr aliasing).
     spec.patches = patches_;
 
-    // printer_model: pull from the cache populated at LoadFromDir time.
-    auto cit = base_printer_model_cache_.find(stem);
-    if (cit != base_printer_model_cache_.end()) { spec.printer_model = cit->second; }
-    // (cache miss is non-fatal; spec.printer_model stays empty and downstream
-    //  metadata writers omit the printer_model_id plate annotation.)
+    // printer_model + bed size: pull from the cache populated at LoadFromDir time.
+    auto cit = base_meta_cache_.find(stem);
+    if (cit != base_meta_cache_.end()) {
+        spec.printer_model = cit->second.printer_model;
+        spec.bed_size_x_mm = cit->second.bed_size_x_mm;
+        spec.bed_size_y_mm = cit->second.bed_size_y_mm;
+    }
+    // (cache miss is non-fatal; spec.printer_model stays empty and bed size
+    //  retains its 256x256 default. Downstream metadata writers omit the
+    //  printer_model_id plate annotation when printer_model is empty.)
 
     return spec;
 }
@@ -323,13 +376,14 @@ BambuPresetCatalog::GetMachineSummary(std::string_view machine_name) const {
 
     // Best-effort printer_model lookup: the cache key is `<slug>_<lh>mm_<nozzle>`,
     // and we don't know which layer-height/nozzle the catalog actually shipped a
-    // base file for, so accept the first stem starting with `<slug>_`. Order is
-    // unordered_map iteration order; consistency is fine since all base files
-    // for a given slug carry the same printer_model (sanity-checked at load).
+    // base file for, so accept the first stem starting with `<slug>_` whose
+    // entry has a non-empty printer_model. Order is unordered_map iteration
+    // order; consistency is fine since all base files for a given slug carry
+    // the same printer_model (sanity-checked at load).
     const std::string slug_prefix = rec.slug + "_";
-    for (const auto& [stem, model] : base_printer_model_cache_) {
-        if (stem.compare(0, slug_prefix.size(), slug_prefix) == 0) {
-            summary.printer_model = model;
+    for (const auto& [stem, meta] : base_meta_cache_) {
+        if (stem.compare(0, slug_prefix.size(), slug_prefix) == 0 && !meta.printer_model.empty()) {
+            summary.printer_model = meta.printer_model;
             break;
         }
     }
