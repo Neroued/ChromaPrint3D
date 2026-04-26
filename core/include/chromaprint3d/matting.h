@@ -88,7 +88,12 @@ using MattingProviderPtr = std::shared_ptr<IMattingProvider>;
 /// any pixel whose Lab distance exceeds the threshold as foreground.
 class CHROMAPRINT3D_API ThresholdMattingProvider : public IMattingProvider {
 public:
-    explicit ThresholdMattingProvider(float distance_threshold = 15.0f);
+    /// \param distance_threshold ΔE76 distance to background; pixels above this
+    ///        are foreground. Default `6.0f` matches project D65 Lab range
+    ///        (L in [0,100]); the previous default `15.0f` targeted OpenCV
+    ///        uint8 Lab range (L in [0,255]). Divide an OpenCV-tuned value by
+    ///        ~2.55 when porting calibration to project D65.
+    explicit ThresholdMattingProvider(float distance_threshold = 6.0f);
 
     std::string Name() const override;
     std::string Description() const override;

@@ -34,13 +34,19 @@ DEFAULT_REF_JSON = (
 
 
 def color_metrics_from_linear_rgb(linear_rgb: np.ndarray) -> Dict[str, object]:
+    """Compute JSON-friendly color metrics from linear RGB.
+
+    Returns a dict whose values are plain Python `list[float]` / `int`,
+    so the result can be passed directly to `json.dump(...)` without
+    additional `tolist()` conversion at the call site.
+    """
     linear = np.clip(np.asarray(linear_rgb, dtype=np.float32), 0.0, 1.0)
     srgb = linear_to_srgb(linear)
     srgb_8bit = [int(round(float(v) * 255.0)) for v in srgb.tolist()]
-    lab_d65 = linear_rgb_to_lab_d65(linear)
+    lab_d65 = np.asarray(linear_rgb_to_lab_d65(linear), dtype=np.float32)
     return {
         "measured_srgb": srgb_8bit,
-        "measured_lab_d65": lab_d65,
+        "measured_lab_d65": _round_list(lab_d65, 4),
         "measured_linear_rgb": _round_list(linear, 6),
     }
 

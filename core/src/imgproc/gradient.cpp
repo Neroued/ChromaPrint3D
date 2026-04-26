@@ -32,11 +32,11 @@ Rgb InterpolateGradient(const GradientInfo& grad, float t) {
 
     if (t <= grad.stops.front().offset) {
         const auto& s = grad.stops.front();
-        return Rgb(s.color.x * s.opacity, s.color.y * s.opacity, s.color.z * s.opacity);
+        return Rgb(s.color.r() * s.opacity, s.color.g() * s.opacity, s.color.b() * s.opacity);
     }
     if (t >= grad.stops.back().offset) {
         const auto& s = grad.stops.back();
-        return Rgb(s.color.x * s.opacity, s.color.y * s.opacity, s.color.z * s.opacity);
+        return Rgb(s.color.r() * s.opacity, s.color.g() * s.opacity, s.color.b() * s.opacity);
     }
 
     for (size_t i = 0; i + 1 < grad.stops.size(); ++i) {
@@ -48,12 +48,13 @@ Rgb InterpolateGradient(const GradientInfo& grad, float t) {
             float a       = a0 + (a1 - a0) * frac;
             const Rgb& c0 = grad.stops[i].color;
             const Rgb& c1 = grad.stops[i + 1].color;
-            return Rgb((c0.x + (c1.x - c0.x) * frac) * a, (c0.y + (c1.y - c0.y) * frac) * a,
-                       (c0.z + (c1.z - c0.z) * frac) * a);
+            return Rgb((c0.r() + (c1.r() - c0.r()) * frac) * a,
+                       (c0.g() + (c1.g() - c0.g()) * frac) * a,
+                       (c0.b() + (c1.b() - c0.b()) * frac) * a);
         }
     }
     const auto& s = grad.stops.back();
-    return Rgb(s.color.x * s.opacity, s.color.y * s.opacity, s.color.z * s.opacity);
+    return Rgb(s.color.r() * s.opacity, s.color.g() * s.opacity, s.color.b() * s.opacity);
 }
 
 } // namespace

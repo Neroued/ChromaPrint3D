@@ -1,7 +1,6 @@
 #include "chromaprint3d/vector_preview.h"
 #include "chromaprint3d/color.h"
 #include "chromaprint3d/encoding.h"
-#include "detail/layer_preview_color.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -134,9 +133,9 @@ cv::Mat RenderVectorLayerPreview(const VectorProcResult& result, const VectorRec
             if (static_cast<std::size_t>(layer_idx) < recipe.size()) {
                 const std::size_t channel_idx = recipe[static_cast<std::size_t>(layer_idx)];
                 if (channel_idx < palette.size()) {
-                    const cv::Vec3b bgr =
-                        detail::PaletteColorLiteralToBgr(palette[channel_idx].color);
-                    color = cv::Scalar(bgr[0], bgr[1], bgr[2], 255);
+                    const SrgbU8 srgb = ResolveColorLiteral(palette[channel_idx].color);
+                    // OpenCV draw fns take BGR; SrgbU8 is RGB.
+                    color = cv::Scalar(srgb.b, srgb.g, srgb.r, 255);
                 } else {
                     color = cv::Scalar(127, 127, 127, 255);
                 }

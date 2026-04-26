@@ -82,7 +82,11 @@ struct CandidateDecision {
     bool model_queried = false;
 };
 
-CandidateResult FindBestDbCandidate(const cv::Vec3f& target_color, bool use_lab,
+/// Find the best DB candidate for a typed target color (`Lab` or `Rgb`).
+/// The matching color space is encoded in the type `T`; there is no
+/// `bool use_lab` flag.
+template <typename T>
+CandidateResult FindBestDbCandidate(const T& target_color,
                                     const std::vector<PreparedDB>& prepared_dbs,
                                     const PrintProfile& profile, const MatchConfig& cfg);
 
@@ -90,13 +94,32 @@ std::optional<PreparedModel> PrepareModel(const ModelPackage* model_package,
                                           const ModelGateConfig& model_gate,
                                           const PrintProfile& profile);
 
-CandidateResult FindBestModelCandidate(const cv::Vec3f& target_color, bool use_lab,
-                                       const PreparedModel& model);
+template <typename T>
+CandidateResult FindBestModelCandidate(const T& target_color, const PreparedModel& model);
 
-CandidateDecision SelectCandidate(const cv::Vec3f& target_color, bool use_lab,
+template <typename T>
+CandidateDecision SelectCandidate(const T& target_color,
                                   const std::vector<PreparedDB>& prepared_dbs,
                                   const PrintProfile& profile, const MatchConfig& cfg,
                                   const PreparedModel* prepared_model, bool model_only);
+
+// Explicit instantiations are emitted from candidate_select.cpp for
+// `Lab` and `Rgb`. Other translation units must not instantiate these
+// templates with a different type.
+extern template CandidateResult FindBestDbCandidate<Lab>(const Lab&, const std::vector<PreparedDB>&,
+                                                         const PrintProfile&, const MatchConfig&);
+extern template CandidateResult FindBestDbCandidate<Rgb>(const Rgb&, const std::vector<PreparedDB>&,
+                                                         const PrintProfile&, const MatchConfig&);
+
+extern template CandidateResult FindBestModelCandidate<Lab>(const Lab&, const PreparedModel&);
+extern template CandidateResult FindBestModelCandidate<Rgb>(const Rgb&, const PreparedModel&);
+
+extern template CandidateDecision SelectCandidate<Lab>(const Lab&, const std::vector<PreparedDB>&,
+                                                       const PrintProfile&, const MatchConfig&,
+                                                       const PreparedModel*, bool);
+extern template CandidateDecision SelectCandidate<Rgb>(const Rgb&, const std::vector<PreparedDB>&,
+                                                       const PrintProfile&, const MatchConfig&,
+                                                       const PreparedModel*, bool);
 
 void WriteRecipe(RecipeMap& result, std::size_t pixel_idx, const std::vector<uint8_t>& recipe);
 

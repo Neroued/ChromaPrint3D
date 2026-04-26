@@ -124,7 +124,7 @@ int EstimateClusterCount(const cv::Mat& samples) {
     return chosen_k;
 }
 
-void ValidateImageForMatch(const RasterProcResult& img, bool use_lab) {
+void ValidateImageForMatch(const RasterProcResult& img, ColorSpace color_space) {
     if (img.width <= 0 || img.height <= 0) {
         throw InputError("RasterProcResult width/height must be positive");
     }
@@ -136,7 +136,7 @@ void ValidateImageForMatch(const RasterProcResult& img, bool use_lab) {
     if (!img.mask.empty() && (img.mask.rows != img.height || img.mask.cols != img.width)) {
         throw InputError("Image mask size does not match RasterProcResult size");
     }
-    if (!use_lab) {
+    if (color_space == ColorSpace::Rgb) {
         if (img.rgb.empty()) { throw InputError("Image RGB data is empty"); }
         if (img.rgb.type() != CV_32FC3) { throw InputError("Image RGB data must be CV_32FC3"); }
         if (img.rgb.rows != img.height || img.rgb.cols != img.width) {
@@ -149,8 +149,13 @@ RecipeMap MatchFromRasterCore(const RasterProcResult& img,
                               const std::vector<detail::PreparedDB>& prepared_dbs,
                               const std::optional<detail::PreparedModel>& prepared_model,
                               const PrintProfile& profile, const MatchConfig& cfg,
-                              const ModelGateConfig& model_gate, bool model_only, bool use_lab,
+                              const ModelGateConfig& model_gate, bool model_only,
                               MatchStats* out_stats) {
+    // Single point of color-space dispatch: the matcher detail API is
+    // typed (`SelectCandidate<Lab>` / `<Rgb>`), so we only need a local
+    // boolean to choose which `cv::Mat` plane and which template specialisation
+    // to feed.
+    const bool use_lab       = (cfg.color_space == ColorSpace::Lab);
     int stat_total_queries   = 0;
     int stat_db_only         = 0;
     int stat_model_used      = 0;
@@ -175,6 +180,19 @@ RecipeMap MatchFromRasterCore(const RasterProcResult& img,
 
     const cv::Mat& target = use_lab ? img.lab : img.rgb;
     const bool has_mask   = !img.mask.empty();
+
+    auto select_at_pixel = [&](const cv::Vec3f& pixel) {
+        if (use_lab) {
+            const Lab target_lab(pixel[0], pixel[1], pixel[2]);
+            return detail::SelectCandidate<Lab>(target_lab, prepared_dbs, profile, cfg,
+                                                prepared_model ? &prepared_model.value() : nullptr,
+                                                model_only);
+        }
+        const Rgb target_rgb(pixel[0], pixel[1], pixel[2]);
+        return detail::SelectCandidate<Rgb>(target_rgb, prepared_dbs, profile, cfg,
+                                            prepared_model ? &prepared_model.value() : nullptr,
+                                            model_only);
+    };
     std::vector<std::size_t> valid_indices;
     valid_indices.reserve(pixel_count);
 
@@ -239,13 +257,25 @@ RecipeMap MatchFromRasterCore(const RasterProcResult& img,
 
         detail::DitherStats ds;
         if (effective_dither == DitherMethod::BlueNoise) {
-            detail::MatchWithBlueNoiseDither(result, target, img.mask, use_lab, prepared_dbs,
-                                             profile, dither_cfg, pm, model_only,
-                                             cfg.dither_strength, ds);
+            if (use_lab) {
+                detail::MatchWithBlueNoiseDither<Lab>(result, target, img.mask, prepared_dbs,
+                                                      profile, dither_cfg, pm, model_only,
+                                                      cfg.dither_strength, ds);
+            } else {
+                detail::MatchWithBlueNoiseDither<Rgb>(result, target, img.mask, prepared_dbs,
+                                                      profile, dither_cfg, pm, model_only,
+                                                      cfg.dither_strength, ds);
+            }
         } else {
-            detail::MatchWithFloydSteinberg(result, target, img.mask, use_lab, prepared_dbs,
-                                            profile, dither_cfg, pm, model_only,
-                                            cfg.dither_strength, ds);
+            if (use_lab) {
+                detail::MatchWithFloydSteinberg<Lab>(result, target, img.mask, prepared_dbs,
+                                                     profile, dither_cfg, pm, model_only,
+                                                     cfg.dither_strength, ds);
+            } else {
+                detail::MatchWithFloydSteinberg<Rgb>(result, target, img.mask, prepared_dbs,
+                                                     profile, dither_cfg, pm, model_only,
+                                                     cfg.dither_strength, ds);
+            }
         }
 
         stat_total_queries = ds.total_queries;
@@ -281,9 +311,7 @@ RecipeMap MatchFromRasterCore(const RasterProcResult& img,
                 const int r           = static_cast<int>(idx / static_cast<std::size_t>(img.width));
                 const int c           = static_cast<int>(idx % static_cast<std::size_t>(img.width));
                 const cv::Vec3f target_color             = target.at<cv::Vec3f>(r, c);
-                const detail::CandidateDecision decision = detail::SelectCandidate(
-                    target_color, use_lab, prepared_dbs, profile, cfg,
-                    prepared_model ? &prepared_model.value() : nullptr, model_only);
+                const detail::CandidateDecision decision = select_at_pixel(target_color);
                 if (!decision.selected.valid) {
                     throw MatchError("No valid match candidate after DB/model selection");
                 }
@@ -373,9 +401,7 @@ RecipeMap MatchFromRasterCore(const RasterProcResult& img,
             static_cast<std::size_t>(slic_clusters));
         for (int i = 0; i < slic_clusters; ++i) {
             const cv::Vec3f center_color             = slic.centers[static_cast<std::size_t>(i)];
-            const detail::CandidateDecision decision = detail::SelectCandidate(
-                center_color, use_lab, prepared_dbs, profile, cfg,
-                prepared_model ? &prepared_model.value() : nullptr, model_only);
+            const detail::CandidateDecision decision = select_at_pixel(center_color);
             if (!decision.selected.valid) {
                 throw MatchError("SLIC center has no valid match candidate");
             }
@@ -514,9 +540,7 @@ RecipeMap MatchFromRasterCore(const RasterProcResult& img,
     for (int i = 0; i < resolved_k; ++i) {
         const cv::Vec3f center_color(centers.at<float>(i, 0), centers.at<float>(i, 1),
                                      centers.at<float>(i, 2));
-        const detail::CandidateDecision decision =
-            detail::SelectCandidate(center_color, use_lab, prepared_dbs, profile, cfg,
-                                    prepared_model ? &prepared_model.value() : nullptr, model_only);
+        const detail::CandidateDecision decision = select_at_pixel(center_color);
         if (!decision.selected.valid) {
             throw MatchError("Cluster center has no valid match candidate");
         }
@@ -589,8 +613,7 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
                  cfg.color_space == ColorSpace::Lab ? "Lab" : "RGB", cfg.k_candidates,
                  cfg.cluster_count);
 
-    const bool use_lab = (cfg.color_space == ColorSpace::Lab);
-    ValidateImageForMatch(img, use_lab);
+    ValidateImageForMatch(img, cfg.color_space);
     const bool model_only = model_gate.model_only;
 
     std::vector<detail::PreparedDB> prepared_dbs;
@@ -616,7 +639,7 @@ RecipeMap RecipeMap::MatchFromRaster(const RasterProcResult& img, std::span<cons
     }
 
     return MatchFromRasterCore(img, prepared_dbs, prepared_model, profile, cfg, model_gate,
-                               model_only, use_lab, out_stats);
+                               model_only, out_stats);
 }
 
 RecipeMap RecipeMap::MatchFromRasterPtrs(const RasterProcResult& img,
@@ -634,8 +657,7 @@ RecipeMap RecipeMap::MatchFromRasterPtrs(const RasterProcResult& img,
                  cfg.color_space == ColorSpace::Lab ? "Lab" : "RGB", cfg.k_candidates,
                  cfg.cluster_count);
 
-    const bool use_lab = (cfg.color_space == ColorSpace::Lab);
-    ValidateImageForMatch(img, use_lab);
+    ValidateImageForMatch(img, cfg.color_space);
     const bool model_only = model_gate.model_only;
 
     std::vector<detail::PreparedDB> prepared_dbs;
@@ -655,7 +677,7 @@ RecipeMap RecipeMap::MatchFromRasterPtrs(const RasterProcResult& img,
     }
 
     return MatchFromRasterCore(img, prepared_dbs, prepared_model, profile, cfg, model_gate,
-                               model_only, use_lab, out_stats);
+                               model_only, out_stats);
 }
 
 } // namespace ChromaPrint3D

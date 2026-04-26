@@ -136,14 +136,23 @@ core/
 
 ### vec3 / color — 数学与颜色基础
 
-**头文件：** `vec3.h`、`color.h`
+**头文件：** `vec3.h`、`color.h`（伞头）+ `color/{types,conversions,distance,parse,image}.h`
 
 - `Vec3<T>`：整型三分量向量模板，提供 `Vec3i = Vec3<int32_t>`（体素坐标、有符号偏移）与 `Vec3u = Vec3<uint32_t>`（网格三角面索引，与 `neroued_3mf::IndexTriangle` 布局兼容，3MF 导出走零拷贝路径）
 - `Vec3f`：浮点三分量向量（支持归一化、距离、插值、钳位等操作）
-- `Rgb`：线性 sRGB 颜色（各分量 [0, 1]），支持与 Lab 互转、gamma 编解码
-- `Lab`：CIE L\*a\*b\* 颜色，提供 `DeltaE76` 色差计算
+
+颜色模块（`color/`）提供 4 个一等公民类型：
+
+- `Rgb`：线性 sRGB 颜色（各分量 float [0,1]），强类型（**不**继承 `Vec3f`）；支持与 `Lab` 互转、`ToHex` 便捷方法
+- `Lab`：CIE L\*a\*b\* 颜色，**项目 D65 Lab**（`(6/29)^3` 阈值、D65 白点、真 cbrt）；提供 `DeltaE76` 色差计算
+- `SrgbU8`：gamma-encoded sRGB 字节三元组（无 alpha）；`FromHex` / `ToHex` 是 hex 解析/格式化的**唯一**入口（严格拒绝 8 位 RGBA 输入）
+- `Hsv`：HSV 颜色，提供两条入口 `FromRgb`（线性，科学约定）与 `FromSrgbU8`（gamma 编码，BambuStudio 字节级一致）
 
 色彩空间转换链路：sRGB gamma ↔ 线性 RGB ↔ XYZ (D65) ↔ L\*a\*b\*
+
+**Lab 数学契约**：项目 D65 Lab 是仓库唯一的权威 Lab 实现。`color/image.h::BgrToLab` 自实现完整 BGR→linear→XYZ(D65)→Lab(D65) 流水线，**禁止**调用 `cv::cvtColor(BGR2Lab)`。前端 `web/frontend/src/utils/colorConvert.ts` 与 Python `modeling/core/color_space.py::linear_rgb_to_lab_d65` 三方共享同一份数学。
+
+历史 ColorDB（`data/dbs/**/*.json` 的 `entries[*].lab`）来自 OpenCV `cvtColor(BGR2Lab)` 量化路径，与新项目 D65 路径之间存在亚 ΔE76 漂移（mean ~0.15 / p99 ~0.30 / max ~0.7），但用户已确认在当前场景可接受：本仓库**不**批量重建历史 ColorDB，**不**引入 `lab_math` 元字段，**不**在 modelpack 加载路径加任何兼容校验；新生成或逐步重建的 ColorDB 会自然走项目 D65。详见 `docs/development.md` "Lab math" 章节。
 
 ### kdtree — KD-Tree 最近邻搜索
 

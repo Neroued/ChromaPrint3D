@@ -3,7 +3,6 @@
 #include "chromaprint3d/color_db.h"
 #include "chromaprint3d/error.h"
 #include "chromaprint3d/raster_region_map.h"
-#include "detail/layer_preview_color.h"
 
 #include <opencv2/imgproc.hpp>
 
@@ -85,10 +84,8 @@ cv::Mat RecipeMap::ToBgraImage() const {
                 static_cast<size_t>(r) * static_cast<size_t>(width) + static_cast<size_t>(c);
             if (!mask.empty() && mask[idx] == 0) { continue; }
 
-            Rgb rgb    = mapped_color[idx].ToRgb();
-            uint8_t r8 = 0, g8 = 0, b8 = 0;
-            rgb.ToRgb255(r8, g8, b8);
-            bgra.at<cv::Vec4b>(r, c) = cv::Vec4b(b8, g8, r8, 255);
+            const SrgbU8 srgb        = SrgbU8::FromRgb(mapped_color[idx].ToRgb());
+            bgra.at<cv::Vec4b>(r, c) = cv::Vec4b(srgb.b, srgb.g, srgb.r, 255);
         }
     }
     return bgra;
@@ -136,11 +133,12 @@ cv::Mat RecipeMap::ToLayerBgraImage(int layer_idx, const std::vector<Channel>& p
             if (recipe_offset >= recipes.size()) { continue; }
             const uint8_t channel_idx = recipes[recipe_offset];
 
-            cv::Vec3b color(127, 127, 127);
+            SrgbU8 srgb{127, 127, 127};
             if (channel_idx < palette.size()) {
-                color = detail::PaletteColorLiteralToBgr(palette[channel_idx].color);
+                srgb = ResolveColorLiteral(palette[channel_idx].color);
             }
-            bgra.at<cv::Vec4b>(r, c) = cv::Vec4b(color[0], color[1], color[2], 255);
+            // SrgbU8 is RGB-ordered; cv::Vec4b is BGRA in OpenCV convention.
+            bgra.at<cv::Vec4b>(r, c) = cv::Vec4b(srgb.b, srgb.g, srgb.r, 255);
         }
     }
     return bgra;

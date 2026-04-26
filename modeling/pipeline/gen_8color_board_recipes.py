@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from modeling.core.color_space import linear_rgb_to_opencv_lab_batch
+from modeling.core.color_space import linear_rgb_to_lab_d65
 from modeling.core.forward_model import (
     load_stage_forward_model,
     predict_linear_batch as predict_with_stage_model,
@@ -184,7 +184,7 @@ def main() -> int:
         all_recipes, stage_model, LAYER_HEIGHT_MM, MICRO_LAYER_HEIGHT,
         base_channel_idx, layer_order, substrate_idx,
     )
-    labs = linear_rgb_to_opencv_lab_batch(linear)
+    labs = linear_rgb_to_lab_d65(linear)
 
     print(f"Running k-center to select {TOTAL_SELECT} recipes ...")
     selected_order = kcenter_select(labs, TOTAL_SELECT)

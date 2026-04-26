@@ -457,6 +457,35 @@ npm run dev
 - `completed_at` 只在任务主生命周期真正结束时写入，用于 `--task-ttl`。
 - `GET /api/v1/tasks/{id}`、artifact 下载、recipe editor 查询只会刷新 `last_accessed_at`，不会延长 `--task-ttl`。
 
+### 5.11 颜色与 Lab 数学契约
+
+仓库统一使用项目 D65 Lab（**唯一**权威 Lab 实现）。
+
+- **数学定义**：sRGB(gamma) → linear RGB → XYZ(D65) → L*a*b\*；阈值 `(6/29)^3`、白点 D65 `(0.95047, 1.0, 1.08883)`、大于阈值时使用真 cbrt。
+- **三方共享**：C++ `core/include/chromaprint3d/color/types.h::Rgb::ToLab()`、Python `modeling/core/color_space.py::linear_rgb_to_lab_d65`、前端 `web/frontend/src/utils/colorConvert.ts::hexToLab` 共享同一份数学；`color/image.h::BgrToLab` 自实现完整流水线，**禁止**调用 `cv::cvtColor(BGR2Lab)`。
+- **hex 字段**：所有 hex 输出（API `hex` 字段、3MF 元数据、配方编辑器）始终为 `#RRGGBB` 大写格式（`SrgbU8::ToHex`）。hex 解析（`SrgbU8::FromHex`）严格只接受 RGB（payload 长度 3 或 6），8 位 RGBA 输入返回 `std::nullopt`；带 alpha 的 3MF 颜色必须走 `neroued_3mf::Color::FromHex`。
+
+**ColorDB 历史例外**：
+
+- `data/dbs/**/*.json` 中历史 ColorDB 的 `entries[*].lab` 仍来自 OpenCV `cvtColor(BGR2Lab)` 量化路径，与运行时 project D65 数学之间存在亚 ΔE 漂移（mean ~0.15 / p99 ~0.30 / max ~0.7）。
+- 用户已确认在当前场景可接受；本仓库**不**批量重建历史 ColorDB。
+- 这**不是**兼容分支：modelpack 内**不**含 `lab_math` 元字段，C++ `model_package.cpp::LoadFromMsgpack` **不**做任何与 Lab 数学相关的硬校验，老/新 modelpack 加载均不报错（仅产生亚 ΔE 漂移）。
+- 未来新生成或逐步重建的 ColorDB 自然走 project D65；无需人工介入。
+
+**Modelpack 重生成**（dev 本地操作）：
+
+```bash
+python3 -m modeling.pipeline.step5_build_model_package \
+    --stage modeling/output/params/stage_B_retrained.json \
+    --db modeling/dbs \
+    --vendor BambuLab --material-type PLA \
+    --modes 2:0.08,3:0.08,4:0.08,5:0.08,6:0.04,7:0.04,8:0.04,9:0.04,10:0.04 \
+    --candidate-count 65536 \
+    --output data/model_packs/bambulab_pla.msgpack
+```
+
+每次代码侧 Lab 数学更新（如本次重构）必须同步重新生成 modelpack，以保证 `pred_lab_view` 与运行时 Lab 计算一致；否则 KD-tree 查询会产生亚 ΔE 漂移。
+
 ## 6. 常见开发问题
 
 ### 6.1 前端启动了但 API 全失败

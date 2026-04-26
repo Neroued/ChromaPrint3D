@@ -1,4 +1,5 @@
 #include "chromaprint3d/matting.h"
+#include "chromaprint3d/color/image.h"
 #include "chromaprint3d/error.h"
 
 #include <nlohmann/json.hpp>
@@ -77,6 +78,8 @@ MattingModelConfig MattingModelConfig::LoadFromJson(const std::string& json_path
 ThresholdMattingProvider::ThresholdMattingProvider(float distance_threshold)
     : distance_threshold_(distance_threshold) {}
 
+// Default value lives in the header (matting.h) — see project D65 Lab note.
+
 std::string ThresholdMattingProvider::Name() const { return "opencv-threshold"; }
 
 std::string ThresholdMattingProvider::Description() const {
@@ -89,9 +92,13 @@ MattingOutput ThresholdMattingProvider::Run(const cv::Mat& bgr, MattingTimingInf
     using Clock = std::chrono::steady_clock;
     auto t0     = Clock::now();
 
-    cv::Mat lab;
-    cv::cvtColor(bgr, lab, cv::COLOR_BGR2Lab);
-    lab.convertTo(lab, CV_32F);
+    // Project D65 Lab (CV_32FC3 with L in [0,100], a/b in approx [-128,127]).
+    // Replaces the previous `cv::cvtColor(BGR2Lab)` + uint8 Lab quantization
+    // path. Threshold default in `matting.h` adjusted accordingly so existing
+    // calibration on "reasonable threshold" still produces similar masks; if
+    // the threshold was previously tuned in OpenCV uint8 Lab range [0,255]
+    // it should be divided by ~2.55 to stay perceptually equivalent.
+    cv::Mat lab = BgrToLab(bgr);
 
     auto t1 = Clock::now();
 

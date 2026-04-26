@@ -163,12 +163,23 @@ class ColorCheckerTool:
 
     @staticmethod
     def _bgr_to_lab_d65(bgr: np.ndarray) -> List[float]:
-        bgr_uint8 = np.clip(bgr, 0, 255).astype(np.uint8).reshape(1, 1, 3)
-        lab = cv2.cvtColor(bgr_uint8, cv2.COLOR_BGR2LAB).astype(np.float32)[0, 0]
-        l = (lab[0] / 255.0) * 100.0
-        a = lab[1] - 128.0
-        b = lab[2] - 128.0
-        return [round(float(l), 2), round(float(a), 2), round(float(b), 2)]
+        # Project D65 Lab pipeline (replaces the previous OpenCV cv2.COLOR_BGR2LAB
+        # path). Input is gamma-encoded BGR uint8; we explicitly:
+        #   1) reverse channel order to RGB and rescale to float [0,1] (sRGB);
+        #   2) decode sRGB gamma to linear RGB;
+        #   3) project D65 Lab via the analytic formula in `color_space`.
+        # Note: directly passing uint8 BGR to `linear_rgb_to_lab_d65` would be
+        # wrong — that function expects linear-RGB float input.
+        from modeling.core.color_space import (
+            linear_rgb_to_lab_d65_rounded_list,
+            srgb_to_linear,
+        )
+
+        bgr_uint8 = np.clip(bgr, 0, 255).astype(np.uint8).reshape(3)
+        # BGR uint8 -> sRGB RGB float [0,1]
+        srgb_rgb = bgr_uint8[::-1].astype(np.float32) / 255.0
+        linear_rgb = np.asarray(srgb_to_linear(srgb_rgb), dtype=np.float32)
+        return linear_rgb_to_lab_d65_rounded_list(linear_rgb)
 
     @staticmethod
     def _srgb_to_linear(rgb: np.ndarray) -> np.ndarray:

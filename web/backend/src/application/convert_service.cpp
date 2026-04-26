@@ -102,14 +102,9 @@ ServiceResult ConvertService::AnalyzeVectorWidth(const std::vector<uint8_t>& svg
 
         json shapes_json = json::array();
         for (const auto& s : analysis.shapes) {
-            uint8_t r8, g8, b8;
-            s.color.ToRgb255(r8, g8, b8);
-            char hex[8];
-            std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", r8, g8, b8);
-
             shapes_json.push_back({
                 {"index", s.index},
-                {"color", std::string(hex)},
+                {"color", s.color.ToHex()},
                 {"area_mm2", std::round(s.area_mm2 * 100.0f) / 100.0f},
                 {"min_width_mm", std::round(s.min_width_mm * 1000.0f) / 1000.0f},
                 {"median_width_mm", std::round(s.median_width_mm * 1000.0f) / 1000.0f},

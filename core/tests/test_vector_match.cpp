@@ -27,7 +27,7 @@ ColorDB MakePaletteReorderedDb() {
     db.palette = {Channel{"White", "PLA"}, Channel{"Black", "PLA"}};
 
     Entry e;
-    e.lab    = Lab::FromRgb(Rgb::FromRgb255(255, 255, 255));
+    e.lab    = Lab::FromRgb(SrgbU8(255, 255, 255).ToRgb());
     e.recipe = {0, 0, 0, 0, 0}; // Source DB channel index 0 (White).
     db.entries.push_back(e);
     return db;
@@ -80,7 +80,7 @@ TEST(VectorMatch, RemapsRecipeToProfilePaletteOrder) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
-    VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(255, 255, 255));
+    VectorProcResult vec = MakeSingleColorVector(SrgbU8(255, 255, 255).ToRgb());
 
     MatchConfig cfg;
     cfg.color_space = ColorSpace::Lab;
@@ -99,12 +99,12 @@ TEST(VectorMatch, ModelOnlyUsesModelRecipeForVectorSolidColor) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
-    VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(255, 255, 255));
+    VectorProcResult vec = MakeSingleColorVector(SrgbU8(255, 255, 255).ToRgb());
 
     const int black_idx = FindChannelIndexByName(profile, "Black");
     ASSERT_GE(black_idx, 0);
     ModelPackage model = MakeSingleCandidateModel(profile, static_cast<uint8_t>(black_idx),
-                                                  Lab::FromRgb(Rgb::FromRgb255(255, 255, 255)));
+                                                  Lab::FromRgb(SrgbU8(255, 255, 255).ToRgb()));
 
     MatchConfig cfg;
     cfg.color_space = ColorSpace::Lab;
@@ -126,14 +126,14 @@ TEST(VectorMatch, ThresholdFallbackUsesModelWhenEnabled) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
-    VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(128, 128, 128));
+    VectorProcResult vec = MakeSingleColorVector(SrgbU8(128, 128, 128).ToRgb());
 
     const int black_idx = FindChannelIndexByName(profile, "Black");
     const int white_idx = FindChannelIndexByName(profile, "White");
     ASSERT_GE(black_idx, 0);
     ASSERT_GE(white_idx, 0);
     ModelPackage model = MakeSingleCandidateModel(profile, static_cast<uint8_t>(black_idx),
-                                                  Lab::FromRgb(Rgb::FromRgb255(128, 128, 128)));
+                                                  Lab::FromRgb(SrgbU8(128, 128, 128).ToRgb()));
 
     MatchConfig cfg;
     cfg.color_space = ColorSpace::Lab;
@@ -157,14 +157,14 @@ TEST(VectorMatch, HighThresholdKeepsDbResultWithoutModelQuery) {
     ColorDB db = MakePaletteReorderedDb();
     std::vector<ColorDB> dbs{db};
     PrintProfile profile = PrintProfile::BuildFromColorDBs(dbs, 5, 0.08f);
-    VectorProcResult vec = MakeSingleColorVector(Rgb::FromRgb255(128, 128, 128));
+    VectorProcResult vec = MakeSingleColorVector(SrgbU8(128, 128, 128).ToRgb());
 
     const int black_idx = FindChannelIndexByName(profile, "Black");
     const int white_idx = FindChannelIndexByName(profile, "White");
     ASSERT_GE(black_idx, 0);
     ASSERT_GE(white_idx, 0);
     ModelPackage model = MakeSingleCandidateModel(profile, static_cast<uint8_t>(black_idx),
-                                                  Lab::FromRgb(Rgb::FromRgb255(128, 128, 128)));
+                                                  Lab::FromRgb(SrgbU8(128, 128, 128).ToRgb()));
 
     MatchConfig cfg;
     cfg.color_space = ColorSpace::Lab;

@@ -89,15 +89,8 @@ inline cv::Mat ExtractOpaqueMask(const cv::Mat& src, uint8_t alpha_threshold = 0
     return mask;
 }
 
-/// Convert a BGR (uint8) image to CIE L*a*b* (float32).
-/// Returns an empty Mat if input is empty.
-inline cv::Mat BgrToLab(const cv::Mat& bgr) {
-    if (bgr.empty()) { return cv::Mat(); }
-    cv::Mat bgr_float;
-    bgr.convertTo(bgr_float, CV_32F, 1.0 / 255.0);
-    cv::Mat lab;
-    cv::cvtColor(bgr_float, lab, cv::COLOR_BGR2Lab);
-    return lab;
-}
+// detail::BgrToLab removed: superseded by ChromaPrint3D::BgrToLab in
+// `chromaprint3d/color/image.h`, which self-implements the project D65 Lab
+// pipeline (no OpenCV cvtColor(BGR2Lab) call).
 
 } // namespace ChromaPrint3D::detail

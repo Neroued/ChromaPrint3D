@@ -100,18 +100,12 @@ json ColorDbBuildResultToJson(const ColorDB& db) {
 
     json entries = json::array();
     for (const auto& entry : db.entries) {
-        Rgb rgb    = entry.lab.ToRgb();
-        uint8_t r8 = 0, g8 = 0, b8 = 0;
-        rgb.ToRgb255(r8, g8, b8);
-        char hex_buf[8];
-        std::snprintf(hex_buf, sizeof(hex_buf), "#%02X%02X%02X", r8, g8, b8);
-
         json recipe_arr = json::array();
         for (uint8_t v : entry.recipe) { recipe_arr.push_back(static_cast<int>(v)); }
 
         entries.push_back({
-            {"lab", {entry.lab.x, entry.lab.y, entry.lab.z}},
-            {"hex", std::string(hex_buf)},
+            {"lab", {entry.lab.l(), entry.lab.a(), entry.lab.b()}},
+            {"hex", entry.lab.ToHex()},
             {"recipe", std::move(recipe_arr)},
         });
     }

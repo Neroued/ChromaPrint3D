@@ -50,8 +50,8 @@ TEST(LayerPreview, RasterPreviewAndLayerPreviewKeepTransparency) {
     map.recipes      = {0, 1};
     map.mask         = {255, 0};
     map.mapped_color = {
-        Lab::FromRgb(Rgb::FromRgb255(255, 0, 0)),
-        Lab::FromRgb(Rgb::FromRgb255(0, 255, 0)),
+        Lab::FromRgb(SrgbU8(255, 0, 0).ToRgb()),
+        Lab::FromRgb(SrgbU8(0, 255, 0).ToRgb()),
     };
 
     std::vector<Channel> palette = {
@@ -101,7 +101,7 @@ TEST(LayerPreview, VectorLayerPreviewPngsContainAllLayers) {
     recipe_map.color_layers = 2;
     recipe_map.num_channels = 2;
     recipe_map.entries.push_back(VectorRecipeMap::ShapeEntry{
-        0, std::vector<uint8_t>{0, 1}, Lab::FromRgb(Rgb::FromRgb255(255, 255, 255)), false});
+        0, std::vector<uint8_t>{0, 1}, Lab::FromRgb(SrgbU8(255, 255, 255).ToRgb()), false});
 
     std::vector<Channel> palette = {
         Channel{"Green", "PLA"},
@@ -142,7 +142,7 @@ TEST(LayerPreview, VectorPreviewAndLayerPreviewKeepTransparentBackground) {
     recipe_map.color_layers = 1;
     recipe_map.num_channels = 1;
     recipe_map.entries.push_back(VectorRecipeMap::ShapeEntry{
-        0, std::vector<uint8_t>{0}, Lab::FromRgb(Rgb::FromRgb255(255, 0, 0)), false});
+        0, std::vector<uint8_t>{0}, Lab::FromRgb(SrgbU8(255, 0, 0).ToRgb()), false});
 
     std::vector<Channel> palette = {
         Channel{"Red", "PLA"},

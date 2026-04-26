@@ -1,5 +1,6 @@
 #include "bambu_metadata.h"
 
+#include "chromaprint3d/color.h"
 #include "chromaprint3d/error.h"
 #include "chromaprint3d/flush_calculator.h"
 
@@ -65,20 +66,14 @@ std::string XmlAttrEscape(std::string_view in) {
     return out;
 }
 
-std::tuple<int, int, int> ParseHexRGB(const std::string& hex) {
-    if (hex.size() >= 7 && hex[0] == '#') {
-        unsigned long val = std::strtoul(hex.c_str() + 1, nullptr, 16);
-        return {static_cast<int>((val >> 16) & 0xFF), static_cast<int>((val >> 8) & 0xFF),
-                static_cast<int>(val & 0xFF)};
-    }
-    return {255, 255, 255};
-}
+// Local ParseHexRGB / RGBDistanceSq removed in the color-unification refactor.
+// Hex parsing now goes through `SrgbU8::FromHex`; integer byte distance via
+// `SrgbU8DistanceSq`. Note `SrgbU8::FromHex` rejects 8-digit RGBA input —
+// the BambuStudio filament_colour list is RGB hex only, so this is safe.
 
-int RGBDistanceSq(const std::tuple<int, int, int>& a, const std::tuple<int, int, int>& b) {
-    int dr = std::get<0>(a) - std::get<0>(b);
-    int dg = std::get<1>(a) - std::get<1>(b);
-    int db = std::get<2>(a) - std::get<2>(b);
-    return dr * dr + dg * dg + db * db;
+SrgbU8 ParseFilamentHexOrWhite(const std::string& hex) {
+    if (auto parsed = SrgbU8::FromHex(hex); parsed) return *parsed;
+    return SrgbU8{255, 255, 255};
 }
 
 void PatchFlushMatrix(nlohmann::json& j, const std::vector<int>& matrix) {
@@ -140,12 +135,12 @@ int MatchColorToSlot(const std::string& hex_color,
                      const std::vector<std::string>& filament_colours) {
     if (filament_colours.empty()) return 1;
 
-    auto target  = ParseHexRGB(hex_color);
-    int best_idx = 0;
-    int best_d   = std::numeric_limits<int>::max();
+    const SrgbU8 target = ParseFilamentHexOrWhite(hex_color);
+    int best_idx        = 0;
+    int best_d          = std::numeric_limits<int>::max();
     for (int i = 0; i < static_cast<int>(filament_colours.size()); ++i) {
-        auto fc = ParseHexRGB(filament_colours[static_cast<size_t>(i)]);
-        int d   = RGBDistanceSq(target, fc);
+        const SrgbU8 fc = ParseFilamentHexOrWhite(filament_colours[static_cast<size_t>(i)]);
+        int d           = SrgbU8DistanceSq(target, fc);
         if (d == 0) return i + 1;
         if (d < best_d) {
             best_d   = d;

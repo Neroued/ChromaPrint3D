@@ -9,14 +9,17 @@
 ///
 /// The formula operates on **gamma-encoded** sRGB (byte / 255), matching
 /// BambuStudio (RGB2HSV is given gamma-encoded inputs without decoding).
+/// All color types come from the unified `chromaprint3d/color/*` module:
+/// `SrgbU8` carries the gamma-encoded byte triple, `Hsv::FromSrgbU8` runs
+/// the BBS-parity HSV conversion, and `HsvDistanceBbs` gives the polar
+/// HSV distance used by the flush formula.
 
 #include "chromaprint3d/flush_calculator.h"
 
-#include "detail/layer_preview_color.h" // TryParseHexColor
+#include "chromaprint3d/color.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <numbers>
 #include <string>
 
@@ -24,87 +27,36 @@ namespace ChromaPrint3D {
 
 namespace {
 
-/// 24-bit gamma-encoded sRGB triplet (parsed from `#RRGGBB`).
-struct RgbU8 {
-    std::uint8_t r = 0;
-    std::uint8_t g = 0;
-    std::uint8_t b = 0;
-};
-
-bool ParseHexToRgbU8(std::string_view hex, RgbU8& out) {
-    std::uint8_t r = 0, g = 0, b = 0;
-    if (!detail::TryParseHexColor(std::string(hex), r, g, b)) return false;
-    out = RgbU8{r, g, b};
-    return true;
-}
-
-// RGB → HSV (BBS-equivalent). Input r,g,b in [0,1] *gamma-encoded*; output
-// h ∈ [0,360], s,v ∈ [0,1]. Mirrors BambuStudio
-// `slic3r/Utils/ColorSpaceConvert.cpp::RGB2HSV` byte-for-byte.
-void RgbToHsv(float r, float g, float b, float& h, float& s, float& v) {
-    const float Cmax  = std::max({r, g, b});
-    const float Cmin  = std::min({r, g, b});
-    const float delta = Cmax - Cmin;
-
-    if (std::abs(delta) < 0.001f) {
-        h = 0.0f;
-    } else if (Cmax == r) {
-        h = 60.0f * std::fmod((g - b) / delta, 6.0f);
-    } else if (Cmax == g) {
-        h = 60.0f * ((b - r) / delta + 2.0f);
-    } else {
-        h = 60.0f * ((r - g) / delta + 4.0f);
-    }
-
-    s = (std::abs(Cmax) < 0.001f) ? 0.0f : (delta / Cmax);
-    v = Cmax;
-}
-
 float DegToRad(float deg) {
     constexpr float kPi = std::numbers::pi_v<float>;
     return deg / 180.0f * kPi;
-}
-
-// HSV "color distance" used by the BBS fallback formula.
-float DeltaHsBbs(float h1, float s1, float v1, float h2, float s2, float v2) {
-    const float h1r = DegToRad(h1);
-    const float h2r = DegToRad(h2);
-    const float dx  = std::cos(h1r) * s1 * v1 - std::cos(h2r) * s2 * v2;
-    const float dy  = std::sin(h1r) * s1 * v1 - std::sin(h2r) * s2 * v2;
-    return std::min(1.2f, std::sqrt(dx * dx + dy * dy));
 }
 
 float CalcTriangle3rdEdge(float a, float b, float deg_ab) {
     return std::sqrt(a * a + b * b - 2.0f * a * b * std::cos(DegToRad(deg_ab)));
 }
 
-float Luminance(float r, float g, float b) { return 0.30f * r + 0.59f * g + 0.11f * b; }
+float Luminance(const SrgbU8& c) {
+    return 0.30f * (c.r / 255.0f) + 0.59f * (c.g / 255.0f) + 0.11f * (c.b / 255.0f);
+}
 
 // HSV-based formula: BambuStudio `calc_flush_vol_rgb`, gamma-encoded inputs.
 // Returns flush volume in mm³ (no min/max clamp here; caller adds the
 // constant baseline and clamps).
-float CalcFlushVolRgb(const RgbU8& src, const RgbU8& dst) {
-    const float src_r_f = src.r / 255.0f;
-    const float src_g_f = src.g / 255.0f;
-    const float src_b_f = src.b / 255.0f;
-    const float dst_r_f = dst.r / 255.0f;
-    const float dst_g_f = dst.g / 255.0f;
-    const float dst_b_f = dst.b / 255.0f;
+float CalcFlushVolRgb(const SrgbU8& src, const SrgbU8& dst) {
+    Hsv hsv_from = Hsv::FromSrgbU8(src);
+    Hsv hsv_to   = Hsv::FromSrgbU8(dst);
 
-    float h_from = 0, s_from = 0, v_from = 0;
-    float h_to = 0, s_to = 0, v_to = 0;
-    RgbToHsv(src_r_f, src_g_f, src_b_f, h_from, s_from, v_from);
-    RgbToHsv(dst_r_f, dst_g_f, dst_b_f, h_to, s_to, v_to);
-    float hs_dist = DeltaHsBbs(h_from, s_from, v_from, h_to, s_to, v_to);
+    float hs_dist = HsvDistanceBbs(hsv_from, hsv_to);
 
-    const float from_lumi = Luminance(src_r_f, src_g_f, src_b_f);
-    const float to_lumi   = Luminance(dst_r_f, dst_g_f, dst_b_f);
+    const float from_lumi = Luminance(src);
+    const float to_lumi   = Luminance(dst);
     float lumi_flush      = 0.0f;
     if (to_lumi >= from_lumi) {
         lumi_flush = std::pow(to_lumi - from_lumi, 0.7f) * 560.0f;
     } else {
         lumi_flush              = (from_lumi - to_lumi) * 80.0f;
-        const float inter_hsv_v = 0.67f * v_to + 0.33f * v_from;
+        const float inter_hsv_v = 0.67f * hsv_to.v() + 0.33f * hsv_from.v();
         hs_dist                 = std::min(inter_hsv_v, hs_dist);
     }
     const float hs_flush = 230.0f * hs_dist;
@@ -119,12 +71,12 @@ FlushVolumeCalculator::FlushVolumeCalculator(int min_flush_volume, int max_flush
     : min_flush_volume_(min_flush_volume), max_flush_volume_(max_flush_volume) {}
 
 int FlushVolumeCalculator::Calc(std::string_view src_hex, std::string_view dst_hex) const {
-    RgbU8 src{255, 255, 255};
-    RgbU8 dst{255, 255, 255};
     // Unparseable hex (or transparent) is treated as white — matches BBS
     // behaviour and keeps a malformed palette entry from blowing up export.
-    ParseHexToRgbU8(src_hex, src);
-    ParseHexToRgbU8(dst_hex, dst);
+    SrgbU8 src{255, 255, 255};
+    SrgbU8 dst{255, 255, 255};
+    if (auto parsed = SrgbU8::FromHex(src_hex); parsed) src = *parsed;
+    if (auto parsed = SrgbU8::FromHex(dst_hex); parsed) dst = *parsed;
 
     float volume = CalcFlushVolRgb(src, dst) + static_cast<float>(min_flush_volume_);
     return std::min(static_cast<int>(volume), max_flush_volume_);

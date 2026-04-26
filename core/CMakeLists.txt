@@ -38,6 +38,9 @@ target_include_directories(chromaprint3d SYSTEM PRIVATE
 # ── Sources ──────────────────────────────────────────────────────────────────
 
 target_sources(chromaprint3d PRIVATE
+    src/color/conversions.cpp
+    src/color/parse.cpp
+    src/color/image.cpp
     src/common/common.cpp
     src/common/image_io.cpp
     src/imgproc/raster_proc.cpp

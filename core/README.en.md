@@ -136,14 +136,23 @@ All public functions throw subclasses of `ChromaPrint3D::Error` instead of bare 
 
 ### vec3 / color — Math and Color Foundations
 
-**Headers:** `vec3.h`, `color.h`
+**Headers:** `vec3.h`, `color.h` (umbrella) + `color/{types,conversions,distance,parse,image}.h`
 
 - `Vec3<T>`: Integer 3-component vector template, with `Vec3i = Vec3<int32_t>` (voxel coordinates, signed offsets) and `Vec3u = Vec3<uint32_t>` (mesh triangle indices, layout-compatible with `neroued_3mf::IndexTriangle` for zero-copy 3MF export)
 - `Vec3f`: Float 3-component vector (normalization, distance, interpolation, clamping)
-- `Rgb`: Linear sRGB color (components in [0, 1]), with Lab interconversion and gamma encode/decode
-- `Lab`: CIE L\*a\*b\* color, provides `DeltaE76` color difference computation
+
+The `color/` submodule provides **four first-class types**:
+
+- `Rgb`: Linear sRGB color (float [0, 1]), strong type (does **not** inherit from `Vec3f`); Lab/Hex round-trips
+- `Lab`: CIE L\*a\*b\*, **project D65 Lab** (`(6/29)^3` threshold, D65 white point, true cbrt); `DeltaE76` provided
+- `SrgbU8`: Gamma-encoded sRGB byte triple (no alpha); `FromHex` / `ToHex` is the **only** hex parser/formatter (strictly rejects 8-digit RGBA input)
+- `Hsv`: HSV color, two semantic entries `FromRgb` (linear, scientific convention) and `FromSrgbU8` (gamma-encoded, BambuStudio byte-equivalent)
 
 Color space conversion chain: sRGB gamma ↔ linear RGB ↔ XYZ (D65) ↔ L\*a\*b\*
+
+**Lab math contract**: project D65 Lab is the **only** authoritative Lab implementation in the repository. `color/image.h::BgrToLab` self-implements the full BGR→linear→XYZ(D65)→Lab(D65) pipeline; calls to `cv::cvtColor(BGR2Lab)` are **forbidden**. The frontend `web/frontend/src/utils/colorConvert.ts` and Python `modeling/core/color_space.py::linear_rgb_to_lab_d65` share the same math.
+
+Historical ColorDB entries (`data/dbs/**/*.json` `entries[*].lab`) come from OpenCV `cvtColor(BGR2Lab)` quantization and exhibit sub-ΔE76 drift versus project D65 (mean ~0.15 / p99 ~0.30 / max ~0.7). The project accepts this drift: historical ColorDB is **not** rebuilt, **no** `lab_math` metadata is introduced, and **no** modelpack-load compatibility check is performed; newly generated or progressively rebuilt ColorDBs naturally use project D65. See `docs/development.md` "Lab math" section.
 
 ### kdtree — KD-Tree Nearest Neighbor Search
 

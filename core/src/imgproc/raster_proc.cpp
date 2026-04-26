@@ -1,5 +1,6 @@
 #include "chromaprint3d/raster_proc.h"
 #include "chromaprint3d/color.h"
+#include "chromaprint3d/color/image.h"
 #include "chromaprint3d/error.h"
 #include "detail/cv_utils.h"
 #include "detail/icc_utils.h"
@@ -37,30 +38,8 @@ static int NormalizeOddKernel(int k) {
     return (k % 2 == 0) ? (k + 1) : k;
 }
 
-static const cv::Mat& SrgbToLinearLut() {
-    static const cv::Mat lut = []() {
-        cv::Mat table(1, 256, CV_32FC1);
-        float* ptr = table.ptr<float>();
-        for (int i = 0; i < 256; ++i) { ptr[i] = SrgbToLinear(static_cast<float>(i) / 255.0f); }
-        return table;
-    }();
-    return lut;
-}
-
-static cv::Mat BgrToRgbLinear(const cv::Mat& bgr) {
-    cv::Mat rgb;
-    cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
-
-    cv::Mat channels[3];
-    cv::split(rgb, channels);
-
-    const cv::Mat& lut = SrgbToLinearLut();
-    for (int c = 0; c < 3; ++c) { cv::LUT(channels[c], lut, channels[c]); }
-
-    cv::Mat rgb_linear;
-    cv::merge(channels, 3, rgb_linear);
-    return rgb_linear;
-}
+// SrgbToLinearLut + BgrToRgbLinear deleted in the color-unification refactor;
+// see `chromaprint3d/color/image.h::BgrToLinearRgb`.
 
 static std::string PathStem(const std::string& path) {
     if (path.empty()) { return {}; }
@@ -99,9 +78,9 @@ RasterProcResult RasterProc::Run(const cv::Mat& input, const std::string& name) 
     result.name   = name;
     result.width  = resized.cols;
     result.height = resized.rows;
-    result.rgb    = BgrToRgbLinear(denoised);
+    result.rgb    = BgrToLinearRgb(denoised);
     result.mask   = mask;
-    result.lab    = detail::BgrToLab(denoised);
+    result.lab    = BgrToLab(denoised);
     return result;
 }
 

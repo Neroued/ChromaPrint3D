@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 import msgpack
 import numpy as np
 
-from modeling.core.color_space import linear_rgb_to_opencv_lab_batch
+from modeling.core.color_space import linear_rgb_to_lab_d65
 from modeling.core.forward_model import (
     load_stage_forward_model,
     predict_linear_batch as predict_with_stage_model,
@@ -253,7 +253,7 @@ def main() -> int:
             recipes, stage_model, layer_height_mm, micro_h, base_channel_idx,
             args.layer_order, substrate_idx,
         )
-        pred_lab = linear_rgb_to_opencv_lab_batch(linear_rgb)
+        pred_lab = linear_rgb_to_lab_d65(linear_rgb)
 
         recipes_bin = recipes.astype(np.uint8).tobytes()
         pred_lab_bin = pred_lab.astype("<f4").tobytes()
