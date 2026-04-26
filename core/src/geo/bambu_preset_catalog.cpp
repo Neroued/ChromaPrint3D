@@ -71,17 +71,13 @@ std::optional<std::pair<float, float>> ParsePrintableAreaSize(const nlohmann::js
     if (!pa[2].is_string()) return std::nullopt;
 
     std::string s = pa[2].get<std::string>();
-    auto is_space = [](char c) {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-    };
+    auto is_space = [](char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; };
     while (!s.empty() && is_space(s.front())) s.erase(s.begin());
     while (!s.empty() && is_space(s.back())) s.pop_back();
     if (s.empty()) return std::nullopt;
 
     const auto x_pos = s.find('x');
-    if (x_pos == std::string::npos || x_pos == 0 || x_pos + 1 >= s.size()) {
-        return std::nullopt;
-    }
+    if (x_pos == std::string::npos || x_pos == 0 || x_pos + 1 >= s.size()) { return std::nullopt; }
 
     try {
         const float w = std::stof(s.substr(0, x_pos));
@@ -386,8 +382,7 @@ BambuPresetCatalog::GetMachineSummary(std::string_view machine_name) const {
     // the same printer_model (sanity-checked at load).
     const std::string slug_prefix = rec.slug + "_";
     for (const auto& [stem, meta] : base_meta_cache_) {
-        if (stem.compare(0, slug_prefix.size(), slug_prefix) == 0 &&
-            !meta.printer_model.empty()) {
+        if (stem.compare(0, slug_prefix.size(), slug_prefix) == 0 && !meta.printer_model.empty()) {
             summary.printer_model = meta.printer_model;
             break;
         }
