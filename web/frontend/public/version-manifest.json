@@ -1,7 +1,7 @@
 {
-  "version": "1.3.3-rc.2",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.3-rc.2",
-  "changelog": "- 新增多机型支持，覆盖 13 款 Bambu Lab 打印机（P1/X1/A1/H2 等系列）\n- 大尺寸 3MF 文件生成与下载的稳定性提升",
-  "changelog_en": "- Added multi-machine support covering 13 Bambu Lab printers (P1/X1/A1/H2 series, etc.)\n- Improved reliability when generating and downloading large 3MF files",
-  "published_at": "2026-04-26"
+  "version": "1.3.3",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.3",
+  "changelog": "- 新增多机型工艺参数支持\n- 耗材冲刷预写入\n- 大尺寸 3MF 文件生成与下载稳定性提升",
+  "changelog_en": "- Added multi-machine process parameter support\n- Pre-injected filament purge matrix\n- Improved reliability when generating and downloading large 3MF files",
+  "published_at": "2026-04-27"
 }
