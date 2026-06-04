@@ -672,10 +672,7 @@ function resetOriginalComparePlacement() {
 
   setOriginalCompareBox({
     left: ORIGINAL_COMPARE_MARGIN,
-    top:
-      bounds.height > 0
-        ? Math.max(ORIGINAL_COMPARE_MARGIN, bounds.height - height - ORIGINAL_COMPARE_MARGIN)
-        : ORIGINAL_COMPARE_MARGIN,
+    top: ORIGINAL_COMPARE_MARGIN,
     width,
     height,
   })
@@ -1091,6 +1088,7 @@ onUnmounted(() => {
       </div>
 
       <CustomRecipeDialog
+        v-if="!fullscreenOpen"
         v-model:show="showCustomRecipeDialog"
         :task-id="taskId"
         :initial-recipe="customRecipeInitialRecipe"
@@ -1144,265 +1142,277 @@ onUnmounted(() => {
   </NCard>
 
   <Teleport to="body">
-    <div v-if="fullscreenOpen && summary" class="recipe-editor-fullscreen">
-      <div class="recipe-editor-fullscreen__toolbar">
-        <NSpace align="center" :size="12" class="recipe-editor-fullscreen__title-group">
-          <NText strong class="recipe-editor-fullscreen__title">
-            {{ t('recipeEditor.fullscreenTitle') }}
-          </NText>
-          <NText depth="3" class="recipe-editor-fullscreen__meta">
-            {{ summary.width }} × {{ summary.height }}
-          </NText>
-        </NSpace>
+    <template v-if="fullscreenOpen && summary">
+      <div class="recipe-editor-fullscreen">
+        <div class="recipe-editor-fullscreen__toolbar">
+          <NSpace align="center" :size="12" class="recipe-editor-fullscreen__title-group">
+            <NText strong class="recipe-editor-fullscreen__title">
+              {{ t('recipeEditor.fullscreenTitle') }}
+            </NText>
+            <NText depth="3" class="recipe-editor-fullscreen__meta">
+              {{ summary.width }} × {{ summary.height }}
+            </NText>
+          </NSpace>
 
-        <NSpace align="center" :size="10" class="recipe-editor-fullscreen__actions">
-          <NTooltip>
-            <template #trigger>
-              <NSpace :size="6" align="center">
-                <NText depth="3" class="recipe-editor-fullscreen__tool-label">
-                  {{ t('recipeEditor.globalModeLabel') }}
-                </NText>
-                <NSwitch v-model:value="globalMode" size="small" />
-              </NSpace>
-            </template>
-            {{ t('recipeEditor.globalModeTooltip') }}
-          </NTooltip>
-          <NButton size="small" secondary :disabled="!hasSelection" @click="clearSelection">
-            {{ t('recipeEditor.clearSelection') }}
-          </NButton>
-          <NButton
-            size="small"
-            secondary
-            :disabled="!canUndo || replacing || generating"
-            @click="handleUndo"
-          >
-            {{ t('recipeEditor.undo') }}
-          </NButton>
-          <NButton
-            type="primary"
-            size="small"
-            :loading="generating"
-            :disabled="!canGenerate"
-            @click="handleGenerate"
-          >
-            {{ generateButtonLabel }}
-          </NButton>
-          <NButton
-            v-if="generateDone"
-            type="success"
-            size="small"
-            :loading="downloading3mf"
-            @click="handleDownload3MF"
-          >
-            {{ t('recipeEditor.download3mf') }}
-          </NButton>
-          <NButton size="small" quaternary @click="closeFullscreenEditor">
-            {{ t('recipeEditor.fullscreenClose') }}
-          </NButton>
-        </NSpace>
-      </div>
-
-      <div
-        ref="fullscreenBodyRef"
-        class="recipe-editor-fullscreen__body"
-        :style="fullscreenBodyStyle"
-      >
-        <section class="recipe-editor-fullscreen__stage">
-          <div
-            ref="fullscreenPreviewAreaRef"
-            class="recipe-editor-preview recipe-editor-preview--fullscreen"
-            @mousedown="recordMouseDown"
-            @click="handleFullscreenViewportClick"
-            @mousemove="handleFullscreenPreviewMouseMove"
-            @mouseleave="handlePreviewMouseLeave"
-          >
-            <ZoomableImageViewport
-              :src="previewBlobUrl"
-              alt="recipe preview"
-              height="100%"
-              :controller="panZoom"
-              :content-width="summary.width"
-              :content-height="summary.height"
-            >
-              <template #default="{ transform, effectiveScale }">
-                <RegionOverlayCanvas
-                  :region-map="regionMap"
-                  :selected-region-ids="selectedRegionIds"
-                  :transform="transform"
-                  :effective-scale="effectiveScale"
-                  :source-width="summary.width"
-                  :source-height="summary.height"
-                />
+          <NSpace align="center" :size="10" class="recipe-editor-fullscreen__actions">
+            <NTooltip>
+              <template #trigger>
+                <NSpace :size="6" align="center">
+                  <NText depth="3" class="recipe-editor-fullscreen__tool-label">
+                    {{ t('recipeEditor.globalModeLabel') }}
+                  </NText>
+                  <NSwitch v-model:value="globalMode" size="small" />
+                </NSpace>
               </template>
-            </ZoomableImageViewport>
-
-            <NButton
-              v-if="isViewTransformed"
-              class="recipe-editor-reset-zoom"
-              size="tiny"
-              secondary
-              @click.stop="panZoom.resetView()"
-            >
-              {{ t('recipeEditor.resetZoom') }}
+              {{ t('recipeEditor.globalModeTooltip') }}
+            </NTooltip>
+            <NButton size="small" secondary :disabled="!hasSelection" @click="clearSelection">
+              {{ t('recipeEditor.clearSelection') }}
             </NButton>
-
-            <div
-              v-if="originalPreviewUrl && !originalCompareCollapsed"
-              class="recipe-editor-original-compare"
-              :style="originalCompareStyle"
-              @mousedown.stop
-              @mousemove.stop
-              @click.stop
-              @wheel.stop
+            <NButton
+              size="small"
+              secondary
+              :disabled="!canUndo || replacing || generating"
+              @click="handleUndo"
             >
-              <div
-                class="recipe-editor-original-compare__header"
-                @mousedown.stop.prevent="startOriginalCompareDrag"
-              >
-                <NText strong class="recipe-editor-original-compare__title">
-                  {{ t('recipeEditor.originalCompare') }}
-                </NText>
-                <NButton
-                  size="tiny"
-                  quaternary
-                  @mousedown.stop
-                  @click="originalCompareCollapsed = true"
-                >
-                  {{ t('recipeEditor.originalCompareCollapse') }}
-                </NButton>
-              </div>
+              {{ t('recipeEditor.undo') }}
+            </NButton>
+            <NButton
+              type="primary"
+              size="small"
+              :loading="generating"
+              :disabled="!canGenerate"
+              @click="handleGenerate"
+            >
+              {{ generateButtonLabel }}
+            </NButton>
+            <NButton
+              v-if="generateDone"
+              type="success"
+              size="small"
+              :loading="downloading3mf"
+              @click="handleDownload3MF"
+            >
+              {{ t('recipeEditor.download3mf') }}
+            </NButton>
+            <NButton size="small" quaternary @click="closeFullscreenEditor">
+              {{ t('recipeEditor.fullscreenClose') }}
+            </NButton>
+          </NSpace>
+        </div>
+
+        <div
+          ref="fullscreenBodyRef"
+          class="recipe-editor-fullscreen__body"
+          :style="fullscreenBodyStyle"
+        >
+          <section class="recipe-editor-fullscreen__stage">
+            <div
+              ref="fullscreenPreviewAreaRef"
+              class="recipe-editor-preview recipe-editor-preview--fullscreen"
+              @mousedown="recordMouseDown"
+              @click="handleFullscreenViewportClick"
+              @mousemove="handleFullscreenPreviewMouseMove"
+              @mouseleave="handlePreviewMouseLeave"
+            >
               <ZoomableImageViewport
-                :src="originalPreviewUrl"
-                alt="original preview"
-                :height="originalCompareViewportHeight"
-                :checkerboard="true"
-              />
+                :src="previewBlobUrl"
+                alt="recipe preview"
+                height="100%"
+                :controller="panZoom"
+                :content-width="summary.width"
+                :content-height="summary.height"
+              >
+                <template #default="{ transform, effectiveScale }">
+                  <RegionOverlayCanvas
+                    :region-map="regionMap"
+                    :selected-region-ids="selectedRegionIds"
+                    :transform="transform"
+                    :effective-scale="effectiveScale"
+                    :source-width="summary.width"
+                    :source-height="summary.height"
+                  />
+                </template>
+              </ZoomableImageViewport>
+
+              <NButton
+                v-if="isViewTransformed"
+                class="recipe-editor-reset-zoom"
+                size="tiny"
+                secondary
+                @click.stop="panZoom.resetView()"
+              >
+                {{ t('recipeEditor.resetZoom') }}
+              </NButton>
+
               <div
-                class="recipe-editor-original-compare__resize-handle"
-                role="separator"
-                :aria-label="t('recipeEditor.resizeOriginalCompare')"
-                @mousedown.stop.prevent="startOriginalCompareResize"
+                v-if="originalPreviewUrl && !originalCompareCollapsed"
+                class="recipe-editor-original-compare"
+                :style="originalCompareStyle"
+                @mousedown.stop
+                @mousemove.stop
+                @click.stop
+                @wheel.stop
+              >
+                <div
+                  class="recipe-editor-original-compare__header"
+                  @mousedown.stop.prevent="startOriginalCompareDrag"
+                >
+                  <NText strong class="recipe-editor-original-compare__title">
+                    {{ t('recipeEditor.originalCompare') }}
+                  </NText>
+                  <NButton
+                    size="tiny"
+                    quaternary
+                    @mousedown.stop
+                    @click="originalCompareCollapsed = true"
+                  >
+                    {{ t('recipeEditor.originalCompareCollapse') }}
+                  </NButton>
+                </div>
+                <ZoomableImageViewport
+                  :src="originalPreviewUrl"
+                  alt="original preview"
+                  :height="originalCompareViewportHeight"
+                  :checkerboard="true"
+                />
+                <div
+                  class="recipe-editor-original-compare__resize-handle"
+                  role="separator"
+                  :aria-label="t('recipeEditor.resizeOriginalCompare')"
+                  @mousedown.stop.prevent="startOriginalCompareResize"
+                />
+              </div>
+
+              <NButton
+                v-else-if="originalPreviewUrl"
+                class="recipe-editor-original-compare-toggle"
+                :style="originalCompareToggleStyle"
+                size="tiny"
+                secondary
+                @mousedown.stop
+                @click.stop="originalCompareCollapsed = false"
+              >
+                {{ t('recipeEditor.originalCompareExpand') }}
+              </NButton>
+            </div>
+
+            <div class="recipe-editor-infobar recipe-editor-infobar--fullscreen">
+              <template v-if="hoverInfo">
+                <span>{{ hoverInfo.px }}, {{ hoverInfo.py }}</span>
+                <template v-if="hoverInfo.regionId !== null">
+                  <span class="recipe-editor-infobar__sep">·</span>
+                  <span>{{ t('recipeEditor.infoRegion', { id: hoverInfo.regionId }) }}</span>
+                </template>
+                <template v-if="hoverInfo.recipeLabel">
+                  <span class="recipe-editor-infobar__sep">·</span>
+                  <span
+                    class="recipe-editor-infobar__swatch"
+                    :style="{ backgroundColor: hoverInfo.recipeHex ?? 'transparent' }"
+                  />
+                  <span style="font-family: monospace">{{ hoverInfo.recipeLabel }}</span>
+                </template>
+              </template>
+              <span v-else class="recipe-editor-infobar__hint">
+                {{ t('recipeEditor.infobarHint') }}
+              </span>
+            </div>
+          </section>
+
+          <div
+            class="recipe-editor-fullscreen__vertical-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-label="t('recipeEditor.resizeEditorColumns')"
+            @mousedown="startFullscreenSideResize"
+          />
+
+          <aside
+            ref="fullscreenSideRef"
+            class="recipe-editor-fullscreen__side"
+            :style="fullscreenSideStyle"
+          >
+            <div class="recipe-editor-fullscreen__status">
+              <NText v-if="replacing" depth="3" class="recipe-editor-fullscreen__status-text">
+                {{ t('recipeEditor.replacing') }}
+              </NText>
+              <NAlert v-if="generateDone && !editedAfterGenerate" type="success" :bordered="false">
+                {{ t('recipeEditor.generateSuccess') }}
+              </NAlert>
+              <NAlert v-if="editedAfterGenerate" type="warning" :bordered="false">
+                {{ t('recipeEditor.staleWarning') }}
+              </NAlert>
+              <NAlert
+                v-if="generateError"
+                type="error"
+                closable
+                :bordered="false"
+                @close="generateError = null"
+              >
+                {{ generateError }}
+              </NAlert>
+            </div>
+
+            <div class="recipe-editor-fullscreen__summary-panel">
+              <RecipeSummaryPanel
+                :summary="summary"
+                :selected-recipe-index="selectedRecipeIndex"
+                @select-recipe="handleSelectRecipe"
               />
             </div>
 
-            <NButton
-              v-else-if="originalPreviewUrl"
-              class="recipe-editor-original-compare-toggle"
-              :style="originalCompareToggleStyle"
-              size="tiny"
-              secondary
-              @mousedown.stop
-              @click.stop="originalCompareCollapsed = false"
-            >
-              {{ t('recipeEditor.originalCompareExpand') }}
-            </NButton>
-          </div>
-
-          <div class="recipe-editor-infobar recipe-editor-infobar--fullscreen">
-            <template v-if="hoverInfo">
-              <span>{{ hoverInfo.px }}, {{ hoverInfo.py }}</span>
-              <template v-if="hoverInfo.regionId !== null">
-                <span class="recipe-editor-infobar__sep">·</span>
-                <span>{{ t('recipeEditor.infoRegion', { id: hoverInfo.regionId }) }}</span>
-              </template>
-              <template v-if="hoverInfo.recipeLabel">
-                <span class="recipe-editor-infobar__sep">·</span>
-                <span
-                  class="recipe-editor-infobar__swatch"
-                  :style="{ backgroundColor: hoverInfo.recipeHex ?? 'transparent' }"
-                />
-                <span style="font-family: monospace">{{ hoverInfo.recipeLabel }}</span>
-              </template>
-            </template>
-            <span v-else class="recipe-editor-infobar__hint">
-              {{ t('recipeEditor.infobarHint') }}
-            </span>
-          </div>
-        </section>
-
-        <div
-          class="recipe-editor-fullscreen__vertical-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          :aria-label="t('recipeEditor.resizeEditorColumns')"
-          @mousedown="startFullscreenSideResize"
-        />
-
-        <aside
-          ref="fullscreenSideRef"
-          class="recipe-editor-fullscreen__side"
-          :style="fullscreenSideStyle"
-        >
-          <div class="recipe-editor-fullscreen__status">
-            <NText v-if="replacing" depth="3" class="recipe-editor-fullscreen__status-text">
-              {{ t('recipeEditor.replacing') }}
-            </NText>
-            <NAlert v-if="generateDone && !editedAfterGenerate" type="success" :bordered="false">
-              {{ t('recipeEditor.generateSuccess') }}
-            </NAlert>
-            <NAlert v-if="editedAfterGenerate" type="warning" :bordered="false">
-              {{ t('recipeEditor.staleWarning') }}
-            </NAlert>
-            <NAlert
-              v-if="generateError"
-              type="error"
-              closable
-              :bordered="false"
-              @close="generateError = null"
-            >
-              {{ generateError }}
-            </NAlert>
-          </div>
-
-          <div class="recipe-editor-fullscreen__summary-panel">
-            <RecipeSummaryPanel
-              :summary="summary"
-              :selected-recipe-index="selectedRecipeIndex"
-              @select-recipe="handleSelectRecipe"
+            <div
+              class="recipe-editor-fullscreen__horizontal-resizer"
+              role="separator"
+              aria-orientation="horizontal"
+              :aria-label="t('recipeEditor.resizeEditorRows')"
+              @mousedown="startFullscreenSummaryResize"
             />
-          </div>
 
-          <div
-            class="recipe-editor-fullscreen__horizontal-resizer"
-            role="separator"
-            aria-orientation="horizontal"
-            :aria-label="t('recipeEditor.resizeEditorRows')"
-            @mousedown="startFullscreenSummaryResize"
-          />
-
-          <div class="recipe-editor-fullscreen__candidate-panel">
-            <NTabs v-model:value="rightTab" type="line" size="small" class="candidate-tabs">
-              <NTabPane
-                name="alternatives"
-                :tab="t('recipeEditor.tabs.alternatives')"
-                class="candidate-tab-pane"
-              >
-                <RecipeCandidatePanel
-                  :task-id="taskId"
-                  :target-lab="targetLab"
-                  :target-hex="targetHex"
-                  :palette="summary.palette"
-                  @select="handleCandidateSelect"
-                />
-              </NTabPane>
-              <NTabPane
-                name="custom"
-                :tab="t('recipeEditor.tabs.custom')"
-                class="candidate-tab-pane"
-              >
-                <CustomRecipeListPanel
-                  :items="customRecipes"
-                  :palette="summary.palette"
-                  :has-selection="hasSelection"
-                  @select="handleCandidateSelect"
-                  @create="openCustomRecipeDialog"
-                />
-              </NTabPane>
-            </NTabs>
-          </div>
-        </aside>
+            <div class="recipe-editor-fullscreen__candidate-panel">
+              <NTabs v-model:value="rightTab" type="line" size="small" class="candidate-tabs">
+                <NTabPane
+                  name="alternatives"
+                  :tab="t('recipeEditor.tabs.alternatives')"
+                  class="candidate-tab-pane"
+                >
+                  <RecipeCandidatePanel
+                    :task-id="taskId"
+                    :target-lab="targetLab"
+                    :target-hex="targetHex"
+                    :palette="summary.palette"
+                    @select="handleCandidateSelect"
+                  />
+                </NTabPane>
+                <NTabPane
+                  name="custom"
+                  :tab="t('recipeEditor.tabs.custom')"
+                  class="candidate-tab-pane"
+                >
+                  <CustomRecipeListPanel
+                    :items="customRecipes"
+                    :palette="summary.palette"
+                    :has-selection="hasSelection"
+                    @select="handleCandidateSelect"
+                    @create="openCustomRecipeDialog"
+                  />
+                </NTabPane>
+              </NTabs>
+            </div>
+          </aside>
+        </div>
       </div>
-    </div>
+
+      <CustomRecipeDialog
+        v-model:show="showCustomRecipeDialog"
+        :task-id="taskId"
+        :initial-recipe="customRecipeInitialRecipe"
+        :initial-hex="customRecipeInitialHex"
+        :palette="summary.palette"
+        :current-color-layers="summary.color_layers"
+        @confirm="handleCustomRecipeConfirm"
+      />
+    </template>
   </Teleport>
 </template>
 
@@ -1512,7 +1522,7 @@ onUnmounted(() => {
 .recipe-editor-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 3000;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   background: #f4f7fb;
