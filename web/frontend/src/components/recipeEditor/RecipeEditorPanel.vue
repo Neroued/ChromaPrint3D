@@ -672,10 +672,7 @@ function resetOriginalComparePlacement() {
 
   setOriginalCompareBox({
     left: ORIGINAL_COMPARE_MARGIN,
-    top:
-      bounds.height > 0
-        ? Math.max(ORIGINAL_COMPARE_MARGIN, bounds.height - height - ORIGINAL_COMPARE_MARGIN)
-        : ORIGINAL_COMPARE_MARGIN,
+    top: ORIGINAL_COMPARE_MARGIN,
     width,
     height,
   })
