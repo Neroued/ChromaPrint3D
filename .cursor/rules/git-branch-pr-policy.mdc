@@ -10,14 +10,84 @@ alwaysApply: true
 - **禁止**在 `master` 分支直接提交代码并推送。
 - 所有代码改动必须在独立分支完成，并通过 Pull Request 合并到 `master`。
 - 分支未提交 PR 前，不得视为“已完成”。
+- 提交信息必须遵循仓库 Conventional Commit 风格，不得使用普通描述句作为 commit subject。
+
+## Commit 命名规范
+
+提交信息必须使用以下格式：
+
+```text
+<type>(<scope>): <subject>
+```
+
+允许在 scope 不明确或不必要时省略 scope：
+
+```text
+<type>: <subject>
+```
+
+允许的 `type`：
+
+- `feat`：新增能力或用户可见功能
+- `fix`：缺陷修复、行为修正
+- `refactor`：不改变外部行为的重构
+- `docs`：文档或规则更新
+- `test`：测试新增或调整
+- `chore`：维护性工作
+- `ci`：CI / workflow 调整
+- `build`：构建系统或依赖调整
+- `perf`：性能优化
+- `style`：格式或样式调整
+- `release`：版本发布
+
+推荐的 `scope` 使用小写短横线命名，例如：
+
+- `recipe-editor`
+- `frontend`
+- `backend`
+- `core`
+- `docker`
+- `geo`
+
+合规示例：
+
+```text
+fix(recipe-editor): keep fullscreen popovers usable
+feat: add fullscreen recipe editor layout
+fix(geo): center 3MF on machine-specific bed
+docs(git): document commit message convention
+release: v1.3.3
+```
+
+不合规示例：
+
+```text
+Fix fullscreen recipe editor overlays
+Add fullscreen recipe editor layout
+update stuff
+```
+
+提交后必须检查最新提交标题：
+
+```bash
+git log -1 --pretty=%s
+```
+
+如发现命名不合规，必须在推送前修正：
+
+```bash
+git commit --amend -m "fix(scope): concise subject"
+```
 
 ## 标准流程
 
 1. 同步基线：`git fetch origin`，基于最新 `origin/master` 创建分支。
 2. 分支开发：在功能分支完成修改与验证。
-3. 推送分支：`git push -u origin <branch>`。
-4. 创建 PR：说明变更、验证结果、风险与回滚方案。
-5. 合并条件：CI 通过 + Code Review 通过后再合并。
+3. 提交代码：使用符合上述规范的 commit message。
+4. 提交后检查：执行 `git log -1 --pretty=%s`，确认最新提交标题合规。
+5. 推送分支：`git push -u origin <branch>`。
+6. 创建 PR：说明变更、验证结果、风险与回滚方案。
+7. 合并条件：CI 通过 + Code Review 通过后再合并。
 
 ## 分支命名建议
 
