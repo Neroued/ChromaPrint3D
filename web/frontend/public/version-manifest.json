@@ -1,7 +1,7 @@
 {
-  "version": "1.3.3",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.3",
-  "changelog": "- 新增多机型工艺参数支持\n- 耗材冲刷预写入\n- 大尺寸 3MF 文件生成与下载稳定性提升",
-  "changelog_en": "- Added multi-machine process parameter support\n- Pre-injected filament purge matrix\n- Improved reliability when generating and downloading large 3MF files",
-  "published_at": "2026-04-27"
+  "version": "1.3.4-rc.1",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.4-rc.1",
+  "changelog": "- 新增配方编辑器全屏编辑模式",
+  "changelog_en": "- Added fullscreen editing mode for the recipe editor",
+  "published_at": "2026-06-04"
 }
