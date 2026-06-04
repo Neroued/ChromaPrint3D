@@ -14,6 +14,7 @@ import {
   readRasterImageDimensions,
   validateImageUploadFile,
 } from '../domain/upload/imageUploadValidation'
+import { createSvgPreviewWithoutStroke } from '../domain/upload/svgPreview'
 import { getUploadMaxMb, getUploadMaxPixels } from '../runtime/env'
 import { useI18n } from 'vue-i18n'
 import { trackEvent } from '../services/analytics'
@@ -103,6 +104,14 @@ async function syncImageDimensions(file: File) {
   appStore.setImageDimensions(dims)
 }
 
+async function syncSvgPreview(file: File) {
+  const currentVersion = dimensionsTaskVersion
+  const previewBlob = await createSvgPreviewWithoutStroke(file).catch(() => file)
+  if (currentVersion !== dimensionsTaskVersion || selectedFile.value !== file) return
+  revokeUrl(previewUrl.value)
+  previewUrl.value = createUrl(previewBlob)
+}
+
 watch(
   () => selectedFile.value,
   (newFile) => {
@@ -116,12 +125,13 @@ watch(
       detectedType.value = type
       appStore.setInputType(type)
 
-      previewUrl.value = createUrl(newFile)
       if (type === 'raster') {
+        previewUrl.value = createUrl(newFile)
         void syncImageDimensions(newFile)
       } else {
         dimensions.value = null
         appStore.setImageDimensions(null)
+        void syncSvgPreview(newFile)
       }
     } else {
       fileList.value = []
