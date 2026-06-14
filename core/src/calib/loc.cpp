@@ -232,6 +232,24 @@ static std::vector<cv::Point2f> OrderCorners(const std::vector<cv::Point2f>& pts
     return {tl, tr, br, bl};
 }
 
+static std::vector<cv::Point2f> OrderByImagePosition(const std::vector<cv::Point2f>& pts) {
+    if (pts.size() != 4) { throw InputError("OrderByImagePosition expects 4 points"); }
+    cv::Point2f tl, tr, br, bl;
+    double min_sum  = std::numeric_limits<double>::infinity();
+    double max_sum  = -std::numeric_limits<double>::infinity();
+    double min_diff = std::numeric_limits<double>::infinity();
+    double max_diff = -std::numeric_limits<double>::infinity();
+    for (const auto& p : pts) {
+        double sum  = p.x + p.y;
+        double diff = p.x - p.y;
+        if (sum < min_sum) { min_sum = sum, tl = p; }
+        if (sum > max_sum) { max_sum = sum, br = p; }
+        if (diff < min_diff) { min_diff = diff, bl = p; }
+        if (diff > max_diff) { max_diff = diff, tr = p; }
+    }
+    return {tl, tr, br, bl};
+}
+
 static std::vector<cv::Point2f> CoarseLocateBoard(const cv::Mat& bgr, double& scale_out) {
     const int width  = bgr.cols;
     const int height = bgr.rows;
@@ -494,9 +512,173 @@ static BoardGeometry ComputeBoardGeometry(const CalibrationBoardMeta& meta) {
     return g;
 }
 
+static float Distance(const cv::Point2f& a, const cv::Point2f& b) {
+    const cv::Point2f d = a - b;
+    return std::sqrt(d.x * d.x + d.y * d.y);
+}
+
+static std::vector<cv::Point2f> RotateCornerOrder(const std::vector<cv::Point2f>& corners,
+                                                  int offset) {
+    if (corners.size() != 4) { throw InputError("RotateCornerOrder expects 4 points"); }
+    std::vector<cv::Point2f> rotated(4);
+    for (int i = 0; i < 4; ++i) { rotated[static_cast<size_t>(i)] = corners[(offset + i) % 4]; }
+    return rotated;
+}
+
+static double AspectPenaltyForCanonicalOrder(const std::vector<cv::Point2f>& corners,
+                                             double expected_aspect) {
+    const float top     = Distance(corners[0], corners[1]);
+    const float right   = Distance(corners[1], corners[2]);
+    const float bottom  = Distance(corners[3], corners[2]);
+    const float left    = Distance(corners[0], corners[3]);
+    const double avg_w  = (static_cast<double>(top) + bottom) * 0.5;
+    const double avg_h  = (static_cast<double>(left) + right) * 0.5;
+    const double aspect = avg_h > 1e-3 ? avg_w / avg_h : 0.0;
+    return std::abs(std::log(std::max(1e-3, aspect / expected_aspect)));
+}
+
+static std::vector<cv::Point2f> InferBoardCornersFromGlobalFiducials(const cv::Mat& bgr,
+                                                                     const BoardGeometry& geom) {
+    cv::Mat gray;
+    cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+    cv::medianBlur(gray, gray, 5);
+
+    const int max_dim   = std::max(bgr.cols, bgr.rows);
+    const int board_dim = std::max(geom.board_w, geom.board_h);
+    const float nominal_radius =
+        board_dim > 0 ? (static_cast<float>(max_dim) * geom.main_r / static_cast<float>(board_dim))
+                      : 0.0f;
+    const int min_radius =
+        std::max(3, static_cast<int>(std::floor(std::max(2.0f, nominal_radius * 0.25f))));
+    const int max_radius = std::max(
+        min_radius + 2, static_cast<int>(std::ceil(std::max(8.0f, nominal_radius * 2.5f))));
+
+    std::vector<cv::Vec3f> circles;
+    cv::HoughCircles(gray, circles, cv::HOUGH_GRADIENT, 1.2,
+                     std::max(12.0, static_cast<double>(max_dim) * 0.04), 100.0, 25.0, min_radius,
+                     max_radius);
+    if (circles.size() < 4) {
+        throw InputError("Failed to detect calibration board fiducial holes");
+    }
+
+    struct Candidate {
+        cv::Point2f center;
+        float radius = 0.0f;
+        float score  = 0.0f;
+    };
+
+    const cv::Point2f image_center(static_cast<float>(bgr.cols) * 0.5f,
+                                   static_cast<float>(bgr.rows) * 0.5f);
+    std::vector<Candidate> candidates;
+    candidates.reserve(circles.size());
+    for (const auto& c : circles) {
+        Candidate candidate;
+        candidate.center = cv::Point2f(c[0], c[1]);
+        candidate.radius = c[2];
+        candidate.score  = Distance(candidate.center, image_center);
+        if (nominal_radius > 1.0f) {
+            candidate.score -= std::abs(candidate.radius - nominal_radius) * 4.0f;
+        }
+        candidates.push_back(candidate);
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+    if (candidates.size() > 120) { candidates.resize(120); }
+
+    const double image_area = static_cast<double>(bgr.cols) * static_cast<double>(bgr.rows);
+    const double expected_aspect =
+        geom.board_h > 0 ? static_cast<double>(geom.board_w) / static_cast<double>(geom.board_h)
+                         : 1.0;
+
+    double best_score = -1.0;
+    std::vector<cv::Point2f> best_quad;
+    const int n = static_cast<int>(candidates.size());
+    for (int a = 0; a < n; ++a) {
+        for (int b = a + 1; b < n; ++b) {
+            for (int c = b + 1; c < n; ++c) {
+                for (int d = c + 1; d < n; ++d) {
+                    std::vector<cv::Point2f> quad = OrderByImagePosition({
+                        candidates[static_cast<size_t>(a)].center,
+                        candidates[static_cast<size_t>(b)].center,
+                        candidates[static_cast<size_t>(c)].center,
+                        candidates[static_cast<size_t>(d)].center,
+                    });
+
+                    bool unique = true;
+                    for (int i = 0; i < 4; ++i) {
+                        for (int j = i + 1; j < 4; ++j) {
+                            if (Distance(quad[static_cast<size_t>(i)],
+                                         quad[static_cast<size_t>(j)]) < 20.0f) {
+                                unique = false;
+                            }
+                        }
+                    }
+                    if (!unique) { continue; }
+
+                    const float top      = Distance(quad[0], quad[1]);
+                    const float right    = Distance(quad[1], quad[2]);
+                    const float bottom   = Distance(quad[3], quad[2]);
+                    const float left     = Distance(quad[0], quad[3]);
+                    const float min_side = std::min({top, right, bottom, left});
+                    if (min_side < static_cast<float>(std::min(bgr.cols, bgr.rows)) * 0.20f) {
+                        continue;
+                    }
+
+                    const double area = std::abs(cv::contourArea(quad));
+                    if (area < image_area * 0.12) { continue; }
+
+                    const double image_avg_w    = (static_cast<double>(top) + bottom) * 0.5;
+                    const double image_avg_h    = (static_cast<double>(left) + right) * 0.5;
+                    const double rectangularity = (image_avg_w > 1e-3 && image_avg_h > 1e-3)
+                                                      ? area / (image_avg_w * image_avg_h)
+                                                      : 0.0;
+                    if (rectangularity < 0.45) { continue; }
+
+                    const double shape_score = area * std::min(1.0, rectangularity);
+                    for (int offset = 0; offset < 4; ++offset) {
+                        std::vector<cv::Point2f> oriented_quad = RotateCornerOrder(quad, offset);
+                        const double aspect_penalty =
+                            AspectPenaltyForCanonicalOrder(oriented_quad, expected_aspect);
+                        const double score = shape_score / (1.0 + aspect_penalty);
+                        if (score > best_score) {
+                            best_score = score;
+                            best_quad  = std::move(oriented_quad);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (best_quad.size() != 4) {
+        throw InputError("Failed to infer calibration board corners from fiducial holes");
+    }
+
+    std::vector<cv::Point2f> board_corners = {
+        cv::Point2f(0.0f, 0.0f),
+        cv::Point2f(static_cast<float>(geom.board_w - 1), 0.0f),
+        cv::Point2f(static_cast<float>(geom.board_w - 1), static_cast<float>(geom.board_h - 1)),
+        cv::Point2f(0.0f, static_cast<float>(geom.board_h - 1)),
+    };
+    cv::Mat H_main_to_img = cv::getPerspectiveTransform(geom.canonical_main, best_quad);
+    std::vector<cv::Point2f> inferred_board_corners;
+    cv::perspectiveTransform(board_corners, inferred_board_corners, H_main_to_img);
+
+    spdlog::info(
+        "Coarse board outline fallback: inferred board corners from global fiducial holes");
+    return inferred_board_corners;
+}
+
 static std::vector<cv::Point2f> DetectFiducials(const cv::Mat& bgr, const BoardGeometry& geom) {
-    double coarse_scale                     = 1.0;
-    std::vector<cv::Point2f> coarse_corners = CoarseLocateBoard(bgr, coarse_scale);
+    double coarse_scale = 1.0;
+    std::vector<cv::Point2f> coarse_corners;
+    try {
+        coarse_corners = CoarseLocateBoard(bgr, coarse_scale);
+    } catch (const InputError& e) {
+        spdlog::warn("Coarse board outline locate failed: {}; trying fiducial-hole fallback",
+                     e.what());
+        coarse_corners = InferBoardCornersFromGlobalFiducials(bgr, geom);
+    }
 
     std::vector<cv::Point2f> board_corners = {
         cv::Point2f(0.0f, 0.0f),
