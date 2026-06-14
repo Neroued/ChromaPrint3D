@@ -294,6 +294,7 @@ ServiceResult CalibrationService::LocateBoard(const std::vector<uint8_t>& image,
         out["image_height"] = result.image_height;
         return ServiceResult::Success(200, std::move(out));
     } catch (const std::exception& e) {
+        spdlog::warn("LocateBoard failed: {}", e.what());
         return ServiceResult::Error(422, "locate_failed", e.what());
     }
 }
