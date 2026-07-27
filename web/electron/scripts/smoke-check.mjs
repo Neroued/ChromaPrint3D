@@ -91,10 +91,13 @@ function hasAnyColorDbJson(rootDir) {
 }
 
 function checkBackendExecutable(binaryPath) {
-  const result = spawnSync(binaryPath, ['--help'], {
+  // With shell:true on Windows the command line is not auto-quoted, so paths
+  // containing spaces must be wrapped explicitly.
+  const useShell = process.platform === 'win32'
+  const result = spawnSync(useShell ? `"${binaryPath}"` : binaryPath, ['--help'], {
     stdio: 'pipe',
     windowsHide: true,
-    shell: process.platform === 'win32',
+    shell: useShell,
   })
   if (result.error) {
     throw result.error

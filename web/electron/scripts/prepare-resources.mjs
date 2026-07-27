@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -76,7 +77,9 @@ function ensureCleanDir(dirPath) {
   mkdirSync(dirPath, { recursive: true })
 }
 
-function copyDirContents(srcDir, destDir) {
+// Uses async fs.cp: fs.cpSync({recursive}) hard-crashes (0xC0000409) on some
+// Node 24.x Windows builds when the path contains non-ASCII characters.
+async function copyDirContents(srcDir, destDir) {
   if (!existsSync(srcDir)) {
     fail(`Directory does not exist: ${srcDir}`)
   }
@@ -85,7 +88,7 @@ function copyDirContents(srcDir, destDir) {
   for (const entry of entries) {
     const sourcePath = path.join(srcDir, entry.name)
     const targetPath = path.join(destDir, entry.name)
-    cpSync(sourcePath, targetPath, { recursive: true })
+    await cp(sourcePath, targetPath, { recursive: true })
   }
 }
 
@@ -407,20 +410,20 @@ async function prepare() {
   if (!existsSync(path.join(frontendSourceDir, 'index.html'))) {
     fail(`Frontend artifact is invalid (index.html not found): ${frontendSourceDir}`)
   }
-  copyDirContents(frontendSourceDir, frontendTargetDir)
+  await copyDirContents(frontendSourceDir, frontendTargetDir)
 
   const backendArchive = resolveBackendArchive()
   const unpackDir = mkdtempSync(path.join(tmpdir(), 'chromaprint3d-backend-'))
   try {
     extractArchive(backendArchive, unpackDir)
-    copyDirContents(unpackDir, backendTargetDir)
+    await copyDirContents(unpackDir, backendTargetDir)
   } finally {
     rmSync(unpackDir, { recursive: true, force: true })
   }
 
   normalizeMacBackendDependencies()
 
-  copyDirContents(dataSourceDir, dataTargetDir)
+  await copyDirContents(dataSourceDir, dataTargetDir)
   await prepareIcons()
   assertPreparedResources()
 
