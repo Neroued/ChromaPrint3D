@@ -55,11 +55,43 @@ struct RingInfo {
     int owner_outer = -1;
 };
 
-constexpr float kDegenerateAreaThreshold = 1e-10f;
+// Double-precision cross product of (p→q) × (q→r). Matches the arithmetic
+// used by earcut's internal `area()` check exactly: float inputs widen to
+// double, both products are exact (24-bit mantissas), so a zero result here
+// is zero inside earcut too.
+double CrossD(const Vec2f& p, const Vec2f& q, const Vec2f& r) {
+    return (static_cast<double>(q.y) - static_cast<double>(p.y)) *
+               (static_cast<double>(r.x) - static_cast<double>(q.x)) -
+           (static_cast<double>(q.x) - static_cast<double>(p.x)) *
+               (static_cast<double>(r.y) - static_cast<double>(q.y));
+}
 
-bool IsDegenerateTriangle2D(const Vec2f& a, const Vec2f& b, const Vec2f& c) {
-    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-    return std::abs(cross) < kDegenerateAreaThreshold;
+// Remove consecutive duplicate points and exactly-collinear points, using the
+// same predicate as earcut's `filterPoints` (duplicate successor, or
+// double-precision cross == 0). earcut silently drops such points from its
+// triangulation, so any point left in the ring but unused by earcut would
+// desynchronize cap boundary edges from the side walls ExtrudeSlab builds
+// from this very ring — producing open edges. Cleaning up-front keeps both
+// consumers in lockstep. Rings reduced below 3 points are emptied.
+void CleanRing(Contour& ring) {
+    bool changed = true;
+    while (changed && ring.size() >= 3) {
+        changed = false;
+        for (size_t i = 0; i < ring.size() && ring.size() >= 3;) {
+            const size_t n    = ring.size();
+            const Vec2f& prev = ring[(i + n - 1) % n];
+            const Vec2f& cur  = ring[i];
+            const Vec2f& next = ring[(i + 1) % n];
+            bool duplicate    = (cur.x == next.x && cur.y == next.y);
+            if (duplicate || CrossD(prev, cur, next) == 0.0) {
+                ring.erase(ring.begin() + static_cast<std::ptrdiff_t>(i));
+                changed = true;
+            } else {
+                ++i;
+            }
+        }
+    }
+    if (ring.size() < 3) { ring.clear(); }
 }
 
 } // namespace
@@ -132,56 +164,56 @@ TriangulatedRegion TriangulateMergedPaths(const Clipper2Lib::Paths64& paths) {
         }
     }
 
-    // Build polygon_groups: each group = [outer, hole1, hole2, ...]
+    // Build candidate groups: each group = [outer, hole1, hole2, ...].
+    // Rings are cleaned right after float conversion so triangulation and
+    // wall extrusion later operate on the identical point set.
+    std::vector<std::vector<Contour>> groups;
     std::vector<int> outer_to_group(rings.size(), -1);
     for (int oid : outer_ids) {
         Contour outer_contour = Path64ToContour(rings[static_cast<size_t>(oid)].path);
+        CleanRing(outer_contour);
         if (outer_contour.size() < 3) continue;
-        outer_to_group[static_cast<size_t>(oid)] = static_cast<int>(result.polygon_groups.size());
-        result.polygon_groups.push_back({std::move(outer_contour)});
+        outer_to_group[static_cast<size_t>(oid)] = static_cast<int>(groups.size());
+        groups.push_back({std::move(outer_contour)});
     }
     for (size_t i = 0; i < rings.size(); ++i) {
         if (rings[i].is_outer || rings[i].owner_outer < 0) continue;
         int group_idx = outer_to_group[static_cast<size_t>(rings[i].owner_outer)];
         if (group_idx < 0) continue;
         Contour hole_contour = Path64ToContour(rings[i].path);
+        CleanRing(hole_contour);
         if (hole_contour.size() < 3) continue;
-        result.polygon_groups[static_cast<size_t>(group_idx)].push_back(std::move(hole_contour));
+        groups[static_cast<size_t>(group_idx)].push_back(std::move(hole_contour));
     }
 
-    // Triangulate each group with earcut.
-    for (const auto& group : result.polygon_groups) {
+    // Triangulate each group with earcut. A group is committed to the result
+    // only when it yields triangles: committing a group without caps would
+    // make ExtrudeSlab emit side walls around an open tube (open edges).
+    // Every earcut triangle is kept — zero-area triangles with distinct
+    // indices are topologically required for watertightness, and slicers'
+    // index-based diagnostics do not flag them.
+    for (auto& group : groups) {
         if (group.empty()) continue;
 
-        std::vector<std::vector<Vec2f>> polygon;
-        polygon.reserve(group.size());
         size_t total_pts = 0;
-        for (const auto& ring : group) {
-            total_pts += ring.size();
-            polygon.push_back(ring);
-        }
-        if (polygon.empty()) continue;
+        for (const auto& ring : group) { total_pts += ring.size(); }
 
-        std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+        std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(group);
+        if (indices.empty()) continue;
 
         size_t base = result.vertices.size();
         result.vertices.reserve(base + total_pts);
-        for (const auto& ring : polygon) {
+        for (const auto& ring : group) {
             for (const Vec2f& p : ring) result.vertices.push_back(p);
         }
 
-        if (indices.empty()) continue;
-
         result.triangles.reserve(result.triangles.size() + indices.size() / 3);
         for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-            uint32_t i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
-            const auto& v0 = result.vertices[base + i0];
-            const auto& v1 = result.vertices[base + i1];
-            const auto& v2 = result.vertices[base + i2];
-            if (IsDegenerateTriangle2D(v0, v1, v2)) continue;
-            result.triangles.emplace_back(CheckedU32Index(base + i0), CheckedU32Index(base + i1),
-                                          CheckedU32Index(base + i2));
+            result.triangles.emplace_back(CheckedU32Index(base + indices[i]),
+                                          CheckedU32Index(base + indices[i + 1]),
+                                          CheckedU32Index(base + indices[i + 2]));
         }
+        result.polygon_groups.push_back(std::move(group));
     }
 
     return result;

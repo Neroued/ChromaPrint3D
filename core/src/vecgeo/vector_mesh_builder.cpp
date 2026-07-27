@@ -222,17 +222,17 @@ void ExtrudeSlab(const detail::TriangulatedRegion& region, float z_bot, float z_
                              CheckedU32Index(base + N + t.y)});
     }
 
-    constexpr float kMinEdgeLenSq = 1e-12f;
-
     size_t offset = 0;
     for (const auto& group : region.polygon_groups) {
         for (const auto& ring : group) {
             const size_t n = ring.size();
             for (size_t i = 0; i < n; ++i) {
                 size_t j = (i + 1) % n;
-                float dx = ring[static_cast<size_t>(j)].x - ring[static_cast<size_t>(i)].x;
-                float dy = ring[static_cast<size_t>(j)].y - ring[static_cast<size_t>(i)].y;
-                if (dx * dx + dy * dy < kMinEdgeLenSq) continue;
+                // Skip only exactly coincident points. Rings are pre-cleaned in
+                // TriangulateMergedPaths, so this is a safety net; any epsilon
+                // here would drop wall quads whose cap boundary edges still
+                // exist, creating open edges.
+                if (ring[j].x == ring[i].x && ring[j].y == ring[i].y) continue;
 
                 uint32_t ti = CheckedU32Index(base + offset + i);
                 uint32_t tj = CheckedU32Index(base + offset + j);
