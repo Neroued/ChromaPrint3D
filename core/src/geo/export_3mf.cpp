@@ -275,7 +275,12 @@ neroued_3mf::Document BuildBambuDocument(const std::vector<InputObject>& objects
     }
 
     builder.EnableProduction(neroued_3mf::Transform::Translation(center_tx, center_ty, 0));
-    builder.SetProductionMergeObjects(true);
+    // One external file per object (3D/Objects/object_N.model). Merged mode
+    // (all objects in object_1.model) is avoided on purpose: BambuStudio's
+    // vendored expat uses 32-bit XML_Size on Windows and aborts parsing any
+    // sub-model file whose uncompressed XML exceeds 2 GiB, so large multi-
+    // channel exports would fail to import.
+    builder.SetProductionMergeObjects(false);
     builder.AddExternalModelMetadata("BambuStudio:3mfVersion", "1");
 
     detail::ExportedGroup group;
