@@ -4,9 +4,14 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace ChromaPrint3D {
 namespace {
@@ -26,6 +31,192 @@ uint32_t CheckedU32Index(std::size_t value) {
 uint32_t CheckedU32Coord(int value) {
     if (value < 0) { throw InputError("Mesh coordinate is negative"); }
     return static_cast<uint32_t>(value);
+}
+
+inline uint64_t UndirectedEdgeKey(uint32_t a, uint32_t b) {
+    if (b < a) { std::swap(a, b); }
+    return (static_cast<uint64_t>(a) << 32) | b;
+}
+
+// Grid cell of the solid voxel bounded by triangle `tri` on the side adjacent
+// to the unit edge (va, vb). Faces meeting at a diagonal-contact edge are
+// paired by this cell so each solid keeps its own topological shell.
+std::array<int, 3> OwnerCellAtEdge(const Vec3u& tri, const std::vector<Vec3u>& grid_pts,
+                                   uint32_t va, uint32_t vb) {
+    const Vec3u& g0 = grid_pts[tri.x];
+    const Vec3u& g1 = grid_pts[tri.y];
+    const Vec3u& g2 = grid_pts[tri.z];
+    const int P[3][3] = {
+        {static_cast<int>(g0.x), static_cast<int>(g0.y), static_cast<int>(g0.z)},
+        {static_cast<int>(g1.x), static_cast<int>(g1.y), static_cast<int>(g1.z)},
+        {static_cast<int>(g2.x), static_cast<int>(g2.y), static_cast<int>(g2.z)},
+    };
+
+    int d = 0;
+    for (int k = 0; k < 3; ++k) {
+        if (P[0][k] == P[1][k] && P[1][k] == P[2][k]) {
+            d = k;
+            break;
+        }
+    }
+    const int u = (d + 1) % 3;
+    const int v = (d + 2) % 3;
+
+    // CCW in the (u, v) plane means the face normal points along +d, so the
+    // solid voxel sits on the (slice - 1) side.
+    const int64_t signed2 =
+        static_cast<int64_t>(P[1][u] - P[0][u]) * static_cast<int64_t>(P[2][v] - P[0][v]) -
+        static_cast<int64_t>(P[1][v] - P[0][v]) * static_cast<int64_t>(P[2][u] - P[0][u]);
+
+    const int A[3] = {static_cast<int>(grid_pts[va].x), static_cast<int>(grid_pts[va].y),
+                      static_cast<int>(grid_pts[va].z)};
+    const int B[3] = {static_cast<int>(grid_pts[vb].x), static_cast<int>(grid_pts[vb].y),
+                      static_cast<int>(grid_pts[vb].z)};
+
+    std::array<int, 3> cell{};
+    cell[d] = (signed2 > 0) ? P[0][d] - 1 : P[0][d];
+    if (A[u] != B[u]) {
+        cell[u]        = std::min(A[u], B[u]);
+        const int m    = A[v];
+        const int gsum = P[0][v] + P[1][v] + P[2][v];
+        cell[v]        = (gsum > 3 * m) ? m : m - 1;
+    } else {
+        cell[v]        = std::min(A[v], B[v]);
+        const int m    = A[u];
+        const int gsum = P[0][u] + P[1][u] + P[2][u];
+        cell[u]        = (gsum > 3 * m) ? m : m - 1;
+    }
+    return cell;
+}
+
+// Voxel solids that touch only along a grid edge share that edge between four
+// faces after positional vertex welding, which slicers report as non-manifold
+// edges. For each such edge one solid keeps the straight edge while the other
+// re-routes its two faces through a midpoint nudged slightly into its own
+// voxel, so every edge ends up used by exactly two faces again. Unlike
+// splitting the vertex fans this stays correct when the two solids are also
+// connected elsewhere (pinched shells sandwiched between common layers).
+void SplitNonManifoldContacts(Mesh& mesh, const std::vector<Vec3u>& grid_pts, float offset_mm) {
+    if (mesh.indices.empty()) { return; }
+
+    std::vector<uint64_t> edge_keys;
+    edge_keys.reserve(mesh.indices.size() * 3);
+    for (const Vec3u& t : mesh.indices) {
+        edge_keys.push_back(UndirectedEdgeKey(t.x, t.y));
+        edge_keys.push_back(UndirectedEdgeKey(t.y, t.z));
+        edge_keys.push_back(UndirectedEdgeKey(t.z, t.x));
+    }
+    std::sort(edge_keys.begin(), edge_keys.end());
+
+    std::unordered_set<uint64_t> nm_edges;
+    for (size_t i = 0; i < edge_keys.size();) {
+        size_t j = i + 1;
+        while (j < edge_keys.size() && edge_keys[j] == edge_keys[i]) { ++j; }
+        if (j - i > 2) { nm_edges.insert(edge_keys[i]); }
+        i = j;
+    }
+    edge_keys.clear();
+    edge_keys.shrink_to_fit();
+    if (nm_edges.empty()) { return; }
+
+    struct NmFace {
+        uint32_t tri;
+        std::array<int, 3> owner;
+    };
+    std::unordered_map<uint64_t, std::vector<NmFace>> nm_faces;
+    nm_faces.reserve(nm_edges.size());
+    for (uint32_t ti = 0; ti < mesh.indices.size(); ++ti) {
+        const Vec3u& t       = mesh.indices[ti];
+        const uint32_t vs[3] = {t.x, t.y, t.z};
+        for (int e = 0; e < 3; ++e) {
+            const uint32_t a   = vs[e];
+            const uint32_t b   = vs[(e + 1) % 3];
+            const uint64_t key = UndirectedEdgeKey(a, b);
+            if (nm_edges.count(key) != 0) {
+                nm_faces[key].push_back({ti, OwnerCellAtEdge(t, grid_pts, a, b)});
+            }
+        }
+    }
+
+    // A subdivision may move an edge of another tracked non-manifold edge onto
+    // the appended triangle; its face record has to follow.
+    auto retarget = [&](uint32_t a, uint32_t b, uint32_t from, uint32_t to) {
+        auto it = nm_faces.find(UndirectedEdgeKey(a, b));
+        if (it == nm_faces.end()) { return; }
+        for (NmFace& f : it->second) {
+            if (f.tri == from) {
+                f.tri = to;
+                return;
+            }
+        }
+    };
+
+    size_t rerouted = 0;
+    for (auto& [key, faces] : nm_faces) {
+        const uint32_t va = static_cast<uint32_t>(key >> 32);
+        const uint32_t vb = static_cast<uint32_t>(key & 0xffffffffu);
+
+        // Group the faces by the solid voxel they bound at this edge.
+        std::vector<std::pair<std::array<int, 3>, std::vector<size_t>>> groups;
+        for (size_t fi = 0; fi < faces.size(); ++fi) {
+            auto it = std::find_if(groups.begin(), groups.end(),
+                                   [&](const auto& g) { return g.first == faces[fi].owner; });
+            if (it == groups.end()) {
+                groups.push_back({faces[fi].owner, {fi}});
+            } else {
+                it->second.push_back(fi);
+            }
+        }
+
+        const Vec3u& A       = grid_pts[va];
+        const Vec3u& B       = grid_pts[vb];
+        const int a_coord[3] = {static_cast<int>(A.x), static_cast<int>(A.y),
+                                static_cast<int>(A.z)};
+        const int b_coord[3] = {static_cast<int>(B.x), static_cast<int>(B.y),
+                                static_cast<int>(B.z)};
+
+        // The first solid keeps the straight edge; every other one detours its
+        // face pair through a midpoint nudged into its own voxel interior.
+        for (size_t gi = 1; gi < groups.size(); ++gi) {
+            if (groups[gi].second.size() != 2) {
+                spdlog::warn("SplitNonManifoldContacts: edge {}-{} bounds {} faces of one voxel, "
+                             "skipped",
+                             va, vb, groups[gi].second.size());
+                continue;
+            }
+
+            const auto& pa = mesh.vertices[va];
+            const auto& pb = mesh.vertices[vb];
+            float m[3]     = {(pa.x + pb.x) * 0.5f, (pa.y + pb.y) * 0.5f, (pa.z + pb.z) * 0.5f};
+            for (int k = 0; k < 3; ++k) {
+                if (a_coord[k] != b_coord[k]) { continue; } // edge axis stays at the midpoint
+                m[k] += (groups[gi].first[k] == a_coord[k]) ? offset_mm : -offset_mm;
+            }
+            const uint32_t mid = CheckedU32Index(mesh.vertices.size());
+            mesh.vertices.emplace_back(m[0], m[1], m[2]);
+
+            for (const size_t fi : groups[gi].second) {
+                const uint32_t ti = faces[fi].tri;
+                Vec3u t           = mesh.indices[ti];
+                int rot           = 0;
+                while (rot < 3 &&
+                       !((t.x == va && t.y == vb) || (t.x == vb && t.y == va))) {
+                    t = Vec3u{t.y, t.z, t.x};
+                    ++rot;
+                }
+                if (rot == 3) { continue; } // stale record, should not happen
+
+                const uint32_t nt = CheckedU32Index(mesh.indices.size());
+                mesh.indices[ti]  = Vec3u{t.x, mid, t.z};
+                mesh.indices.emplace_back(mid, t.y, t.z);
+                retarget(t.y, t.z, ti, nt);
+            }
+            ++rerouted;
+        }
+    }
+
+    spdlog::debug("SplitNonManifoldContacts: {} non-manifold edges, {} face pairs rerouted",
+                  nm_edges.size(), rerouted);
 }
 } // namespace
 
@@ -230,6 +421,9 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
 
     std::unordered_map<Vec3u, uint32_t, Vec3uHash> vertex_map;
     vertex_map.reserve(estimated_surface);
+    // Integer grid coordinates per vertex, kept for topology post-processing.
+    std::vector<Vec3u> grid_pts;
+    grid_pts.reserve(estimated_surface);
 
     const float px = cfg.pixel_mm;
     const float pz = cfg.layer_height_mm;
@@ -246,17 +440,9 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
         }
         const uint32_t idx = CheckedU32Index(mesh.vertices.size());
         mesh.vertices.emplace_back(static_cast<float>(v.x) * px, static_cast<float>(v.y) * px, z);
+        grid_pts.push_back(v);
         vertex_map.emplace(v, idx);
         return idx;
-    };
-
-    auto add_quad = [&](const Vec3u& v0, const Vec3u& v1, const Vec3u& v2, const Vec3u& v3) {
-        const uint32_t i0 = add_vertex(v0);
-        const uint32_t i1 = add_vertex(v1);
-        const uint32_t i2 = add_vertex(v2);
-        const uint32_t i3 = add_vertex(v3);
-        mesh.indices.emplace_back(i0, i1, i2);
-        mesh.indices.emplace_back(i0, i2, i3);
     };
 
     auto is_filled = [&](int x, int y, int z) -> bool {
@@ -269,6 +455,58 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     };
 
     const int dims[3] = {width, height, layers};
+
+    // Emits one merged rectangle [i, i+w) x [j, j+h) in plane axis d at
+    // `slice`, triangulated so that every edge on the rectangle outline is a
+    // unit grid segment. Adjacent faces (coplanar or perpendicular) therefore
+    // always share whole edges at identical vertex indices, which is what
+    // keeps the exported mesh free of T-junction open edges while preserving
+    // the greedy merge (triangle count stays proportional to the perimeter).
+    auto emit_rect = [&](int d, int u, int v, int slice, int i, int j, int w, int h,
+                         bool positive) {
+        auto P = [&](int a, int b) {
+            int p[3] = {0, 0, 0};
+            p[d]     = slice;
+            p[u]     = a;
+            p[v]     = b;
+            return Vec3u{CheckedU32Coord(p[0]), CheckedU32Coord(p[1]), CheckedU32Coord(p[2])};
+        };
+        auto tri = [&](const Vec3u& a, const Vec3u& b, const Vec3u& c) {
+            const uint32_t ia = add_vertex(a);
+            uint32_t ib       = add_vertex(b);
+            uint32_t ic       = add_vertex(c);
+            if (!positive) { std::swap(ib, ic); }
+            mesh.indices.emplace_back(ia, ib, ic);
+        };
+
+        if (h == 1) {
+            // Single row: ladder between the two unit-tessellated long sides.
+            for (int k = 0; k < w; ++k) {
+                tri(P(i + k, j), P(i + k + 1, j), P(i + k, j + 1));
+                tri(P(i + k + 1, j), P(i + k + 1, j + 1), P(i + k, j + 1));
+            }
+            return;
+        }
+
+        // Bottom slab: fan covering the unit-tessellated bottom outline.
+        const Vec3u bl = P(i, j + 1);
+        const Vec3u br = P(i + w, j + 1);
+        for (int k = 0; k < w; ++k) { tri(bl, P(i + k, j), P(i + k + 1, j)); }
+        tri(bl, P(i + w, j), br);
+
+        // Middle slabs: interior spans are only ever shared inside this rect,
+        // so plain quads with full-width horizontal edges are safe.
+        for (int k = 1; k <= h - 2; ++k) {
+            tri(P(i, j + k), P(i + w, j + k), P(i + w, j + k + 1));
+            tri(P(i, j + k), P(i + w, j + k + 1), P(i, j + k + 1));
+        }
+
+        // Top slab: fan covering the unit-tessellated top outline.
+        const Vec3u tl = P(i, j + h - 1);
+        const Vec3u tr = P(i + w, j + h - 1);
+        tri(tl, tr, P(i + w, j + h));
+        for (int k = w - 1; k >= 0; --k) { tri(tl, P(i + k + 1, j + h), P(i + k, j + h)); }
+    };
 
     for (int d = 0; d < 3; ++d) {
         const int u = (d + 1) % 3;
@@ -320,32 +558,7 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
                         if (!ok) { break; }
                     }
 
-                    int x0[3] = {0, 0, 0};
-                    x0[u]     = i;
-                    x0[v]     = j;
-                    x0[d]     = slice;
-
-                    int x1[3] = {x0[0], x0[1], x0[2]};
-                    int x2[3] = {x0[0], x0[1], x0[2]};
-                    int x3[3] = {x0[0], x0[1], x0[2]};
-                    x1[u] += w;
-                    x2[v] += h;
-                    x3[u] += w;
-                    x3[v] += h;
-
-                    const Vec3u v0{CheckedU32Coord(x0[0]), CheckedU32Coord(x0[1]),
-                                   CheckedU32Coord(x0[2])};
-                    const Vec3u v1{CheckedU32Coord(x1[0]), CheckedU32Coord(x1[1]),
-                                   CheckedU32Coord(x1[2])};
-                    const Vec3u v2{CheckedU32Coord(x2[0]), CheckedU32Coord(x2[1]),
-                                   CheckedU32Coord(x2[2])};
-                    const Vec3u v3{CheckedU32Coord(x3[0]), CheckedU32Coord(x3[1]),
-                                   CheckedU32Coord(x3[2])};
-                    if (c > 0) {
-                        add_quad(v0, v1, v3, v2);
-                    } else {
-                        add_quad(v0, v2, v3, v1);
-                    }
+                    emit_rect(d, u, v, slice, i, j, w, h, c > 0);
 
                     for (int dy = 0; dy < h; ++dy) {
                         for (int dx = 0; dx < w; ++dx) { mask[n + dx + dy * dims[u]] = 0; }
@@ -357,6 +570,8 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
             }
         }
     }
+
+    SplitNonManifoldContacts(mesh, grid_pts, 0.125f * std::min(px, pz));
 
     if (mesh.vertices.empty() || mesh.indices.empty()) {
         spdlog::warn("Mesh::Build: ch={} produced empty mesh (vertices={}, triangles={})",

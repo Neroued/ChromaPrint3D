@@ -4,9 +4,72 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace ChromaPrint3D;
+
+namespace {
+
+struct EdgeKey {
+    uint32_t a = 0;
+    uint32_t b = 0;
+
+    bool operator==(const EdgeKey& o) const { return a == o.a && b == o.b; }
+};
+
+struct EdgeKeyHash {
+    size_t operator()(const EdgeKey& e) const {
+        size_t h = std::hash<uint32_t>{}(e.a);
+        h ^= std::hash<uint32_t>{}(e.b) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+EdgeKey MakeEdgeKey(uint32_t a, uint32_t b) {
+    if (b < a) std::swap(a, b);
+    return {a, b};
+}
+
+struct MeshTopologyMetrics {
+    size_t open_edges           = 0;
+    size_t non_manifold_edges   = 0;
+    size_t degenerate_triangles = 0;
+};
+
+// Mirrors BambuStudio's its_edge_diagnostics(): purely index-based edge
+// counting with no positional welding, matching what the slicer reports for
+// the exported per-channel meshes.
+MeshTopologyMetrics AnalyzeMeshTopology(const Mesh& mesh) {
+    MeshTopologyMetrics m;
+    std::unordered_map<EdgeKey, int, EdgeKeyHash> edge_use;
+    edge_use.reserve(mesh.indices.size() * 3);
+
+    const uint32_t max_idx = static_cast<uint32_t>(mesh.vertices.size());
+    for (const Vec3u& tri : mesh.indices) {
+        if (tri.x >= max_idx || tri.y >= max_idx || tri.z >= max_idx || tri.x == tri.y ||
+            tri.y == tri.z || tri.x == tri.z) {
+            ++m.degenerate_triangles;
+            continue;
+        }
+        ++edge_use[MakeEdgeKey(tri.x, tri.y)];
+        ++edge_use[MakeEdgeKey(tri.y, tri.z)];
+        ++edge_use[MakeEdgeKey(tri.z, tri.x)];
+    }
+
+    for (const auto& [_, count] : edge_use) {
+        if (count == 1) {
+            ++m.open_edges;
+        } else if (count > 2) {
+            ++m.non_manifold_edges;
+        }
+    }
+    return m;
+}
+
+} // namespace
 
 TEST(Mesh, BuildFromSingleVoxel) {
     VoxelGrid grid;
@@ -138,6 +201,77 @@ TEST(Mesh, InterfaceOffsetZeroGapIsNoOp) {
     Mesh m2 = Mesh::Build(grid, cfg_gap0);
     EXPECT_EQ(m1.vertices.size(), m2.vertices.size());
     EXPECT_EQ(m1.indices.size(), m2.indices.size());
+}
+
+TEST(Mesh, LShapeHasNoOpenOrNonManifoldEdges) {
+    // L-shaped footprint: greedy meshing merges it into two rectangles whose
+    // shared boundary is only partially covered, which used to leave
+    // index-level T-junctions (reported as open edges by slicers).
+    VoxelGrid grid;
+    grid.width      = 2;
+    grid.height     = 2;
+    grid.num_layers = 1;
+    grid.ooc.assign(static_cast<size_t>(2 * 2 * 1), 0);
+    grid.Set(0, 0, 0, true);
+    grid.Set(1, 0, 0, true);
+    grid.Set(0, 1, 0, true);
+
+    Mesh mesh = Mesh::Build(grid);
+    ASSERT_FALSE(mesh.indices.empty());
+
+    MeshTopologyMetrics m = AnalyzeMeshTopology(mesh);
+    EXPECT_EQ(m.open_edges, 0u);
+    EXPECT_EQ(m.non_manifold_edges, 0u);
+    EXPECT_EQ(m.degenerate_triangles, 0u);
+}
+
+TEST(Mesh, DiagonalContactHasNoNonManifoldEdges) {
+    // Checkerboard pattern: two voxels of the same channel touching only
+    // along a vertical edge. Global positional vertex welding used to give a
+    // grid edge shared by four faces (a non-manifold edge).
+    VoxelGrid grid;
+    grid.width      = 2;
+    grid.height     = 2;
+    grid.num_layers = 1;
+    grid.ooc.assign(static_cast<size_t>(2 * 2 * 1), 0);
+    grid.Set(0, 0, 0, true);
+    grid.Set(1, 1, 0, true);
+
+    Mesh mesh = Mesh::Build(grid);
+    ASSERT_FALSE(mesh.indices.empty());
+
+    MeshTopologyMetrics m = AnalyzeMeshTopology(mesh);
+    EXPECT_EQ(m.open_edges, 0u);
+    EXPECT_EQ(m.non_manifold_edges, 0u);
+    EXPECT_EQ(m.degenerate_triangles, 0u);
+}
+
+TEST(Mesh, FragmentedMultiColorPatternIsClean) {
+    // Pseudo-random fragmented occupancy mimicking one channel of a dithered
+    // multi-color bitmap: plenty of diagonal contacts and partial overlaps
+    // across layers must still produce a topologically clean mesh.
+    VoxelGrid grid;
+    grid.width      = 17;
+    grid.height     = 13;
+    grid.num_layers = 4;
+    grid.ooc.assign(static_cast<size_t>(17 * 13 * 4), 0);
+    uint32_t state = 0x12345678u;
+    for (int z = 0; z < 4; ++z) {
+        for (int y = 0; y < 13; ++y) {
+            for (int x = 0; x < 17; ++x) {
+                state = state * 1664525u + 1013904223u;
+                if ((state >> 16) % 3 == 0) { grid.Set(x, y, z, true); }
+            }
+        }
+    }
+
+    Mesh mesh = Mesh::Build(grid);
+    ASSERT_FALSE(mesh.indices.empty());
+
+    MeshTopologyMetrics m = AnalyzeMeshTopology(mesh);
+    EXPECT_EQ(m.open_edges, 0u);
+    EXPECT_EQ(m.non_manifold_edges, 0u);
+    EXPECT_EQ(m.degenerate_triangles, 0u);
 }
 
 TEST(Mesh, TwoGridsWithGapHaveCorrectSeparation) {
