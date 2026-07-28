@@ -1,7 +1,7 @@
 {
-  "version": "1.3.4-rc.1",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.4-rc.1",
-  "changelog": "- 新增配方编辑器全屏编辑模式",
-  "changelog_en": "- Added fullscreen editing mode for the recipe editor",
-  "published_at": "2026-06-04"
+  "version": "1.3.4-rc.2",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.4-rc.2",
+  "changelog": "- 修复位图/矢量转换产生非流形边与开放边的问题\n- 3MF 按对象拆分子模型文件，修复超大模型导入 BambuStudio 失败\n- 重写矩形剖分消除近退化薄片，修复切片卡死",
+  "changelog_en": "- Fixed non-manifold and open edges in raster/vector conversion\n- Split 3MF sub-models per object to fix BambuStudio import failure on huge models\n- Reworked rectangle triangulation to remove sliver faces that stalled slicing",
+  "published_at": "2026-07-28"
 }

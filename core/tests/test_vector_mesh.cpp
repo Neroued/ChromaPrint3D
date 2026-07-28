@@ -2,6 +2,7 @@
 
 #include "chromaprint3d/vector_mesh.h"
 #include "chromaprint3d/vector_recipe_map.h"
+#include "vecgeo/triangulate.h"
 
 #include <algorithm>
 #include <array>
@@ -77,24 +78,17 @@ FaceKey MakeFaceKey(uint32_t i0, uint32_t i1, uint32_t i2) {
     return {ids[0], ids[1], ids[2]};
 }
 
-bool IsDegenerateByArea(const Mesh& mesh, const Vec3u& tri) {
-    const Vec3f& a = mesh.vertices[static_cast<size_t>(tri.x)];
-    const Vec3f& b = mesh.vertices[static_cast<size_t>(tri.y)];
-    const Vec3f& c = mesh.vertices[static_cast<size_t>(tri.z)];
-    Vec3f ab       = b - a;
-    Vec3f ac       = c - a;
-    float cx       = ab.y * ac.z - ab.z * ac.y;
-    float cy       = ab.z * ac.x - ab.x * ac.z;
-    float cz       = ab.x * ac.y - ab.y * ac.x;
-    return (cx * cx + cy * cy + cz * cz) <= 1e-12f;
-}
-
 struct MeshTopologyMetrics {
+    size_t open_edges           = 0;
     size_t non_manifold_edges   = 0;
     size_t duplicate_faces      = 0;
     size_t degenerate_triangles = 0;
 };
 
+// Mirrors BambuStudio's its_edge_diagnostics(): purely index-based edge
+// counting with no positional welding. Only faces with repeated or
+// out-of-range indices are excluded; zero-area faces with distinct indices
+// still contribute edges, exactly as the slicer sees them.
 MeshTopologyMetrics AnalyzeMesh(const Mesh& mesh) {
     MeshTopologyMetrics m;
     std::unordered_map<EdgeKey, int, EdgeKeyHash> edge_use;
@@ -105,7 +99,7 @@ MeshTopologyMetrics AnalyzeMesh(const Mesh& mesh) {
     const uint32_t max_idx = static_cast<uint32_t>(mesh.vertices.size());
     for (const Vec3u& tri : mesh.indices) {
         if (tri.x >= max_idx || tri.y >= max_idx || tri.z >= max_idx || tri.x == tri.y ||
-            tri.y == tri.z || tri.x == tri.z || IsDegenerateByArea(mesh, tri)) {
+            tri.y == tri.z || tri.x == tri.z) {
             ++m.degenerate_triangles;
             continue;
         }
@@ -119,9 +113,56 @@ MeshTopologyMetrics AnalyzeMesh(const Mesh& mesh) {
     }
 
     for (const auto& [_, count] : edge_use) {
-        if (count != 2) ++m.non_manifold_edges;
+        if (count == 1) {
+            ++m.open_edges;
+        } else if (count > 2) {
+            ++m.non_manifold_edges;
+        }
     }
     return m;
+}
+
+// Verify the TriangulatedRegion contract required by ExtrudeSlab for a
+// watertight extrusion: vertices laid out group→ring→vertex, every ring edge
+// used exactly once by the cap triangulation (the wall quad supplies the
+// second use), and every non-ring edge used exactly twice (interior).
+void ExpectRegionExtrudable(const ChromaPrint3D::detail::TriangulatedRegion& region) {
+    size_t total_ring_pts = 0;
+    std::unordered_set<EdgeKey, EdgeKeyHash> ring_edges;
+    for (const auto& group : region.polygon_groups) {
+        for (const auto& ring : group) {
+            const size_t n = ring.size();
+            ASSERT_GE(n, 3u);
+            for (size_t i = 0; i < n; ++i) {
+                size_t j = (i + 1) % n;
+                ring_edges.insert(MakeEdgeKey(static_cast<uint32_t>(total_ring_pts + i),
+                                              static_cast<uint32_t>(total_ring_pts + j)));
+            }
+            total_ring_pts += n;
+        }
+    }
+    ASSERT_EQ(region.vertices.size(), total_ring_pts);
+
+    std::unordered_map<EdgeKey, int, EdgeKeyHash> edge_use;
+    for (const Vec3u& tri : region.triangles) {
+        ++edge_use[MakeEdgeKey(tri.x, tri.y)];
+        ++edge_use[MakeEdgeKey(tri.y, tri.z)];
+        ++edge_use[MakeEdgeKey(tri.z, tri.x)];
+    }
+
+    for (const auto& [edge, count] : edge_use) {
+        if (ring_edges.count(edge) > 0) {
+            EXPECT_EQ(count, 1) << "ring edge (" << edge.a << "," << edge.b
+                                << ") must be used exactly once by the cap";
+        } else {
+            EXPECT_EQ(count, 2) << "interior edge (" << edge.a << "," << edge.b
+                                << ") must be used exactly twice";
+        }
+    }
+    for (const EdgeKey& edge : ring_edges) {
+        EXPECT_EQ(edge_use.count(edge), 1u)
+            << "ring edge (" << edge.a << "," << edge.b << ") missing from cap triangulation";
+    }
 }
 
 std::pair<float, float> MeshZRange(const Mesh& mesh) {
@@ -152,6 +193,7 @@ TEST(VectorMesh, SingleRectangleIsWatertight) {
     ASSERT_FALSE(meshes[0].indices.empty());
 
     MeshTopologyMetrics metrics = AnalyzeMesh(meshes[0]);
+    EXPECT_EQ(metrics.open_edges, 0u);
     EXPECT_EQ(metrics.non_manifold_edges, 0u);
     EXPECT_EQ(metrics.duplicate_faces, 0u);
     EXPECT_EQ(metrics.degenerate_triangles, 0u);
@@ -174,6 +216,7 @@ TEST(VectorMesh, AdjacentRectanglesDoNotGenerateInternalWalls) {
     ASSERT_FALSE(meshes[0].indices.empty());
 
     MeshTopologyMetrics metrics = AnalyzeMesh(meshes[0]);
+    EXPECT_EQ(metrics.open_edges, 0u);
     EXPECT_EQ(metrics.non_manifold_edges, 0u);
     EXPECT_EQ(metrics.duplicate_faces, 0u);
     EXPECT_EQ(metrics.degenerate_triangles, 0u);
@@ -290,4 +333,120 @@ TEST(VectorMesh, ZeroGapIsNoOp) {
         EXPECT_EQ(m1[i].vertices.size(), m2[i].vertices.size());
         EXPECT_EQ(m1[i].indices.size(), m2[i].indices.size());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Triangulation regression tests (dirty ring inputs)
+// ---------------------------------------------------------------------------
+
+TEST(VectorTriangulate, DirtyRingWithDuplicateAndCollinearPointsStaysExtrudable) {
+    // 10mm square (Clipper scale 1e5) with a collinear midpoint on the bottom
+    // edge and a duplicated corner. earcut filters such points internally; the
+    // triangulator must strip them from the rings too, or cap boundary edges
+    // desynchronize from the side walls and become open edges.
+    Clipper2Lib::Paths64 paths;
+    paths.push_back(Clipper2Lib::Path64{
+        {0, 0}, {500000, 0}, {1000000, 0}, {1000000, 1000000}, {1000000, 1000000}, {0, 1000000}});
+
+    detail::TriangulatedRegion region = detail::TriangulateMergedPaths(paths);
+    ASSERT_EQ(region.polygon_groups.size(), 1u);
+    ASSERT_EQ(region.polygon_groups[0].size(), 1u);
+    EXPECT_EQ(region.polygon_groups[0][0].size(), 4u); // cleaned to a plain square
+    ExpectRegionExtrudable(region);
+}
+
+TEST(VectorTriangulate, ZeroAreaRingIsDroppedWithoutOrphanGroup) {
+    // A fully collinear ring collapses during cleaning / yields no earcut
+    // triangles. It must not leave a polygon group or vertices behind: an
+    // uncapped group would make ExtrudeSlab emit a side-wall tube whose two
+    // rims are entirely open edges.
+    Clipper2Lib::Paths64 paths;
+    paths.push_back(Clipper2Lib::Path64{{0, 0}, {1000000, 0}, {2000000, 0}});
+
+    detail::TriangulatedRegion region = detail::TriangulateMergedPaths(paths);
+    EXPECT_TRUE(region.polygon_groups.empty());
+    EXPECT_TRUE(region.vertices.empty());
+    EXPECT_TRUE(region.triangles.empty());
+}
+
+TEST(VectorTriangulate, Float32QuantizationCollapseIsCleaned) {
+    // At x = 200mm the float32 ulp (~1.5e-5mm) exceeds the Clipper grid step
+    // (1e-5mm): the two distinct int64 points 20000001 and 20000002 round to
+    // the same float, creating a duplicate vertex after conversion. This is
+    // the real-world source of dirty rings on large canvases.
+    Clipper2Lib::Paths64 paths;
+    paths.push_back(Clipper2Lib::Path64{
+        {0, 0}, {20000001, 0}, {20000002, 0}, {20000002, 1000000}, {0, 1000000}});
+
+    detail::TriangulatedRegion region = detail::TriangulateMergedPaths(paths);
+    ASSERT_EQ(region.polygon_groups.size(), 1u);
+    EXPECT_EQ(region.polygon_groups[0][0].size(), 4u); // duplicate collapsed
+    ExpectRegionExtrudable(region);
+}
+
+TEST(VectorTriangulate, SquareWithDirtyHoleStaysExtrudable) {
+    Clipper2Lib::Paths64 paths;
+    // Outer 20mm square with a duplicated corner.
+    paths.push_back(Clipper2Lib::Path64{
+        {0, 0}, {2000000, 0}, {2000000, 2000000}, {2000000, 2000000}, {0, 2000000}});
+    // 10mm hole with a collinear midpoint on its right edge.
+    paths.push_back(Clipper2Lib::Path64{{500000, 500000},
+                                        {1500000, 500000},
+                                        {1500000, 1000000},
+                                        {1500000, 1500000},
+                                        {500000, 1500000}});
+
+    detail::TriangulatedRegion region = detail::TriangulateMergedPaths(paths);
+    ASSERT_EQ(region.polygon_groups.size(), 1u);
+    ASSERT_EQ(region.polygon_groups[0].size(), 2u); // outer + hole
+    EXPECT_EQ(region.polygon_groups[0][0].size(), 4u);
+    EXPECT_EQ(region.polygon_groups[0][1].size(), 4u);
+    ExpectRegionExtrudable(region);
+}
+
+TEST(VectorMesh, ContourWithDuplicateAndCollinearPointsIsWatertight) {
+    // End-to-end guard: dirty input contours must still produce a mesh with
+    // zero open / non-manifold edges under index-based diagnostics.
+    VectorShape shape;
+    shape.contours.push_back(Contour{
+        {0.0f, 0.0f}, {5.0f, 0.0f}, {10.0f, 0.0f}, {10.0f, 10.0f}, {10.0f, 10.0f}, {0.0f, 10.0f}});
+
+    std::vector<VectorShape> shapes{shape};
+    VectorRecipeMap map = BuildSingleChannelRecipeMap(1);
+
+    VectorMeshConfig cfg;
+    cfg.layer_height_mm = 0.2f;
+
+    std::vector<Mesh> meshes = BuildVectorMeshes(shapes, map, cfg);
+    ASSERT_EQ(meshes.size(), 1u);
+    ASSERT_FALSE(meshes[0].indices.empty());
+
+    MeshTopologyMetrics metrics = AnalyzeMesh(meshes[0]);
+    EXPECT_EQ(metrics.open_edges, 0u);
+    EXPECT_EQ(metrics.non_manifold_edges, 0u);
+    EXPECT_EQ(metrics.duplicate_faces, 0u);
+    EXPECT_EQ(metrics.degenerate_triangles, 0u);
+}
+
+TEST(VectorMesh, HairlineSliverShapeIsWatertightOrDropped) {
+    // A 20mm × 1µm sliver survives Clipper simplification but produces
+    // near-zero-area cap triangles. They must be kept: dropping them (the old
+    // float degenerate-area filter) punched holes in the caps while the side
+    // walls still referenced those boundary edges.
+    VectorShape shape;
+    shape.contours.push_back(MakeRect(0.0f, 0.0f, 20.0f, 0.001f));
+
+    std::vector<VectorShape> shapes{shape};
+    VectorRecipeMap map = BuildSingleChannelRecipeMap(1);
+
+    VectorMeshConfig cfg;
+    cfg.layer_height_mm = 0.2f;
+
+    std::vector<Mesh> meshes = BuildVectorMeshes(shapes, map, cfg);
+    ASSERT_EQ(meshes.size(), 1u);
+
+    MeshTopologyMetrics metrics = AnalyzeMesh(meshes[0]);
+    EXPECT_EQ(metrics.open_edges, 0u);
+    EXPECT_EQ(metrics.non_manifold_edges, 0u);
+    EXPECT_EQ(metrics.duplicate_faces, 0u);
 }
