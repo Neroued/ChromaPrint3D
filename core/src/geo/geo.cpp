@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
@@ -463,11 +464,15 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     // keeps the exported mesh free of T-junction open edges while preserving
     // the greedy merge (triangle count stays proportional to the perimeter).
     //
-    // The interior is stitched row by row with u-steps doubling toward the
-    // middle, so every triangle spans exactly one grid row and its aspect
-    // ratio stays bounded. Fanning the outline from a corner instead would
-    // create near-degenerate slivers (altitude ~ unit/perimeter) on large
-    // rectangles, which collapse at slicer precision and stall slicing.
+    // The interior is fanned from per-block centers: the rectangle is cut
+    // along its longer side (in mm) into the fewest blocks that keep every
+    // fan triangle's altitude above ~30 um, each block fanned from an
+    // interior grid point. Block-to-block cuts are single full-length
+    // segments shared by the two adjacent fans, so the triangle count stays
+    // ~2(w + h) + blocks. Fanning the whole outline from one corner instead
+    // would create near-degenerate slivers (altitude ~ unit/perimeter) on
+    // large rectangles, which collapse at slicer precision and stall
+    // slicing.
     auto emit_rect = [&](int d, int u, int v, int slice, int i, int j, int w, int h,
                          bool positive) {
         auto P = [&](int a, int b) {
@@ -485,37 +490,70 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
             mesh.indices.emplace_back(ia, ib, ic);
         };
 
-        // Monotone u-chain for row r: unit steps on the outline rows (r == 0
-        // and r == h), doubling once per row toward the middle. Endpoints are
-        // always included so the vertical outline edges stay unit segments.
-        auto chain = [&](int r) {
-            const int e    = std::min({r, h - r, 30});
-            const int step = 1 << e;
-            std::vector<int> pts;
-            pts.reserve(static_cast<size_t>(w / step) + 2);
-            for (int x = 0; x < w; x += step) { pts.push_back(i + x); }
-            pts.push_back(i + w);
-            return pts;
-        };
-
-        std::vector<int> bottom = chain(0);
-        for (int r = 0; r < h; ++r) {
-            std::vector<int> top = chain(r + 1);
-            size_t ia            = 0;
-            size_t ib            = 0;
-            while (ia + 1 < bottom.size() || ib + 1 < top.size()) {
-                const bool advance_bottom =
-                    ib + 1 >= top.size() ||
-                    (ia + 1 < bottom.size() && bottom[ia + 1] <= top[ib + 1]);
-                if (advance_bottom) {
-                    tri(P(bottom[ia], j + r), P(bottom[ia + 1], j + r), P(top[ib], j + r + 1));
-                    ++ia;
-                } else {
-                    tri(P(bottom[ia], j + r), P(top[ib + 1], j + r + 1), P(top[ib], j + r + 1));
-                    ++ib;
+        // Single-row/column strips: the plain unit-step ladder is already
+        // minimal and its right triangles have bounded aspect.
+        if (w == 1 || h == 1) {
+            for (int r = 0; r < h; ++r) {
+                for (int x = 0; x < w; ++x) {
+                    tri(P(i + x, j + r), P(i + x + 1, j + r), P(i + x, j + r + 1));
+                    tri(P(i + x + 1, j + r), P(i + x + 1, j + r + 1), P(i + x, j + r + 1));
                 }
             }
-            bottom = std::move(top);
+            return;
+        }
+
+        // Cut along the longer side (in mm). The worst fan triangle sits on
+        // a long-side unit segment near a block corner: altitude ~=
+        // step_along * across_mm / (block_len_mm * sqrt(2)). Choose the
+        // fewest blocks that keep that above ~30 um.
+        const float step_u     = (u == 2) ? pz : px;
+        const float step_v     = (v == 2) ? pz : px;
+        const bool along_u     = static_cast<float>(w) * step_u >= static_cast<float>(h) * step_v;
+        const int len          = along_u ? w : h;
+        const int across       = along_u ? h : w;
+        const float step_along = along_u ? step_u : step_v;
+        const float len_mm     = static_cast<float>(len) * step_along;
+        const float across_mm  = static_cast<float>(across) * (along_u ? step_v : step_u);
+        constexpr float kMinAltitudeMm = 0.03f * 1.4142135f;
+        const int blocks               = std::clamp(
+            static_cast<int>(std::ceil(len_mm * kMinAltitudeMm / (step_along * across_mm))), 1,
+            std::max(1, len / 2));
+
+        auto Q = [&](int al, int ac) { return along_u ? P(i + al, j + ac) : P(i + ac, j + al); };
+
+        std::vector<std::pair<int, int>> loop;
+        for (int k = 0; k < blocks; ++k) {
+            const int al0 = static_cast<int>(static_cast<int64_t>(len) * k / blocks);
+            const int al1 = static_cast<int>(static_cast<int64_t>(len) * (k + 1) / blocks);
+
+            // Block boundary, counter-clockwise in (along, across). Outline
+            // sides use unit steps; internal block cuts are single segments
+            // shared verbatim by the neighbouring block's fan.
+            loop.clear();
+            for (int a = al0; a < al1; ++a) { loop.emplace_back(a, 0); }
+            if (al1 == len) {
+                for (int c = 0; c < across; ++c) { loop.emplace_back(al1, c); }
+            } else {
+                loop.emplace_back(al1, 0);
+            }
+            for (int a = al1; a > al0; --a) { loop.emplace_back(a, across); }
+            if (al0 == 0) {
+                for (int c = across; c > 0; --c) { loop.emplace_back(al0, c); }
+            } else {
+                loop.emplace_back(al0, across);
+            }
+
+            const Vec3u apex = Q((al0 + al1) / 2, across / 2);
+            for (size_t s = 0; s < loop.size(); ++s) {
+                const auto& p0 = loop[s];
+                const auto& p1 = loop[(s + 1) % loop.size()];
+                // Swapping the axes mirrors the plane, so restore the winding.
+                if (along_u) {
+                    tri(apex, Q(p0.first, p0.second), Q(p1.first, p1.second));
+                } else {
+                    tri(apex, Q(p1.first, p1.second), Q(p0.first, p0.second));
+                }
+            }
         }
     };
 
