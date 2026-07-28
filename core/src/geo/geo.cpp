@@ -462,6 +462,12 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
     // always share whole edges at identical vertex indices, which is what
     // keeps the exported mesh free of T-junction open edges while preserving
     // the greedy merge (triangle count stays proportional to the perimeter).
+    //
+    // The interior is stitched row by row with u-steps doubling toward the
+    // middle, so every triangle spans exactly one grid row and its aspect
+    // ratio stays bounded. Fanning the outline from a corner instead would
+    // create near-degenerate slivers (altitude ~ unit/perimeter) on large
+    // rectangles, which collapse at slicer precision and stall slicing.
     auto emit_rect = [&](int d, int u, int v, int slice, int i, int j, int w, int h,
                          bool positive) {
         auto P = [&](int a, int b) {
@@ -479,33 +485,38 @@ Mesh Mesh::Build(const VoxelGrid& voxel_grid, const BuildMeshConfig& cfg) {
             mesh.indices.emplace_back(ia, ib, ic);
         };
 
-        if (h == 1) {
-            // Single row: ladder between the two unit-tessellated long sides.
-            for (int k = 0; k < w; ++k) {
-                tri(P(i + k, j), P(i + k + 1, j), P(i + k, j + 1));
-                tri(P(i + k + 1, j), P(i + k + 1, j + 1), P(i + k, j + 1));
+        // Monotone u-chain for row r: unit steps on the outline rows (r == 0
+        // and r == h), doubling once per row toward the middle. Endpoints are
+        // always included so the vertical outline edges stay unit segments.
+        auto chain = [&](int r) {
+            const int e    = std::min({r, h - r, 30});
+            const int step = 1 << e;
+            std::vector<int> pts;
+            pts.reserve(static_cast<size_t>(w / step) + 2);
+            for (int x = 0; x < w; x += step) { pts.push_back(i + x); }
+            pts.push_back(i + w);
+            return pts;
+        };
+
+        std::vector<int> bottom = chain(0);
+        for (int r = 0; r < h; ++r) {
+            std::vector<int> top = chain(r + 1);
+            size_t ia            = 0;
+            size_t ib            = 0;
+            while (ia + 1 < bottom.size() || ib + 1 < top.size()) {
+                const bool advance_bottom =
+                    ib + 1 >= top.size() ||
+                    (ia + 1 < bottom.size() && bottom[ia + 1] <= top[ib + 1]);
+                if (advance_bottom) {
+                    tri(P(bottom[ia], j + r), P(bottom[ia + 1], j + r), P(top[ib], j + r + 1));
+                    ++ia;
+                } else {
+                    tri(P(bottom[ia], j + r), P(top[ib + 1], j + r + 1), P(top[ib], j + r + 1));
+                    ++ib;
+                }
             }
-            return;
+            bottom = std::move(top);
         }
-
-        // Bottom slab: fan covering the unit-tessellated bottom outline.
-        const Vec3u bl = P(i, j + 1);
-        const Vec3u br = P(i + w, j + 1);
-        for (int k = 0; k < w; ++k) { tri(bl, P(i + k, j), P(i + k + 1, j)); }
-        tri(bl, P(i + w, j), br);
-
-        // Middle slabs: interior spans are only ever shared inside this rect,
-        // so plain quads with full-width horizontal edges are safe.
-        for (int k = 1; k <= h - 2; ++k) {
-            tri(P(i, j + k), P(i + w, j + k), P(i + w, j + k + 1));
-            tri(P(i, j + k), P(i + w, j + k + 1), P(i, j + k + 1));
-        }
-
-        // Top slab: fan covering the unit-tessellated top outline.
-        const Vec3u tl = P(i, j + h - 1);
-        const Vec3u tr = P(i + w, j + h - 1);
-        tri(tl, tr, P(i + w, j + h));
-        for (int k = w - 1; k >= 0; --k) { tri(tl, P(i + k + 1, j + h), P(i + k, j + h)); }
     };
 
     for (int d = 0; d < 3; ++d) {
