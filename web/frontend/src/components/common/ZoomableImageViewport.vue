@@ -96,7 +96,7 @@ const imgStyle = computed(() => {
   if (useExplicitFit.value) {
     base.width = `${props.contentWidth}px`
     base.height = `${props.contentHeight}px`
-    base.objectFit = 'none'
+    base.objectFit = 'fill'
   }
   return base
 })
