@@ -8,6 +8,7 @@ This module locks in the contract BambuStudio relies on:
 - top-level sections: `process_common`, `process_per_nozzle`, `process_per_face`, `filament_common`
 - `process_per_nozzle` covers `0.2` and `0.4`
 - `process_per_face` covers `FaceUp` and `FaceDown`
+- optional `process_per_machine` overrides are keyed by registered machine names
 - every `$variant_indexed` dict covers all 5 known extruder variants and contains no `TODO_*` placeholders
 - `filament_common` is empty (ChromaPrint3D does not modify filament_options_with_variant fields)
 """
@@ -52,6 +53,13 @@ class CanonicalPatchesStructureTest(unittest.TestCase):
         faces = self.data["process_per_face"]
         for f in ("FaceUp", "FaceDown"):
             self.assertIn(f, faces, f"missing face section {f}")
+
+    def test_process_per_machine_uses_registered_machines(self) -> None:
+        with open(REPO_ROOT / "data/presets/machines.json", encoding="utf-8") as f:
+            machines = json.load(f)["machines"]
+        for machine, section in self.data.get("process_per_machine", {}).items():
+            self.assertIn(machine, machines)
+            self.assertIsInstance(section, dict)
 
     def test_face_down_overrides_initial_layer_print_height(self) -> None:
         self.assertEqual(

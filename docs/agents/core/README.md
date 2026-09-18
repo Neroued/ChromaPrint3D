@@ -44,6 +44,8 @@ UI 列举机型走 `BambuPresetCatalog::GetMachineSummary()`（layer-height 无�
 
 颜色匹配逻辑在 `bambu_metadata.cpp` 中：`MatchColorToSlot` 基于 RGB 欧氏距离将每个 mesh 颜色匹配到预设 `filament_colour` 数组中最近的槽位。`BuildProjectSettings` 运行时叠加 `chromaprint_patches.json`（含 `$variant_indexed` 多变体項）、按 N×K_process 扩展 filament 数组、生成 BambuStudio 必填的 3 个 variant 元字段（`extruder_variant_list`/`filament_extruder_variant`/`filament_self_index`）。导出翻转逻辑位于 `export_3mf.cpp`，与 `flip_y`（坐标系适配）解耦。
 
+擦料塔宽度由 `chromaprint_patches.json` 配置：`process_per_machine` 最后按机型覆盖，A1 mini 默认为 170 mm，其他机型为 200 mm。`BuildProjectSettings` 与 `BuildEmbeddedProcessPreset` 保持一致。
+
 ## 输入输出契约（高频）
 
 - 栅格转换编排：`ConvertRasterRequest` -> `ConvertResult`

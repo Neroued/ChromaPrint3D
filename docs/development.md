@@ -261,6 +261,8 @@ npm run dev
 
 ### 5.4 Bambu Studio 预设参数
 
+擦料塔默认宽度（`prime_tower_width`）在 A1 mini 上为 170 mm，其他机型为 200 mm，适用于 0.2/0.4 mm 喷嘴和两种观赏面方向。`chromaprint_patches.json` 的可选 `process_per_machine` 按完整机型名在 common / nozzle / face 覆盖之后应用，同时写入项目设置和内嵌工艺预设。
+
 以下参数适用于 Raster/Vector 转换端点和校准板生成端点：
 
 | 参数 | 类型 | 默认值 | 有效值 | 说明 |

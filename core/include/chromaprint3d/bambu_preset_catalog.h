@@ -81,6 +81,7 @@ struct ChromaPrintPatches {
     JsonSection process_common;
     std::map<std::string, JsonSection> process_per_nozzle; // nozzle "0.2" / "0.4"
     std::map<std::string, JsonSection> process_per_face;   // "FaceUp" / "FaceDown"
+    std::map<std::string, JsonSection> process_per_machine;
     JsonSection filament_common;
 
     static ChromaPrintPatches LoadFromFile(const std::filesystem::path& path);

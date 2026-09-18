@@ -5,6 +5,7 @@
     "  process_common: applied to all (machine × nozzle × face) combinations",
     "  process_per_nozzle.<nozzle>: applied for that nozzle, overrides process_common",
     "  process_per_face.<face>: applied for that face, overrides earlier layers",
+    "  process_per_machine.<machine>: applied last for that machine, overrides earlier layers",
     "  filament_common: applied to all filament arrays (currently empty - ChromaPrint3D",
     "                   does not modify filament_options_with_variant fields)",
     "Field categories (per BambuStudio PrintConfig.cpp):",
@@ -117,6 +118,11 @@
     "FaceUp": {},
     "FaceDown": {
       "initial_layer_print_height": "${layer_height}"
+    }
+  },
+  "process_per_machine": {
+    "Bambu Lab A1 mini": {
+      "prime_tower_width": "170"
     }
   },
   "filament_common": {}

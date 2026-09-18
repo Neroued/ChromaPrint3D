@@ -187,6 +187,7 @@ CHROMAPRINT3D_DATA_DIR=$(pwd)/data ctest --test-dir build
 - `process_common`：所有机型 + 所有 nozzle + 所有 face 都应用的 patch。
 - `process_per_nozzle.<nozzle>`：仅对该 nozzle 应用。
 - `process_per_face.<face>`：仅对该 face 应用，覆盖 per_nozzle / common。
+- `process_per_machine.<machine>`：可选，按 `machines.json` 中的完整机型名最后应用，覆盖前述各层。A1 mini 的 `prime_tower_width` 为 `170` mm，其他机型沿用 common 的 `200` mm；项目设置与内嵌工艺预设均应用此覆盖。
 - `filament_common`：当前留空；如果 ChromaPrint3D 未来需要修改 `filament_options_with_variant` 字段，在此处添加。
 
 `$variant_indexed` 字段必须覆盖所有可能出现在 `print_extruder_variant` 中的 variant 名（5 种已知：`Direct Drive Standard` / `Direct Drive High Flow` / `Direct Drive TPU High Flow` / `Bowden Standard` / `Bowden High Flow`）。漏掉某个 variant 会在 `BuildProjectSettings` 运行时 throw `chromaprint_patches.json: $variant_indexed for ... missing variant ...`。

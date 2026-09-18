@@ -874,6 +874,31 @@ void InjectFlushVolumes(nlohmann::json& final_dict, const nlohmann::json& base_d
     set_if_absent("role_base_wipe_speed", "1");
 }
 
+void ApplyProcessPatches(nlohmann::json& final_dict, const SlicerPreset& preset,
+                         const std::vector<std::string>& process_variant) {
+    if (preset.machine.patches) {
+        const auto& patches = *preset.machine.patches;
+        ApplyPatchSection(final_dict, patches.process_common, process_variant,
+                          preset.layer_height_mm);
+
+        const std::string nozzle_key = (preset.nozzle == NozzleSize::N02) ? "0.2" : "0.4";
+        auto nit                     = patches.process_per_nozzle.find(nozzle_key);
+        if (nit != patches.process_per_nozzle.end()) {
+            ApplyPatchSection(final_dict, nit->second, process_variant, preset.layer_height_mm);
+        }
+
+        const std::string face_key = FaceLabelForPatch(preset.face);
+        auto fit                   = patches.process_per_face.find(face_key);
+        if (fit != patches.process_per_face.end()) {
+            ApplyPatchSection(final_dict, fit->second, process_variant, preset.layer_height_mm);
+        }
+        auto mit = patches.process_per_machine.find(preset.machine.machine_name);
+        if (mit != patches.process_per_machine.end()) {
+            ApplyPatchSection(final_dict, mit->second, process_variant, preset.layer_height_mm);
+        }
+    }
+}
+
 } // namespace
 
 std::string BuildProjectSettings(const SlicerPreset& preset) {
@@ -912,24 +937,7 @@ std::string BuildProjectSettings(const SlicerPreset& preset) {
     }
     const std::size_t K_per_extruder = extruder0_variants.size();
 
-    // Apply ChromaPrint3D patches (process_common -> per_nozzle -> per_face).
-    if (preset.machine.patches) {
-        const auto& patches = *preset.machine.patches;
-        ApplyPatchSection(final_dict, patches.process_common, process_variant,
-                          preset.layer_height_mm);
-
-        const std::string nozzle_key = (preset.nozzle == NozzleSize::N02) ? "0.2" : "0.4";
-        auto nit                     = patches.process_per_nozzle.find(nozzle_key);
-        if (nit != patches.process_per_nozzle.end()) {
-            ApplyPatchSection(final_dict, nit->second, process_variant, preset.layer_height_mm);
-        }
-
-        const std::string face_key = FaceLabelForPatch(preset.face);
-        auto fit                   = patches.process_per_face.find(face_key);
-        if (fit != patches.process_per_face.end()) {
-            ApplyPatchSection(final_dict, fit->second, process_variant, preset.layer_height_mm);
-        }
-    }
+    ApplyProcessPatches(final_dict, preset, process_variant);
 
     // Compute dynamic diff (single concatenated `;`-joined string).
     const std::string diff_str = ComputeDynamicDiff(final_dict, base_dict);
@@ -1006,21 +1014,7 @@ std::string BuildEmbeddedProcessPreset(const SlicerPreset& preset) {
         throw FormatError("preset_base missing print_extruder_variant");
     }
 
-    if (preset.machine.patches) {
-        const auto& patches = *preset.machine.patches;
-        ApplyPatchSection(final_dict, patches.process_common, process_variant,
-                          preset.layer_height_mm);
-        const std::string nozzle_key = (preset.nozzle == NozzleSize::N02) ? "0.2" : "0.4";
-        auto nit                     = patches.process_per_nozzle.find(nozzle_key);
-        if (nit != patches.process_per_nozzle.end()) {
-            ApplyPatchSection(final_dict, nit->second, process_variant, preset.layer_height_mm);
-        }
-        const std::string face_key = FaceLabelForPatch(preset.face);
-        auto fit                   = patches.process_per_face.find(face_key);
-        if (fit != patches.process_per_face.end()) {
-            ApplyPatchSection(final_dict, fit->second, process_variant, preset.layer_height_mm);
-        }
-    }
+    ApplyProcessPatches(final_dict, preset, process_variant);
 
     const std::string diff_str = ComputeDynamicDiff(final_dict, base_dict);
 

@@ -954,6 +954,33 @@ TEST(TransparentLayer, ExportWithTransparentLayerMesh) {
 // Group 1: $variant_indexed patch application
 // ===========================================================================
 
+TEST(SlicerPreset, PrimeTowerWidthMatchesTargetMachine) {
+    auto catalog = LoadCatalogOrNull();
+    ASSERT_TRUE(catalog.has_value()) << "BambuPresetCatalog not available";
+    for (const auto& machine : catalog->ListMachines()) {
+        for (auto nozzle : {NozzleSize::N02, NozzleSize::N04}) {
+            for (auto face : {FaceOrientation::FaceUp, FaceOrientation::FaceDown}) {
+                SCOPED_TRACE(machine);
+                SCOPED_TRACE(static_cast<int>(nozzle));
+                SCOPED_TRACE(static_cast<int>(face));
+                auto preset = MakeTestPresetForMachine(*catalog, machine, nozzle, 4, face);
+                ASSERT_TRUE(preset.machine_resolved());
+                const std::string expected = machine == "Bambu Lab A1 mini" ? "170" : "200";
+                for (const auto& settings : {detail::BuildProjectSettings(preset),
+                                             detail::BuildEmbeddedProcessPreset(preset)}) {
+                    const auto j = nlohmann::json::parse(settings);
+                    EXPECT_EQ(j.at("prime_tower_width"), expected);
+                    EXPECT_NE(j.at("different_settings_to_system")
+                                  .at(0)
+                                  .get<std::string>()
+                                  .find("prime_tower_width"),
+                              std::string::npos);
+                }
+            }
+        }
+    }
+}
+
 TEST(VariantIndexed, AppliedToP2sK2) {
     auto catalog = LoadCatalogOrNull();
     if (!catalog) GTEST_SKIP() << "BambuPresetCatalog not available";

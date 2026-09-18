@@ -117,12 +117,19 @@ ChromaPrintPatches ChromaPrintPatches::LoadFromFile(const std::filesystem::path&
             out.process_per_face.emplace(it.key(), LoadSection(it.value()));
         }
     }
+    if (j.contains("process_per_machine") && j["process_per_machine"].is_object()) {
+        for (auto it = j["process_per_machine"].begin(); it != j["process_per_machine"].end();
+             ++it) {
+            out.process_per_machine.emplace(it.key(), LoadSection(it.value()));
+        }
+    }
     if (j.contains("filament_common")) out.filament_common = LoadSection(j["filament_common"]);
 
     spdlog::debug("ChromaPrintPatches loaded: {} common, {} per-nozzle sections, {} per-face "
-                  "sections, {} filament-common",
+                  "sections, {} per-machine sections, {} filament-common",
                   out.process_common.size(), out.process_per_nozzle.size(),
-                  out.process_per_face.size(), out.filament_common.size());
+                  out.process_per_face.size(), out.process_per_machine.size(),
+                  out.filament_common.size());
     return out;
 }
 
