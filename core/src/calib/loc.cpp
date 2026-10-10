@@ -6,6 +6,9 @@
 #include <spdlog/spdlog.h>
 
 #include <opencv2/opencv.hpp>
+#if CV_VERSION_MAJOR >= 5
+#    include <opencv2/geometry.hpp> // OpenCV 5 moved geometry helpers (minAreaRect etc.) out of imgproc
+#endif
 
 #include <algorithm>
 #include <cmath>

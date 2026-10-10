@@ -56,7 +56,7 @@ if(CHROMAPRINT3D_USE_JEMALLOC)
     endif()
 endif()
 
-find_package(OpenCV 4.5 REQUIRED COMPONENTS core imgproc imgcodecs)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 message(STATUS "Found OpenCV ${OpenCV_VERSION}: ${OpenCV_INSTALL_PATH}")
 
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "Disable spdlog examples" FORCE)
