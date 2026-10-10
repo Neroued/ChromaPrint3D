@@ -1,7 +1,7 @@
 {
-  "version": "1.3.4-rc.1",
-  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.4-rc.1",
-  "changelog": "- 新增配方编辑器全屏编辑模式",
-  "changelog_en": "- Added fullscreen editing mode for the recipe editor",
-  "published_at": "2026-06-04"
+  "version": "1.3.4",
+  "download_url": "https://github.com/neroued/ChromaPrint3D/releases/tag/v1.3.4",
+  "changelog": "- 新增配方编辑器全屏布局，编辑区更宽敞\n- 修复 A1 mini 机型擦料塔默认宽度超出热床的问题\n- 修复配方编辑器大图预览时点击选区位置偏移的问题\n- 修复配方编辑器全屏模式下弹出菜单不可用的问题\n- 修复上传预览中 SVG 线条意外显示的问题",
+  "changelog_en": "- Added a fullscreen layout for the recipe editor\n- Fixed the prime tower default width exceeding the build volume on A1 mini\n- Fixed selection position offset when clicking on large previews in the recipe editor\n- Fixed popovers being unusable in fullscreen recipe editor\n- Fixed unexpected SVG strokes showing in the upload preview",
+  "published_at": "2026-10-10"
 }
