@@ -42,38 +42,38 @@ search_dirs.extend([Path("/usr/local/lib"), Path("/opt/homebrew/lib")])
 search_dirs = [p for p in search_dirs if p.exists()]
 
 
+def locate_by_basename(base: str, extra_dirs=()):
+    """Locate a dylib by file name: bundle-local dirs, known lib dirs, then
+    the Homebrew gcc keg tree (gcc runtime libs such as libgcc_s.1.1.dylib
+    are referenced by relative install names that stop resolving after
+    relocation, and are not symlinked into the opt lib dir)."""
+    for directory in extra_dirs:
+        candidate = (Path(directory) / base).resolve()
+        if candidate.exists():
+            return candidate
+    for directory in search_dirs:
+        candidate = (Path(directory) / base).resolve()
+        if candidate.exists():
+            return candidate
+    gcc_lib = os.environ.get("GCC_PREFIX")
+    if gcc_lib:
+        gcc_tree = Path(gcc_lib) / "lib" / "gcc"
+        if gcc_tree.exists():
+            hits = sorted(gcc_tree.rglob(base))
+            if hits:
+                return hits[0]
+    return None
+
+
 def resolve_dep(dep: str, owner: Path):
     if dep.startswith("@loader_path/"):
         candidate = (owner.parent / dep[len("@loader_path/"):]).resolve()
-        if candidate.exists():
-            return candidate
-        # Homebrew gcc runtime dylibs (e.g. libgcc_s.1.1.dylib) reference
-        # siblings relative to the original Cellar layout, which no longer
-        # resolves after relocation into the bundle. Fall back to a basename
-        # search in the known lib dirs, then the gcc keg tree.
-        base = os.path.basename(dep)
-        for directory in search_dirs:
-            fallback = (Path(directory) / base).resolve()
-            if fallback.exists():
-                return fallback
-        gcc_lib = os.environ.get("GCC_PREFIX")
-        if gcc_lib:
-            gcc_tree = Path(gcc_lib) / "lib" / "gcc"
-            if gcc_tree.exists():
-                hits = sorted(gcc_tree.rglob(base))
-                if hits:
-                    return hits[0]
-        return None
+        return candidate if candidate.exists() else locate_by_basename(os.path.basename(dep))
     if dep.startswith("@executable_path/"):
         candidate = (pkg / dep[len("@executable_path/"):]).resolve()
         return candidate if candidate.exists() else None
     if dep.startswith("@rpath/"):
-        base = os.path.basename(dep)
-        for directory in [owner.parent, *search_dirs]:
-            candidate = (Path(directory) / base).resolve()
-            if candidate.exists():
-                return candidate
-        return None
+        return locate_by_basename(os.path.basename(dep), extra_dirs=[owner.parent])
     candidate = Path(dep)
     return candidate.resolve() if candidate.exists() else None
 
