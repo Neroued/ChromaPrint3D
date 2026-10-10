@@ -11,6 +11,7 @@ export OPENCV_PREFIX="$(brew --prefix opencv)"
 export LIBOMP_PREFIX="$(brew --prefix libomp)"
 export JPEG_PREFIX="$(brew --prefix jpeg-turbo)"
 export OPENBLAS_PREFIX="$(brew --prefix openblas 2>/dev/null || true)"
+export GCC_PREFIX="$(brew --prefix gcc 2>/dev/null || true)"
 
 if [[ -n "${OPENBLAS_PREFIX}" && -d "${OPENBLAS_PREFIX}/lib" ]]; then
   find "${OPENBLAS_PREFIX}/lib" -name "libopenblas*.dylib*" \
@@ -32,7 +33,7 @@ queue = [pkg / "chromaprint3d_server"] + initial_dylibs
 seen = set()
 
 search_dirs = []
-for key in ("BREW_PREFIX", "OPENCV_PREFIX", "LIBOMP_PREFIX", "JPEG_PREFIX", "OPENBLAS_PREFIX"):
+for key in ("BREW_PREFIX", "OPENCV_PREFIX", "LIBOMP_PREFIX", "JPEG_PREFIX", "OPENBLAS_PREFIX", "GCC_PREFIX"):
     value = os.environ.get(key)
     if value:
         search_dirs.append(Path(value) / "lib")
@@ -44,7 +45,25 @@ search_dirs = [p for p in search_dirs if p.exists()]
 def resolve_dep(dep: str, owner: Path):
     if dep.startswith("@loader_path/"):
         candidate = (owner.parent / dep[len("@loader_path/"):]).resolve()
-        return candidate if candidate.exists() else None
+        if candidate.exists():
+            return candidate
+        # Homebrew gcc runtime dylibs (e.g. libgcc_s.1.1.dylib) reference
+        # siblings relative to the original Cellar layout, which no longer
+        # resolves after relocation into the bundle. Fall back to a basename
+        # search in the known lib dirs, then the gcc keg tree.
+        base = os.path.basename(dep)
+        for directory in search_dirs:
+            fallback = (Path(directory) / base).resolve()
+            if fallback.exists():
+                return fallback
+        gcc_lib = os.environ.get("GCC_PREFIX")
+        if gcc_lib:
+            gcc_tree = Path(gcc_lib) / "lib" / "gcc"
+            if gcc_tree.exists():
+                hits = sorted(gcc_tree.rglob(base))
+                if hits:
+                    return hits[0]
+        return None
     if dep.startswith("@executable_path/"):
         candidate = (pkg / dep[len("@executable_path/"):]).resolve()
         return candidate if candidate.exists() else None
