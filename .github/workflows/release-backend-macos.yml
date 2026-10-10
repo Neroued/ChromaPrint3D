@@ -104,7 +104,7 @@ jobs:
             -DZLIB_ROOT="${ZLIB_PREFIX}"
 
       - name: Build
-        run: cmake --build build --config Release --parallel ${{ inputs.build_parallel }}
+        run: cmake --build build --config Release --parallel ${{ inputs.build_parallel }} -- -k 0
 
       - name: ccache stats
         run: ccache -s
